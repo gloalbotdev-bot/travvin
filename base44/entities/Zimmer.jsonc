@@ -1,0 +1,159 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "title": "\u05e9\u05dd \u05d4\u05e6\u05d9\u05de\u05e8"
+    },
+    "owner_id": {
+      "type": "string",
+      "title": "\u05de\u05d6\u05d4\u05d4 \u05d1\u05e2\u05dc \u05d4\u05de\u05ea\u05d7\u05dd"
+    },
+    "owner_name": {
+      "type": "string",
+      "title": "\u05e9\u05dd \u05d1\u05e2\u05dc \u05d4\u05de\u05ea\u05d7\u05dd"
+    },
+    "location": {
+      "type": "string",
+      "title": "\u05de\u05d9\u05e7\u05d5\u05dd"
+    },
+    "price_per_night": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05dc\u05d9\u05dc\u05d4 (\u05de\u05dc\u05d0)"
+    },
+    "weekday_price": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05dc\u05d9\u05dc\u05d4 \u05d1\u05d0\u05de\u05e6\u05e2 \u05d4\u05e9\u05d1\u05d5\u05e2 (\u05d0'-\u05d4')"
+    },
+    "weekend_price": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05dc\u05d9\u05dc\u05d4 \u05d1\u05e1\u05d5\u05e3 \u05d4\u05e9\u05d1\u05d5\u05e2 (\u05d4'-\u05e9')"
+    },
+    "num_rooms": {
+      "type": "number",
+      "title": "\u05de\u05e1\u05e4\u05e8 \u05d7\u05d3\u05e8\u05d9\u05dd"
+    },
+    "max_guests": {
+      "type": "number",
+      "title": "\u05de\u05e1\u05e4\u05e8 \u05d0\u05d5\u05e8\u05d7\u05d9\u05dd \u05de\u05e7\u05e1\u05d9\u05de\u05dc\u05d9 \u05d1\u05de\u05d7\u05d9\u05e8 \u05d4\u05de\u05dc\u05d0"
+    },
+    "partial_pricing_enabled": {
+      "type": "boolean",
+      "title": "\u05ea\u05de\u05d7\u05d5\u05e8 \u05d7\u05dc\u05e7\u05d9 \u05de\u05d5\u05e4\u05e2\u05dc",
+      "default": false
+    },
+    "min_guests": {
+      "type": "number",
+      "title": "\u05d0\u05d5\u05e8\u05d7\u05d9\u05dd \u05de\u05d9\u05e0\u05d9\u05de\u05dc\u05d9\u05d9\u05dd \u05dc\u05ea\u05de\u05d7\u05d5\u05e8 \u05d7\u05dc\u05e7\u05d9"
+    },
+    "price_per_adult": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05de\u05d1\u05d5\u05d2\u05e8 \u05dc\u05dc\u05d9\u05dc\u05d4 (\u05ea\u05de\u05d7\u05d5\u05e8 \u05d7\u05dc\u05e7\u05d9)"
+    },
+    "price_per_child": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05d9\u05dc\u05d3 \u05dc\u05dc\u05d9\u05dc\u05d4 (\u05ea\u05de\u05d7\u05d5\u05e8 \u05d7\u05dc\u05e7\u05d9)"
+    },
+    "seasonal_pricing": {
+      "type": "array",
+      "title": "\u05ea\u05de\u05d7\u05d5\u05e8 \u05e2\u05d5\u05e0\u05ea\u05d9",
+      "items": {
+        "type": "object",
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05ea\u05d7\u05dc\u05d4"
+          },
+          "end_date": {
+            "type": "string",
+            "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05e1\u05d9\u05d5\u05dd"
+          },
+          "adjustment": {
+            "type": "string",
+            "enum": [
+              "increase",
+              "decrease"
+            ],
+            "title": "\u05e1\u05d5\u05d2 \u05d4\u05ea\u05d0\u05de\u05d4",
+            "default": "increase"
+          },
+          "percentage": {
+            "type": "number",
+            "title": "\u05d0\u05d7\u05d5\u05d6 \u05d4\u05ea\u05d0\u05de\u05d4"
+          }
+        },
+        "required": [
+          "start_date",
+          "end_date",
+          "adjustment",
+          "percentage"
+        ]
+      },
+      "default": []
+    },
+    "description": {
+      "type": "string",
+      "title": "\u05ea\u05d9\u05d0\u05d5\u05e8 \u05d7\u05d5\u05e4\u05e9\u05d9"
+    },
+    "images": {
+      "type": "array",
+      "title": "\u05ea\u05de\u05d5\u05e0\u05d5\u05ea",
+      "items": {
+        "type": "string"
+      }
+    },
+    "approval_status": {
+      "type": "string",
+      "enum": [
+        "\u05de\u05de\u05ea\u05d9\u05df \u05dc\u05d0\u05d9\u05e9\u05d5\u05e8",
+        "\u05d0\u05d5\u05e9\u05e8",
+        "\u05e0\u05d3\u05d7\u05ea\u05d4"
+      ],
+      "default": "\u05d0\u05d5\u05e9\u05e8",
+      "title": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d0\u05d9\u05e9\u05d5\u05e8"
+    },
+    "data_zones": {
+      "type": "array",
+      "title": "\u05d0\u05d6\u05d5\u05e8\u05d9 \u05e7\u05dc\u05d9\u05d8\u05d4 \u05d5\u05d0\u05d9\u05e1\u05d5\u05e3 \u05e0\u05ea\u05d5\u05e0\u05d9\u05dd",
+      "items": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "\u05ea\u05d5\u05db\u05df"
+          },
+          "source_label": {
+            "type": "string",
+            "title": "\u05de\u05e7\u05d5\u05e8"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "\u05e9\u05d9\u05d7\u05ea \u05d8\u05dc\u05e4\u05d5\u05df",
+              "\u05e9\u05d9\u05d7\u05ea \u05d5\u05d5\u05d0\u05d8\u05e1\u05d0\u05e4",
+              "\u05d8\u05e7\u05e1\u05d8 \u05d7\u05d5\u05e4\u05e9\u05d9",
+              "\u05e9\u05d0\u05dc\u05d5\u05ea \u05d5\u05ea\u05e9\u05d5\u05d1\u05d5\u05ea"
+            ],
+            "title": "\u05e1\u05d5\u05d2 \u05de\u05e7\u05d5\u05e8"
+          },
+          "source_date": {
+            "type": "string",
+            "title": "\u05ea\u05d0\u05e8\u05d9\u05da"
+          }
+        }
+      }
+    },
+    "info_summary": {
+      "type": "string",
+      "title": "\u05e1\u05d9\u05db\u05d5\u05dd \u05de\u05d9\u05d3\u05e2 \u05dc\u05dc\u05e7\u05d5\u05d7\u05d5\u05ea"
+    },
+    "info_summary_snapshot": {
+      "type": "string",
+      "title": "\u05d7\u05ea\u05d9\u05de\u05ea \u05d0\u05d6\u05d5\u05e8\u05d9 \u05de\u05d9\u05d3\u05e2 \u05d1\u05d6\u05de\u05df \u05d4\u05e1\u05d9\u05db\u05d5\u05dd"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "name": "Zimmer"
+}

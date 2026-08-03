@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "owner"
+      ],
+      "default": "owner",
+      "title": "\u05ea\u05e4\u05e7\u05d9\u05d3"
+    }
+  },
+  "name": "User"
+}

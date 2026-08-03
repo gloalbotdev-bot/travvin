@@ -1,0 +1,113 @@
+{
+  "type": "object",
+  "title": "\u05d4\u05d5\u05d3\u05e2\u05ea \u05de\u05e2\u05e8\u05db\u05ea",
+  "properties": {
+    "audience": {
+      "type": "string",
+      "enum": [
+        "customer",
+        "owner"
+      ],
+      "title": "\u05e7\u05d4\u05dc \u05d9\u05e2\u05d3",
+      "default": "customer"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "\u05d4\u05d5\u05d3\u05e2\u05d4",
+        "\u05e2\u05d3\u05db\u05d5\u05df",
+        "\u05d4\u05e6\u05e2\u05d4"
+      ],
+      "default": "\u05d4\u05d5\u05d3\u05e2\u05d4",
+      "title": "\u05e1\u05d5\u05d2"
+    },
+    "title": {
+      "type": "string",
+      "title": "\u05db\u05d5\u05ea\u05e8\u05ea"
+    },
+    "body": {
+      "type": "string",
+      "title": "\u05ea\u05d5\u05db\u05df"
+    },
+    "target_user_ids": {
+      "type": "array",
+      "title": "\u05e0\u05de\u05e2\u05e0\u05d9\u05dd \u05e0\u05d1\u05d7\u05e8\u05d9\u05dd (\u05e8\u05d9\u05e7 = \u05db\u05d5\u05dc\u05dd)",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "target_label": {
+      "type": "string",
+      "title": "\u05ea\u05d9\u05d0\u05d5\u05e8 \u05e0\u05de\u05e2\u05e0\u05d9\u05dd"
+    },
+    "action_type": {
+      "type": "string",
+      "title": "\u05e1\u05d5\u05d2 \u05e4\u05e2\u05d5\u05dc\u05d4 \u05dc\u05e0\u05d9\u05d5\u05d5\u05d8",
+      "enum": [
+        "approve_booking",
+        "answer_question",
+        "cancel_booking",
+        "open_booking",
+        "open_answer",
+        "open_chat",
+        "open_review"
+      ]
+    },
+    "action_entity_id": {
+      "type": "string",
+      "title": "\u05de\u05d6\u05d4\u05d4 \u05d9\u05e9\u05d5\u05ea \u05dc\u05e0\u05d9\u05d5\u05d5\u05d8"
+    }
+  },
+  "required": [
+    "audience",
+    "title",
+    "body"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "owner"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "owner"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "owner"
+          }
+        }
+      ]
+    }
+  },
+  "name": "SystemMessage"
+}

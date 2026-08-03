@@ -1,0 +1,45 @@
+{
+  "name": "Booking Rejected Notify Customer",
+  "description": "\u05e9\u05d5\u05dc\u05d7 \u05e4\u05d5\u05e9 \u05d1\u05ea\u05d5\u05da \u05d4\u05d0\u05e4\u05dc\u05d9\u05e7\u05e6\u05d9\u05d4 \u05dc\u05dc\u05e7\u05d5\u05d7 \u05db\u05e9\u05d1\u05e2\u05dc \u05d4\u05de\u05ea\u05d7\u05dd \u05d3\u05d5\u05d7\u05d4 \u05d0\u05ea \u05d4\u05d4\u05d6\u05de\u05e0\u05d4 \u05e9\u05dc\u05d5",
+  "trigger": {
+    "config": {
+      "trigger_type": "entity",
+      "entity_name": "BookingRequest",
+      "events": [
+        "update"
+      ]
+    },
+    "condition": "${ .trigger.data.status == \"\u05e0\u05d3\u05d7\u05ea\u05d4\" and .trigger.old_data.status != \"\u05e0\u05d3\u05d7\u05ea\u05d4\" and (.trigger.data.created_by_id // \"\") != \"\" and .trigger.data.created_by_id != .trigger.data.owner_id }"
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "booking_rejected_notify_customer",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "notify": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "pushInAppNotification",
+            "args": {
+              "audience": "customer",
+              "target_user_ids": "${ [ .trigger.data.created_by_id ] }",
+              "category": "\u05e2\u05d3\u05db\u05d5\u05df",
+              "title": "\u05d4\u05d4\u05d6\u05de\u05e0\u05d4 \u05e0\u05d3\u05d7\u05ea\u05d4",
+              "body": "\u05d1\u05e2\u05dc \u05d4\u05e6\u05d9\u05de\u05e8 \u05d3\u05d7\u05d4 \u05d0\u05ea \u05d4\u05d4\u05d6\u05de\u05e0\u05d4 \u05dc-${ .trigger.data.zimmer_name } (${ .trigger.data.check_in } \u05e2\u05d3 ${ .trigger.data.check_out }). \u05de\u05d5\u05de\u05dc\u05e5 \u05dc\u05d7\u05e4\u05e9 \u05ea\u05d0\u05e8\u05d9\u05db\u05d9\u05dd \u05d0\u05d5 \u05e6\u05d9\u05de\u05e8 \u05d0\u05d7\u05e8.",
+              "action_type": "open_booking",
+              "action_entity_id": "${ .trigger.entity_id }"
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "\u05e9\u05dc\u05d7 \u05e4\u05d5\u05e9 \u05dc\u05dc\u05e7\u05d5\u05d7"
+          }
+        }
+      }
+    ]
+  }
+}

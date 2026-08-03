@@ -1,0 +1,45 @@
+{
+  "name": "New Booking Notify Owner",
+  "description": "\u05e9\u05d5\u05dc\u05d7 \u05d4\u05d5\u05d3\u05e2\u05d4 \u05d1\u05ea\u05d5\u05da \u05d4\u05d0\u05e4\u05dc\u05d9\u05e7\u05e6\u05d9\u05d4 \u05dc\u05d1\u05e2\u05dc \u05d4\u05de\u05ea\u05d7\u05dd \u05db\u05e9\u05e0\u05d5\u05e6\u05e8\u05ea \u05d1\u05e7\u05e9\u05ea \u05d4\u05d6\u05de\u05e0\u05d4 \u05d7\u05d3\u05e9\u05d4",
+  "trigger": {
+    "config": {
+      "trigger_type": "entity",
+      "entity_name": "BookingRequest",
+      "events": [
+        "create"
+      ]
+    },
+    "condition": "${ (.trigger.data.owner_id // \"\") != \"\" }"
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "new_booking_notify_owner",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "notify": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "pushInAppNotification",
+            "args": {
+              "audience": "owner",
+              "target_user_ids": "${ [ .trigger.data.owner_id ] }",
+              "category": "\u05e2\u05d3\u05db\u05d5\u05df",
+              "title": "\u05d1\u05e7\u05e9\u05ea \u05d4\u05d6\u05de\u05e0\u05d4 \u05d7\u05d3\u05e9\u05d4",
+              "body": "\u05d0\u05d5\u05e8\u05d7 ${ .trigger.data.guest_name } \u05d1\u05d9\u05e7\u05e9 \u05d4\u05d6\u05de\u05e0\u05d4 \u05dc-${ .trigger.data.zimmer_name } \u05d1\u05ea\u05d0\u05e8\u05d9\u05db\u05d9\u05dd ${ .trigger.data.check_in } \u05e2\u05d3 ${ .trigger.data.check_out }",
+              "action_type": "approve_booking",
+              "action_entity_id": "${ .trigger.entity_id }"
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "\u05e9\u05dc\u05d7 \u05d4\u05d5\u05d3\u05e2\u05d4 \u05dc\u05d1\u05e2\u05dc \u05d4\u05de\u05ea\u05d7\u05dd"
+          }
+        }
+      }
+    ]
+  }
+}
