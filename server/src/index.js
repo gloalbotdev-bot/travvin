@@ -54,16 +54,26 @@ app.use(attachAuthUser);
 app.use(storage.urlPrefix, express.static(storage.rootDir));
 
 app.get('/api/health', async (_req, res) => {
+  // Liveness for Render: always 200 if process is up (DB hang must not block deploy).
+  let db = false;
+  let error;
   try {
-    await prisma.$queryRaw`SELECT 1`;
-    res.json({ ok: true, db: true });
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`.then(() => {
+        db = true;
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('db_timeout')), 4000),
+      ),
+    ]);
   } catch (err) {
-    res.status(503).json({
-      ok: false,
-      db: false,
-      error: err instanceof Error ? err.message : String(err),
-    });
+    error = err instanceof Error ? err.message : String(err);
   }
+  res.status(200).json({
+    ok: true,
+    db,
+    ...(error && !db ? { error } : {}),
+  });
 });
 
 app.use('/api/auth', createAuthRouter(prisma));
@@ -80,8 +90,8 @@ app.use(
   createGoogleCalendarConnectorRouter(prisma, store),
 );
 
-app.listen(port, () => {
-  console.log(`[travvin-server] listening on http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`[travvin-server] listening on 0.0.0.0:${port}`);
   if (process.env.CALENDAR_CRON_DISABLED === '1') {
     console.log('[calendar-auto-sync] disabled via CALENDAR_CRON_DISABLED');
   } else {

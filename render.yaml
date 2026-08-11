@@ -17,8 +17,9 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      # Free tier: ephemeral local dir. Switch to /var/data/uploads when disk is enabled.
       - key: STORAGE_LOCAL_DIR
-        value: /var/data/uploads
+        value: ./uploads
       # Wired automatically after first deploy (do not set manually):
       - key: FRONTEND_URL
         fromService:
