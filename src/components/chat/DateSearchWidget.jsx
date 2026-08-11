@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, Users, Search, Wallet, Sparkles, MapPin } from 'lucide-react';
 import { REGION_OPTIONS } from '@/lib/regions';
+import { ownFetch } from '@/api/own/http';
 
 // Checks if two date ranges overlap (inclusive nights)
 export function datesOverlap(checkIn1, checkOut1, checkIn2, checkOut2) {
@@ -11,18 +12,25 @@ export function datesOverlap(checkIn1, checkOut1, checkIn2, checkOut2) {
   return a1 < b2 && a2 > b1;
 }
 
+/** Busy ranges without PII (M15 #2) — public /api/bookings/busy */
+async function fetchBusyRanges(zimmerId) {
+  const q = zimmerId ? `?zimmer_id=${encodeURIComponent(zimmerId)}` : '';
+  const data = await ownFetch(`/api/bookings/busy${q}`, { method: 'GET', auth: false });
+  return Array.isArray(data) ? data : [];
+}
+
 // Returns booked zimmer IDs for a given date range
-export async function getBookedZimmerIds(base44, checkIn, checkOut) {
-  const bookings = await base44.entities.BookingRequest.filter({ status: 'אושרה' });
+export async function getBookedZimmerIds(_client, checkIn, checkOut) {
+  const bookings = await fetchBusyRanges();
   return bookings
     .filter(b => datesOverlap(checkIn, checkOut, b.check_in, b.check_out))
     .map(b => b.zimmer_id);
 }
 
 // Returns booked date ranges (check_in/check_out) for a specific zimmer
-export async function getBookedRangesForZimmer(base44, zimmerId) {
+export async function getBookedRangesForZimmer(_client, zimmerId) {
   if (!zimmerId) return [];
-  const bookings = await base44.entities.BookingRequest.filter({ zimmer_id: zimmerId, status: 'אושרה' });
+  const bookings = await fetchBusyRanges(zimmerId);
   return bookings
     .filter(b => b.check_in && b.check_out)
     .map(b => ({ check_in: b.check_in, check_out: b.check_out }));

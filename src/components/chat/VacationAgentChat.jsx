@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Send, Sparkles, MapPin, Utensils, Compass, ArrowRight } from 'lucide-react';
 
 const fmtTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
@@ -36,12 +36,15 @@ export default function VacationAgentChat({ user, onSwitchToSearch }) {
       let prof = null;
       try {
         if (user?.id) {
-          const all = await base44.entities.BookingRequest.list('-created_date', 60);
-          const isMine = b => b.created_by_id === user.id || (b.guest_name && user.full_name && b.guest_name.trim() === user.full_name.trim());
+          const all = await api.entities.BookingRequest.filter(
+            { created_by_id: user.id },
+            '-created_date',
+            60,
+          );
           upcoming = all
-            .filter(b => isMine(b) && new Date(b.check_in) >= new Date())
+            .filter(b => new Date(b.check_in) >= new Date())
             .sort((a, b) => new Date(a.check_in) - new Date(b.check_in));
-          const profs = await base44.entities.CustomerProfile.filter({ user_id: user.id });
+          const profs = await api.entities.CustomerProfile.filter({ user_id: user.id });
           prof = profs[0] || null;
         }
       } catch (e) { /* silent */ }
@@ -106,7 +109,7 @@ ${ctx}
 - התאם את ההמלצות להרכב הנוסעים (מבוגרים/ילדים) שמופיע למעלה. אם יש ילדים, תעדף מקומות מתאימים למשפחות.
 - השתמש במידע עדכני מהרשת (כתובות, שעות פתיחה, דירוגים).
 - פרק את התשובה לפסקאות עם כותרות ורשימות להבהרה.`;
-      const res = await base44.integrations.Core.InvokeLLM({
+      const res = await api.integrations.Core.InvokeLLM({
         prompt,
         add_context_from_internet: true,
         model: 'gemini_3_flash',

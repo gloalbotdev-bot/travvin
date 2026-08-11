@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!server/.env.example
 
 # Logs
 /logs
@@ -31,3 +32,6 @@ dist-ssr
 .env
 .vite
 base44/.app.jsonc
+
+# Local file uploads (M11)
+server/uploads/

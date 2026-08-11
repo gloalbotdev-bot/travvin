@@ -1,0 +1,78 @@
+# Travvin — Render Blueprint (Option A: Static Site + Web Service)
+# Apply: Dashboard → Blueprints → New Blueprint Instance → repo travvin → branch main
+# Docs: docs/deployment-render.md
+
+services:
+  # Express API + crons (calendar sync, delayed jobs) + /uploads
+  - type: web
+    name: travvin-api
+    runtime: node
+    plan: free # Starter ($7/mo) for no sleep + persistent disk — see docs/deployment-render.md
+    region: frankfurt
+    branch: main
+    rootDir: server
+    buildCommand: npm ci && npx prisma generate
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: STORAGE_LOCAL_DIR
+        value: /var/data/uploads
+      # Wired automatically after first deploy (do not set manually):
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: travvin
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: PUBLIC_API_URL
+        fromService:
+          type: web
+          name: travvin-api
+          envVarKey: RENDER_EXTERNAL_URL
+      # Secrets — set in Render Dashboard (sync: false):
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_CALENDAR_REDIRECT_URI
+        sync: false
+      - key: CALENDAR_TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+    # Persistent uploads — requires plan: starter (uncomment when upgrading):
+    # disk:
+    #   name: uploads
+    #   mountPath: /var/data/uploads
+    #   sizeGB: 1
+
+  # Vite/React SPA
+  - type: web
+    name: travvin
+    runtime: static
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: VITE_OWN_API_URL
+        fromService:
+          type: web
+          name: travvin-api
+          envVarKey: RENDER_EXTERNAL_URL

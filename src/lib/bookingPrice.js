@@ -38,10 +38,29 @@ function seasonalMultiplierForDate(seasonalPricing, dateStr) {
 // (0 guests) we fall back to the full nightly price.
 // Midweek (Sun–Wed) vs weekend (Thu–Fri nights). Saturday night counts as weekday.
 const WEEKEND_DAYS = new Set([4, 5]); // Thursday(4), Friday(5)
+
+/** 0=Sun … 6=Sat for civil date YYYY-MM-DD in Asia/Jerusalem (M15 #21) */
+export function getDayOfWeekIsrael(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') return 0;
+  const utc = new Date(`${dateStr}T12:00:00.000Z`);
+  const wd = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem',
+    weekday: 'short',
+  }).format(utc);
+  const map = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return map[wd] ?? 0;
+}
+
+function addDaysIso(dateStr, n) {
+  const a = Date.parse(`${dateStr}T00:00:00Z`);
+  if (!Number.isFinite(a)) return dateStr;
+  return new Date(a + n * 86400000).toISOString().slice(0, 10);
+}
+
 function weekdayOrWeekendPrice(zimmer, dateStr) {
   const base = Number(zimmer?.price_per_night) || 0;
   if (!dateStr) return base;
-  const day = new Date(dateStr + 'T00:00:00').getUTCDay();
+  const day = getDayOfWeekIsrael(dateStr);
   const isWeekend = WEEKEND_DAYS.has(day);
   return isWeekend
     ? (zimmer?.weekend_price != null ? Number(zimmer.weekend_price) : base)
@@ -69,11 +88,10 @@ export function calcBookingTotalForZimmer(zimmer, checkIn, checkOut, numAdults =
   const nights = calcNights(checkIn, checkOut);
   if (nights <= 0) return 0;
   let total = 0;
-  let cursor = new Date(checkIn);
+  let ds = checkIn;
   for (let i = 0; i < nights; i++) {
-    const ds = cursor.toISOString().split('T')[0];
     total += effectivePricePerNight(zimmer, ds, numAdults, numChildren);
-    cursor = new Date(cursor.getTime() + 86400000);
+    ds = addDaysIso(ds, 1);
   }
   return total;
 }

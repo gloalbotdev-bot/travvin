@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { MessageSquare, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
 
 export default function CustomerHistoryTab({ user }) {
@@ -8,7 +8,7 @@ export default function CustomerHistoryTab({ user }) {
   const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
-    base44.entities.ChatSession.filter({ user_id: user.id }, '-created_date', 50).then(data => {
+    api.entities.ChatSession.filter({ user_id: user.id }, '-created_date', 50).then(data => {
       setSessions(data);
       setLoading(false);
     });

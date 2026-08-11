@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { ArrowRight, PenLine, MapPin } from 'lucide-react';
 import { Image } from '@/components/ui/image';
 import InfoSummarySection from '@/components/admin/InfoSummarySection';
@@ -12,7 +12,7 @@ export default function ZimmerView({ zimmer, onEdit, onCancel, onUpdated }) {
   const images = data.images || [];
 
   const handleSaveSummary = async (text, snapshot) => {
-    await base44.entities.Zimmer.update(data.id, { info_summary: text, info_summary_snapshot: snapshot });
+    await api.entities.Zimmer.update(data.id, { info_summary: text, info_summary_snapshot: snapshot });
     const updated = { ...data, info_summary: text, info_summary_snapshot: snapshot };
     setData(updated);
     if (onUpdated) onUpdated(updated);

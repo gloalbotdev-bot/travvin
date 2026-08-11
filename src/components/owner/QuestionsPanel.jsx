@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { MessageCircleQuestion, X, BookOpen, Clock } from 'lucide-react';
 
 const inputStyle = { background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A', borderRadius: '12px' };
@@ -23,7 +23,7 @@ export default function QuestionsPanel({ ownerId, focusQuestionId }) {
 
   const load = async () => {
     setLoading(true);
-    const data = await base44.entities.UnansweredQuestion.filter({ owner_id: ownerId }, '-created_date');
+    const data = await api.entities.UnansweredQuestion.filter({ owner_id: ownerId }, '-created_date');
     setQuestions(data);
     setLoading(false);
   };
@@ -31,17 +31,17 @@ export default function QuestionsPanel({ ownerId, focusQuestionId }) {
   const handleAnswer = async (q) => {
     if (!answer.trim()) return;
     setSaving(true);
-    await base44.entities.UnansweredQuestion.update(q.id, {
+    await api.entities.UnansweredQuestion.update(q.id, {
       status: 'נענתה',
       owner_answer: answer.trim(),
       save_to_knowledge: true,
       answered_at: new Date().toISOString().split('T')[0],
     });
 
-    const zimmer = await base44.entities.Zimmer.get(q.zimmer_id).catch(() => null);
+    const zimmer = await api.entities.Zimmer.get(q.zimmer_id).catch(() => null);
     if (zimmer) {
       // Rebuild the Q&A info zones from ALL answered questions on this zimmer
-      const allQ = await base44.entities.UnansweredQuestion.filter({ zimmer_id: q.zimmer_id, status: 'נענתה' }, 'created_date');
+      const allQ = await api.entities.UnansweredQuestion.filter({ zimmer_id: q.zimmer_id, status: 'נענתה' }, 'created_date');
       const answeredQ = allQ.filter(item => item.owner_answer);
       const qaZones = answeredQ.map(item => ({
         content: `שאלה: ${item.question}\nתשובה: ${item.owner_answer}\nמקור: לקוח (${item.customer_name || 'אנונימי'}), תאריך: ${(item.created_date || '').slice(0, 10)}`,
@@ -54,7 +54,7 @@ export default function QuestionsPanel({ ownerId, focusQuestionId }) {
         z.source_type !== 'שאלות ותשובות' &&
         !(z.source_type === 'טקסט חופשי' && z.source_label === 'שאלת לקוח')
       );
-      await base44.entities.Zimmer.update(q.zimmer_id, { data_zones: [...kept, ...qaZones] });
+      await api.entities.Zimmer.update(q.zimmer_id, { data_zones: [...kept, ...qaZones] });
     }
 
     setAnsweringId(null);
@@ -64,7 +64,7 @@ export default function QuestionsPanel({ ownerId, focusQuestionId }) {
   };
 
   const handleDismiss = async (id) => {
-    await base44.entities.UnansweredQuestion.update(id, { status: 'נדחתה' });
+    await api.entities.UnansweredQuestion.update(id, { status: 'נדחתה' });
     load();
   };
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Database, ChevronDown, ChevronUp, MapPin, BedDouble, Users, MessageSquare } from 'lucide-react';
 
 const SOURCE_COLORS = {
@@ -18,7 +18,7 @@ export default function ZimmerDatabase({ ownerId }) {
 
   useEffect(() => {
     if (!ownerId) return;
-    base44.entities.Zimmer.filter({ owner_id: ownerId }).then(data => {
+    api.entities.Zimmer.filter({ owner_id: ownerId }).then(data => {
       setZimmers(data);
       setLoading(false);
       // auto-expand first zimmer
@@ -41,7 +41,7 @@ export default function ZimmerDatabase({ ownerId }) {
 תיאור: ${zimmer.description || 'אין'}
 אזורי מידע שנאספו:\n${zones || 'אין'}
     `;
-    const result = await base44.integrations.Core.InvokeLLM({ prompt });
+    const result = await api.integrations.Core.InvokeLLM({ prompt });
     setSummaries(prev => ({ ...prev, [zimmer.id]: result }));
     setSummarizing(prev => ({ ...prev, [zimmer.id]: false }));
   };

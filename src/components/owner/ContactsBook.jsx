@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Plus, Phone, Mail, Trash2, Users, Wrench } from 'lucide-react';
 
 const EMPTY_FORM = { name: '', phone: '', email: '', type: 'לקוח', category: '', notes: '' };
@@ -18,7 +18,7 @@ export default function ContactsBook({ ownerId }) {
 
   const load = async () => {
     setLoading(true);
-    const data = await base44.entities.Contact.filter({ owner_id: ownerId });
+    const data = await api.entities.Contact.filter({ owner_id: ownerId });
     setContacts(data);
     setLoading(false);
   };
@@ -26,7 +26,7 @@ export default function ContactsBook({ ownerId }) {
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-    await base44.entities.Contact.create({ ...form, owner_id: ownerId });
+    await api.entities.Contact.create({ ...form, owner_id: ownerId });
     setForm(EMPTY_FORM);
     setShowForm(false);
     setSaving(false);
@@ -35,7 +35,7 @@ export default function ContactsBook({ ownerId }) {
 
   const handleDelete = async (id) => {
     if (!confirm('למחוק איש קשר?')) return;
-    await base44.entities.Contact.delete(id);
+    await api.entities.Contact.delete(id);
     load();
   };
 

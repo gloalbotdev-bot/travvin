@@ -1,0 +1,122 @@
+{
+  "type": "object",
+  "properties": {
+    "zimmer_id": {
+      "type": "string",
+      "title": "\u05de\u05d6\u05d4\u05d4 \u05e6\u05d9\u05de\u05e8"
+    },
+    "zimmer_name": {
+      "type": "string",
+      "title": "\u05e9\u05dd \u05d4\u05e6\u05d9\u05de\u05e8"
+    },
+    "owner_id": {
+      "type": "string",
+      "title": "\u05de\u05d6\u05d4\u05d4 \u05d1\u05e2\u05dc \u05d4\u05de\u05ea\u05d7\u05dd"
+    },
+    "guest_name": {
+      "type": "string",
+      "title": "\u05e9\u05dd \u05d4\u05dc\u05e7\u05d5\u05d7"
+    },
+    "guest_phone": {
+      "type": "string",
+      "title": "\u05d8\u05dc\u05e4\u05d5\u05df"
+    },
+    "check_in": {
+      "type": "string",
+      "format": "date",
+      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05db\u05e0\u05d9\u05e1\u05d4"
+    },
+    "check_out": {
+      "type": "string",
+      "format": "date",
+      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d9\u05e6\u05d9\u05d0\u05d4"
+    },
+    "num_guests": {
+      "type": "number",
+      "title": "\u05de\u05e1\u05e4\u05e8 \u05d0\u05d5\u05e8\u05d7\u05d9\u05dd"
+    },
+    "num_adults": {
+      "type": "number",
+      "title": "\u05de\u05e1\u05e4\u05e8 \u05de\u05d1\u05d5\u05d2\u05e8\u05d9\u05dd"
+    },
+    "num_children": {
+      "type": "number",
+      "title": "\u05de\u05e1\u05e4\u05e8 \u05d9\u05dc\u05d3\u05d9\u05dd"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "\u05de\u05de\u05ea\u05d9\u05e0\u05d4",
+        "\u05d0\u05d5\u05e9\u05e8\u05d4",
+        "\u05e0\u05d3\u05d7\u05ea\u05d4"
+      ],
+      "default": "\u05de\u05de\u05ea\u05d9\u05e0\u05d4",
+      "title": "\u05e1\u05d8\u05d8\u05d5\u05e1"
+    },
+    "notes": {
+      "type": "string",
+      "title": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    },
+    "total_price": {
+      "type": "number",
+      "title": "\u05e1\u05da \u05ea\u05e9\u05dc\u05d5\u05dd \u05de\u05d7\u05d5\u05e9\u05d1"
+    },
+    "calendar_event_id": {
+      "type": "string",
+      "title": "\u05de\u05d6\u05d4\u05d4 \u05d0\u05d9\u05e8\u05d5\u05e2 \u05d1\u05d9\u05d5\u05de\u05df"
+    },
+    "deletion_request_reason": {
+      "type": "string",
+      "title": "\u05e1\u05d9\u05d1\u05ea \u05d1\u05e7\u05e9\u05ea \u05de\u05d7\u05d9\u05e7\u05d4 (\u05d1\u05e2\u05dc \u05de\u05ea\u05d7\u05dd \u2192 \u05d0\u05d3\u05de\u05d9\u05df)"
+    },
+    "deletion_request_at": {
+      "type": "string",
+      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d1\u05e7\u05e9\u05ea \u05de\u05d7\u05d9\u05e7\u05d4"
+    },
+    "cancel_request_reason": {
+      "type": "string",
+      "title": "\u05e1\u05d9\u05d1\u05ea \u05d1\u05e7\u05e9\u05ea \u05d1\u05d9\u05d8\u05d5\u05dc (\u05dc\u05e7\u05d5\u05d7 \u2192 \u05d1\u05e2\u05dc \u05de\u05ea\u05d7\u05dd)"
+    },
+    "cancel_request_at": {
+      "type": "string",
+      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d1\u05e7\u05e9\u05ea \u05d1\u05d9\u05d8\u05d5\u05dc"
+    }
+  },
+  "required": [
+    "zimmer_id",
+    "guest_name",
+    "guest_phone",
+    "check_in",
+    "check_out"
+  ],
+  "name": "BookingRequest",
+  "rls": {
+    "read": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "created_by_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "create": {
+      "$or": [
+        { "user_condition": { "authenticated": true } },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "update": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "created_by_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "delete": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "created_by_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    }
+  }
+}

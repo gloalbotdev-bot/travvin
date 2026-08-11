@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import GoogleIcon from '@/components/GoogleIcon';
 
 export default function JoinAsOwner() {
   const [step, setStep] = useState('landing');
 
   useEffect(() => {
-    base44.auth.me().then(u => {
+    api.auth.me().then(u => {
       if (!u) return;
       if (u.role === 'owner' || u.role === 'admin') { window.location.href = '/owner'; }
       else { grantOwnerAccess(u); }
@@ -16,9 +16,9 @@ export default function JoinAsOwner() {
   const grantOwnerAccess = async (u) => {
     setStep('loading');
     try {
-      await base44.auth.updateMe({ role: 'owner' });
+      await api.auth.updateMe({ role: 'owner' });
     } catch (_) {
-      try { await base44.users.inviteUser(u.email, 'owner'); } catch (_2) {}
+      try { await api.users.inviteUser(u.email, 'owner'); } catch (_2) {}
     }
     window.location.href = '/owner';
   };
@@ -37,7 +37,7 @@ export default function JoinAsOwner() {
         {step === 'landing' && (
           <div className="rounded-2xl p-6" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
             <p className="text-sm text-center mb-5" style={{ color: '#6B7280' }}>התחבר עם גוגל כדי להמשיך</p>
-            <button onClick={() => base44.auth.loginWithProvider('google', window.location.href)}
+            <button onClick={() => api.auth.loginWithProvider('google', window.location.href)}
               className="w-full flex items-center justify-center gap-3 bg-white py-3 rounded-xl font-semibold text-sm transition-all hover:shadow-md"
               style={{ border: '1.5px solid #E8E5E0', color: '#1A1A1A' }}>
               <GoogleIcon />התחבר עם Google

@@ -1,5 +1,5 @@
 import React from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { motion } from 'framer-motion';
 
 const fadeUp = {
@@ -11,8 +11,8 @@ const fadeUp = {
 };
 
 export default function Welcome() {
-  const handleCustomer = () => base44.auth.loginWithProvider('google', '/chat');
-  const handleOwner = () => base44.auth.loginWithProvider('google', '/join');
+  const handleCustomer = () => api.auth.loginWithProvider('google', '/chat');
+  const handleOwner = () => api.auth.loginWithProvider('google', '/join');
   const handleAdmin = () => { window.location.href = '/admin-login'; };
 
   return (

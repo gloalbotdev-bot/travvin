@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Star, ChevronLeft, ChevronRight } from 'lucide-react';
 import StarRating from './StarRating';
 import { Image } from '@/components/ui/image';
@@ -22,7 +22,7 @@ export default function ReviewsSection({ zimmerId }) {
     if (!zimmerId) return;
     (async () => {
       try {
-        const data = await base44.entities.Review.filter({ zimmer_id: zimmerId, status: 'published' }, '-published_at', 50);
+        const data = await api.entities.Review.filter({ zimmer_id: zimmerId, status: 'published' }, '-published_at', 50);
         setReviews(data || []);
       } catch { setReviews([]); }
       setLoading(false);

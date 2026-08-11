@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Star } from 'lucide-react';
 import OwnerReviewCard, { REVIEW_STATUS } from '@/components/reviews/OwnerReviewCard';
 import ReviewActionModal from '@/components/reviews/ReviewActionModal';
@@ -15,8 +15,8 @@ export default function ReviewsPanel({ ownerId, focusReviewId }) {
   const load = async () => {
     if (!ownerId) return;
     const [revs, zims] = await Promise.all([
-      base44.entities.Review.filter({ owner_id: ownerId }, '-created_date', 200),
-      base44.entities.Zimmer.filter({ owner_id: ownerId }),
+      api.entities.Review.filter({ owner_id: ownerId }, '-created_date', 200),
+      api.entities.Zimmer.filter({ owner_id: ownerId }),
     ]);
     setReviews(revs);
     setZimmers(zims);
@@ -30,7 +30,7 @@ export default function ReviewsPanel({ ownerId, focusReviewId }) {
     let bookingTotal = 0;
     if (review.booking_id) {
       try {
-        booking = await base44.entities.BookingRequest.get(review.booking_id);
+        booking = await api.entities.BookingRequest.get(review.booking_id);
         const z = zimmers.find(zz => zz.id === review.zimmer_id);
         bookingTotal = getBookingTotal(booking, z);
       } catch {}
@@ -44,14 +44,14 @@ export default function ReviewsPanel({ ownerId, focusReviewId }) {
     const now = new Date().toISOString();
     try {
       if (modal.mode === 'respond') {
-        await base44.entities.Review.update(r.id, {
+        await api.entities.Review.update(r.id, {
           status: 'published',
           owner_response: data.owner_response,
           owner_response_at: now,
           published_at: now,
         });
       } else if (modal.mode === 'compromise') {
-        await base44.entities.Review.update(r.id, {
+        await api.entities.Review.update(r.id, {
           status: 'compromise_offered',
           settlement_offer: {
             percentage: data.percentage,
@@ -61,19 +61,8 @@ export default function ReviewsPanel({ ownerId, focusReviewId }) {
             offered_at: now,
           },
         });
-        if (r.customer_id) {
-          await base44.functions.invoke('pushInAppNotification', {
-            audience: 'customer',
-            target_user_ids: [r.customer_id],
-            category: 'הודעה',
-            title: 'הצעת פשרה על ביקורתך',
-            body: `בעל ${r.zimmer_name} הציע לך החזר של ${data.percentage}% (${data.amount}₪) תמורת הסרת הביקורת.`,
-            action_type: 'open_review',
-            action_entity_id: r.id,
-          });
-        }
       } else if (modal.mode === 'dispute') {
-        await base44.entities.Review.update(r.id, {
+        await api.entities.Review.update(r.id, {
           status: 'disputed',
           dispute_reason: data.dispute_reason,
           disputed_at: now,

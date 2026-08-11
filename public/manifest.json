@@ -1,0 +1,9 @@
+{
+  "name": "travvin",
+  "short_name": "TRAVVIN",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8F7F4",
+  "theme_color": "#F97316",
+  "lang": "he"
+}

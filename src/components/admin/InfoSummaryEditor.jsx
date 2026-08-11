@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { X, CheckSquare, Square, RefreshCw, Sparkles } from 'lucide-react';
 import { Calendar } from 'lucide-react';
 import { zonesSignature } from '@/lib/infoSummary';
@@ -40,7 +40,7 @@ export default function InfoSummaryEditor({ zimmer, onSave, onClose }) {
 
 המידע:
 ${raw}`;
-      const res = await base44.integrations.Core.InvokeLLM({ prompt });
+      const res = await api.integrations.Core.InvokeLLM({ prompt });
       setText(typeof res === 'string' ? res.trim() : (res?.text || res?.message || ''));
     } catch (e) { /* ignore */ }
     setGenerating(false);

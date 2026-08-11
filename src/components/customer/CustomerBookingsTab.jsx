@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { CalendarDays, RefreshCw, AlertTriangle, X } from 'lucide-react';
 
 const statusColors = {
@@ -18,7 +18,7 @@ export default function CustomerBookingsTab({ user }) {
     const reason = (prompt('סיבת ביטול ההזמנה (אופציונלי):', '') ?? '').trim();
     setCancelling(b.id);
     try {
-      await base44.entities.BookingRequest.update(b.id, {
+      await api.entities.BookingRequest.update(b.id, {
         cancel_request_reason: reason || '—',
         cancel_request_at: new Date().toISOString(),
       });
@@ -29,7 +29,7 @@ export default function CustomerBookingsTab({ user }) {
 
   useEffect(() => {
     const load = async () => {
-      const myBookings = await base44.entities.BookingRequest.filter({ created_by_id: user.id }, '-created_date', 500);
+      const myBookings = await api.entities.BookingRequest.filter({ created_by_id: user.id }, '-created_date', 500);
 
       setBookings(myBookings);
 
@@ -38,7 +38,7 @@ export default function CustomerBookingsTab({ user }) {
       const zimmerMap = {};
       await Promise.all(zimmerIds.map(async id => {
         try {
-          const z = await base44.entities.Zimmer.get(id);
+          const z = await api.entities.Zimmer.get(id);
           if (z) zimmerMap[id] = z;
         } catch {}
       }));

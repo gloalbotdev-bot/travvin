@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { HelpCircle, CheckCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function CustomerQuestionsTab({ user }) {
@@ -13,13 +13,13 @@ export default function CustomerQuestionsTab({ user }) {
 
   const loadQuestions = async () => {
     setLoading(true);
-    const sessions = await base44.entities.ChatSession.filter({ user_id: user.id });
-    const sessionIds = sessions.map(s => s.id);
-    if (!sessionIds.length) { setLoading(false); return; }
-
-    const all = await base44.entities.UnansweredQuestion.list('-created_date', 100);
-    const mine = all.filter(q => sessionIds.includes(q.session_id));
-    setQuestions(mine);
+    if (!user?.id) { setLoading(false); return; }
+    const mine = await api.entities.UnansweredQuestion.filter(
+      { created_by_id: user.id },
+      '-created_date',
+      100,
+    );
+    setQuestions(mine || []);
     setLoading(false);
   };
 

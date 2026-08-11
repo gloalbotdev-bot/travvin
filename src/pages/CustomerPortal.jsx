@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
-import { User, ClipboardList, MessageSquare, LogOut, ChevronRight, Bell, Search, Star } from 'lucide-react';
+import { api } from '@/api/client';
+import { User, ClipboardList, MessageSquare, LogOut, ChevronRight, Bell, Search, Star, HelpCircle } from 'lucide-react';
 import DesktopSearchTab from '@/components/customer/DesktopSearchTab';
 import CustomerProfileTab from '@/components/customer/CustomerProfileTab';
 import CustomerBookingsTab from '@/components/customer/CustomerBookingsTab';
 import CustomerHistoryTab from '@/components/customer/CustomerHistoryTab';
 import CustomerUpdatesTab from '@/components/customer/CustomerUpdatesTab';
 import CustomerReviewsTab from '@/components/customer/CustomerReviewsTab';
+import CustomerQuestionsTab from '@/components/customer/CustomerQuestionsTab';
 import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 
 const navItems = [
   { id: 'profile', label: 'פרופיל אישי', icon: User },
   { id: 'bookings', label: 'ההזמנות שלי', icon: ClipboardList },
   { id: 'reviews', label: 'הביקורות שלי', icon: Star },
+  { id: 'questions', label: 'השאלות שלי', icon: HelpCircle },
   { id: 'history', label: 'היסטוריית חיפושים', icon: MessageSquare },
   { id: 'updates', label: 'עדכונים', icon: Bell },
   { id: 'desktop-search', label: 'חיפוש Desktop', icon: Search },
@@ -22,7 +24,7 @@ export default function CustomerPortal() {
   const [tab, setTab] = useState('profile');
   const [currentUser, setCurrentUser] = useState(null);
 
-  useEffect(() => { base44.auth.me().then(setCurrentUser); }, []);
+  useEffect(() => { api.auth.me().then(setCurrentUser); }, []);
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
@@ -38,7 +40,7 @@ export default function CustomerPortal() {
   const openNotificationAction = (actionType, entityId) => {
     if (!actionType) return;
     if (actionType === 'open_booking') setTab('bookings');
-    else if (actionType === 'open_answer') { setFocusQuestionId(entityId); setTab('updates'); setTimeout(() => setFocusQuestionId(null), 200); }
+    else if (actionType === 'open_answer') { setFocusQuestionId(entityId); setTab('questions'); setTimeout(() => setFocusQuestionId(null), 200); }
     else if (actionType === 'open_chat') { setFocusChatId(entityId); setTab('updates'); setTimeout(() => setFocusChatId(null), 200); }
     else if (actionType === 'open_review') { setFocusReviewId(entityId); setTab('reviews'); setTimeout(() => setFocusReviewId(null), 500); }
   };
@@ -63,7 +65,7 @@ export default function CustomerPortal() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => base44.auth.logout('/')} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.06)' }}><LogOut size={15} /></button>
+          <button onClick={() => api.auth.logout('/')} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.06)' }}><LogOut size={15} /></button>
         </div>
       </div>
 
@@ -112,7 +114,7 @@ export default function CustomerPortal() {
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#6B7280'; }}>
             <ChevronRight size={16} /><span>חזרה לצ'אט</span>
           </a>
-          <button onClick={() => base44.auth.logout('/')}
+          <button onClick={() => api.auth.logout('/')}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all"
             style={{ color: '#EF4444' }}
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.05)'}
@@ -157,6 +159,7 @@ export default function CustomerPortal() {
         {currentUser && tab === 'bookings' && <CustomerBookingsTab user={currentUser} />}
         {currentUser && tab === 'history' && <CustomerHistoryTab user={currentUser} />}
         {currentUser && tab === 'reviews' && <CustomerReviewsTab user={currentUser} focusReviewId={focusReviewId} />}
+        {currentUser && tab === 'questions' && <CustomerQuestionsTab user={currentUser} />}
         {currentUser && tab === 'updates' && <CustomerUpdatesTab user={currentUser} onAction={openNotificationAction} focusQuestionId={focusQuestionId} focusChatId={focusChatId} />}
       </main>
     </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { UserPlus, Copy, Check, X } from 'lucide-react';
 
 export default function AddOwnerPanel({ onInvited }) {
@@ -22,9 +22,9 @@ export default function AddOwnerPanel({ onInvited }) {
     setLoading(true);
     setError('');
     try {
-      await base44.users.inviteUser(form.email.trim(), 'owner');
+      await api.users.inviteUser(form.email.trim(), 'owner');
       // Pre-create OwnerRequest so they land with context
-      await base44.entities.OwnerRequest.create({
+      await api.entities.OwnerRequest.create({
         user_id: '__pending__' + form.email.trim(),
         user_name: form.full_name,
         user_email: form.email.trim(),

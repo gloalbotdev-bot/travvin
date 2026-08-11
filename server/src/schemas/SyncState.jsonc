@@ -1,0 +1,71 @@
+{
+  "type": "object",
+  "title": "מצב סנכרון",
+  "properties": {
+    "owner_id": {
+      "type": "string",
+      "title": "מזהה בעלים"
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["google"],
+      "default": "google",
+      "title": "ספק יומן"
+    },
+    "sync_token": {
+      "type": "string",
+      "title": "Sync Token של Google"
+    },
+    "last_sync_at": {
+      "type": "string",
+      "title": "זמן סנכרון אחרון"
+    },
+    "last_sync_attempt": {
+      "type": "string",
+      "title": "זמן ניסיון סנכרון אחרון"
+    },
+    "last_status": {
+      "type": "string",
+      "title": "סטטוס סנכרון אחרון",
+      "enum": ["ok", "error", "syncing"],
+      "default": "ok"
+    },
+    "last_error": {
+      "type": "string",
+      "title": "שגיאה אחרונה"
+    },
+    "auto_sync": {
+      "type": "boolean",
+      "title": "סנכרון אוטומטי מופעל",
+      "default": false
+    }
+  },
+  "required": ["owner_id"],
+  "rls": {
+    "read": {
+      "$or": [
+        { "user_condition": { "role": "admin" } },
+        { "data.owner_id": "{{user.id}}" }
+      ]
+    },
+    "create": {
+      "$or": [
+        { "user_condition": { "role": "admin" } },
+        { "data.owner_id": "{{user.id}}" }
+      ]
+    },
+    "update": {
+      "$or": [
+        { "user_condition": { "role": "admin" } },
+        { "data.owner_id": "{{user.id}}" }
+      ]
+    },
+    "delete": {
+      "$or": [
+        { "user_condition": { "role": "admin" } },
+        { "data.owner_id": "{{user.id}}" }
+      ]
+    }
+  },
+  "name": "SyncState"
+}

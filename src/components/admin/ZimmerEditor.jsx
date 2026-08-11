@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { ArrowRight, Plus, Trash2, Upload, X } from 'lucide-react';
 
 const SOURCE_TYPES = ['שיחת טלפון', 'שיחת וואטסאפ', 'טקסט חופשי', 'שאלות ותשובות'];
@@ -48,7 +48,7 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel }) {
     if (!files.length) return;
     setUploadingImg(true);
     for (const file of files) {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await api.integrations.Core.UploadFile({ file });
       setForm(f => ({ ...f, images: [...f.images, file_url] }));
     }
     setUploadingImg(false);
@@ -87,8 +87,11 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel }) {
       seasonal_pricing: (form.seasonal_pricing || []).map(r => ({ ...r, percentage: r.percentage === '' ? null : Number(r.percentage) })),
     };
     setSaving(true);
-    await onSave(cleaned);
-    setSaving(false);
+    try {
+      await onSave(cleaned);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

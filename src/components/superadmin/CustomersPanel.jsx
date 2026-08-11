@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Search, UserPlus, X, ChevronRight, Phone, Mail, MapPin, MessageSquare, Calendar, Star, Trash2 } from 'lucide-react';
 
 export default function CustomersPanel() {
@@ -21,10 +21,10 @@ export default function CustomersPanel() {
   const loadAll = async () => {
     setLoading(true);
     const [users, profs, sess, books] = await Promise.all([
-      base44.entities.User.list(),
-      base44.entities.CustomerProfile.list(),
-      base44.entities.ChatSession.list('-created_date', 200),
-      base44.entities.BookingRequest.list('-created_date', 200),
+      api.entities.User.list(),
+      api.entities.CustomerProfile.list(),
+      api.entities.ChatSession.list('-created_date', 200),
+      api.entities.BookingRequest.list('-created_date', 200),
     ]);
     // Only regular users (not owners/admins)
     const regularUsers = users.filter(u => u.role === 'user');
@@ -40,10 +40,10 @@ export default function CustomersPanel() {
     setInviting(true);
     setInviteMsg('');
     try {
-      await base44.users.inviteUser(inviteForm.email.trim(), 'user');
+      await api.users.inviteUser(inviteForm.email.trim(), 'user');
       // Pre-create profile if extra details given
       if (inviteForm.full_name || inviteForm.phone) {
-        await base44.entities.CustomerProfile.create({
+        await api.entities.CustomerProfile.create({
           user_id: '__pending__' + inviteForm.email,
           user_name: inviteForm.full_name,
           user_email: inviteForm.email.trim(),
@@ -75,7 +75,7 @@ export default function CustomersPanel() {
   });
 
   const handleDeleteCustomer = async (customer) => {
-    await base44.entities.User.delete(customer.id);
+    await api.entities.User.delete(customer.id);
     setDeletingCustomer(null);
     loadAll();
   };

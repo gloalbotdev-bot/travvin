@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Sparkles, ChevronDown, ChevronUp, MessageSquare, X, RefreshCw } from 'lucide-react';
 
 export default function ChatHistoryPanel() {
@@ -10,7 +10,7 @@ export default function ChatHistoryPanel() {
   const [openChat, setOpenChat] = useState(null);
 
   useEffect(() => {
-    base44.entities.ChatSession.list('-created_date', 200).then(data => {
+    api.entities.ChatSession.list('-created_date', 200).then(data => {
       setSessions(data);
       setLoading(false);
     });
@@ -19,10 +19,10 @@ export default function ChatHistoryPanel() {
   const generateSummary = async (session) => {
     setSummarizing(p => ({ ...p, [session.id]: true }));
     const msgText = (session.messages || []).map(m => `${m.role === 'user' ? 'לקוח' : 'בוט'}: ${m.content}`).join('\n');
-    const result = await base44.integrations.Core.InvokeLLM({
+    const result = await api.integrations.Core.InvokeLLM({
       prompt: `סכם בעברית בקצרה (3-5 שורות) את השיחה הבאה עם לקוח בצ'אט של מערכת הזמנות צימרים. ציין: מה הלקוח חיפש, אילו צימרים הוצגו, ואם נוצרה הזמנה.\n\nשיחה:\n${msgText || 'אין הודעות'}`,
     });
-    await base44.entities.ChatSession.update(session.id, { summary: result });
+    await api.entities.ChatSession.update(session.id, { summary: result });
     setSessions(prev => prev.map(s => s.id === session.id ? { ...s, summary: result } : s));
     setSummarizing(p => ({ ...p, [session.id]: false }));
   };

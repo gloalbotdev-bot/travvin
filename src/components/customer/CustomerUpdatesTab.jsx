@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Bell, MessageCircle, CalendarClock, CheckCircle, Clock, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 import DirectChat, { getOrCreateDirectThread } from '@/components/chat/DirectChat';
 
@@ -18,7 +18,7 @@ export default function CustomerUpdatesTab({ user, onAction, focusQuestionId, fo
   useEffect(() => {
     if (!focusChatId) return;
     (async () => {
-      try { const t = await base44.entities.DirectChat.get(focusChatId); if (t) setDirectThread(t); } catch {}
+      try { const t = await api.entities.DirectChat.get(focusChatId); if (t) setDirectThread(t); } catch {}
     })();
   }, [focusChatId]);
 
@@ -27,10 +27,10 @@ export default function CustomerUpdatesTab({ user, onAction, focusQuestionId, fo
     setLoading(true);
     try {
       const [sys, myBookings, direct, myQ] = await Promise.all([
-        base44.entities.SystemMessage.filter({ audience: 'customer' }, '-created_date', 30),
-        base44.entities.BookingRequest.filter({ created_by_id: user.id }, '-created_date', 60),
-        base44.entities.DirectChat.filter({ customer_id: user.id }, '-updated_date'),
-        base44.entities.UnansweredQuestion.filter({ created_by_id: user.id }, '-created_date', 200),
+        api.entities.SystemMessage.filter({ audience: 'customer' }, '-created_date', 30),
+        api.entities.BookingRequest.filter({ created_by_id: user.id }, '-created_date', 60),
+        api.entities.DirectChat.filter({ customer_id: user.id }, '-updated_date'),
+        api.entities.UnansweredQuestion.filter({ created_by_id: user.id }, '-created_date', 200),
       ]);
       setSystemMsgs((sys || []).filter(m => !m.target_user_ids?.length || (m.target_user_ids || []).includes(user.id)));
       const upcoming = (myBookings || []).filter(b => new Date(b.check_in) >= new Date()).sort((a, b) => new Date(a.check_in) - new Date(b.check_in));
@@ -46,7 +46,7 @@ export default function CustomerUpdatesTab({ user, onAction, focusQuestionId, fo
     try {
       let zimmer = { id: booking.zimmer_id, name: booking.zimmer_name, owner_id: booking.owner_id, owner_name: '' };
       if (booking.zimmer_id) {
-        const z = await base44.entities.Zimmer.get(booking.zimmer_id);
+        const z = await api.entities.Zimmer.get(booking.zimmer_id);
         if (z) zimmer = { id: z.id, name: z.name, owner_id: z.owner_id, owner_name: z.owner_name || '' };
       }
       const t = await getOrCreateDirectThread({ zimmer, customer: user, bookingId: booking.id });

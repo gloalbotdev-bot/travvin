@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Star, PenLine, Check, X, Handshake } from 'lucide-react';
 import ReviewForm from '@/components/reviews/ReviewForm';
 import StarRating from '@/components/reviews/StarRating';
@@ -30,14 +30,14 @@ export default function CustomerReviewsTab({ user, focusReviewId }) {
   const load = async () => {
     if (!user?.id) return;
     const [bs, rs] = await Promise.all([
-      base44.entities.BookingRequest.filter({ created_by_id: user.id }, '-created_date', 500),
-      base44.entities.Review.filter({ customer_id: user.id }, '-created_date', 200),
+      api.entities.BookingRequest.filter({ created_by_id: user.id }, '-created_date', 500),
+      api.entities.Review.filter({ customer_id: user.id }, '-created_date', 200),
     ]);
     setBookings(bs);
     setReviews(rs);
     const zids = [...new Set(bs.map(b => b.zimmer_id).filter(Boolean))];
     const zm = {};
-    await Promise.all(zids.map(async id => { try { zm[id] = await base44.entities.Zimmer.get(id); } catch {} }));
+    await Promise.all(zids.map(async id => { try { zm[id] = await api.entities.Zimmer.get(id); } catch {} }));
     setZimmers(zm);
     setLoading(false);
   };
@@ -56,14 +56,14 @@ export default function CustomerReviewsTab({ user, focusReviewId }) {
     setSaving(true);
     let ownerId = booking.owner_id || zimmers[booking.zimmer_id]?.owner_id;
     if (!ownerId) {
-      try { const z = await base44.entities.Zimmer.get(booking.zimmer_id); ownerId = z?.owner_id; } catch {}
+      try { const z = await api.entities.Zimmer.get(booking.zimmer_id); ownerId = z?.owner_id; } catch {}
     }
     const now = new Date();
     const autoMs = now.getTime() + (data.general >= 4 ? 12 : 48) * 3600000;
     const reviewableUntil = new Date(new Date(booking.check_out).getTime() + 7 * 86400000).toISOString();
     const status = data.general >= 4 ? 'pending_publish' : 'pending_owner';
     try {
-      const created = await base44.entities.Review.create({
+      await api.entities.Review.create({
         zimmer_id: booking.zimmer_id,
         zimmer_name: booking.zimmer_name,
         owner_id: ownerId,
@@ -87,17 +87,6 @@ export default function CustomerReviewsTab({ user, focusReviewId }) {
         auto_publish_at: new Date(autoMs).toISOString(),
         reviewable_until: reviewableUntil,
       });
-      if (ownerId) {
-        await base44.functions.invoke('pushInAppNotification', {
-          audience: 'owner',
-          target_user_ids: [ownerId],
-          category: 'הודעה',
-          title: 'ביקורת חדשה התקבלה',
-          body: `${data.general}/5 דירוג על ${booking.zimmer_name}.`,
-          action_type: 'open_review',
-          action_entity_id: created.id,
-        });
-      }
       await load();
     } catch (e) {
       alert('שגיאה: ' + e.message);
@@ -107,36 +96,18 @@ export default function CustomerReviewsTab({ user, focusReviewId }) {
   };
 
   const acceptCompromise = async (review) => {
-    await base44.entities.Review.update(review.id, {
+    await api.entities.Review.update(review.id, {
       status: 'removed',
       settlement_offer: { ...review.settlement_offer, status: 'accepted', resolved_at: new Date().toISOString() },
-    });
-    await base44.functions.invoke('pushInAppNotification', {
-      audience: 'owner',
-      target_user_ids: [review.owner_id],
-      category: 'הודעה',
-      title: 'הלקוח אישר את הפשרה',
-      body: `הביקורת על ${review.zimmer_name} הוסרה.`,
-      action_type: 'open_review',
-      action_entity_id: review.id,
     });
     load();
   };
 
   const declineCompromise = async (review) => {
     if (!declineNote.trim()) { alert('נא למלא תגובה מנומקת לבעל הצימר.'); return; }
-    await base44.entities.Review.update(review.id, {
+    await api.entities.Review.update(review.id, {
       status: 'pending_owner',
       settlement_offer: { ...review.settlement_offer, status: 'declined', customer_note: declineNote.trim(), resolved_at: new Date().toISOString() },
-    });
-    await base44.functions.invoke('pushInAppNotification', {
-      audience: 'owner',
-      target_user_ids: [review.owner_id],
-      category: 'הודעה',
-      title: 'הלקוח סירב לפשרה',
-      body: `הלקוח סירב להצעת הפשרה. ניתן לפרסם את הביקורת עם תגובה.`,
-      action_type: 'open_review',
-      action_entity_id: review.id,
     });
     setDeclineFor(null);
     setDeclineNote('');

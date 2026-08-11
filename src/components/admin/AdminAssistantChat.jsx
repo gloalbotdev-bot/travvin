@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Send, ArrowRight, X } from 'lucide-react';
 
 const formatTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
@@ -27,8 +27,8 @@ export default function AdminAssistantChat({ onClose, onRefresh }) {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    base44.auth.me().then(user => {
-      base44.entities.Zimmer.filter({ owner_id: user.id }).then(data => {
+    api.auth.me().then(user => {
+      api.entities.Zimmer.filter({ owner_id: user.id }).then(data => {
         setZimmers(data);
         addMsg('bot', 'text', 'שלום! 🏠 אני עוזר הניהול שלך. על איזה צימר תרצה לבצע פעולות?');
         addMsg('bot', 'zimmer_select', data);
@@ -110,7 +110,7 @@ ${historyText}
 אם action=clarify: אל תכניס changes.
 אם action=update או confirm: הכנס changes עם כל שדות הצימר (גם אלה שלא השתנו).`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await api.integrations.Core.InvokeLLM({
         prompt,
         response_json_schema: {
           type: 'object',
@@ -154,9 +154,9 @@ ${historyText}
     if (!pendingChanges || !selectedZimmer) return;
     setIsTyping(true);
     try {
-      await base44.entities.Zimmer.update(selectedZimmer.id, pendingChanges);
-      const user = await base44.auth.me();
-      const updated = await base44.entities.Zimmer.filter({ owner_id: user.id });
+      await api.entities.Zimmer.update(selectedZimmer.id, pendingChanges);
+      const user = await api.auth.me();
+      const updated = await api.entities.Zimmer.filter({ owner_id: user.id });
       setZimmers(updated);
       const updatedZimmer = updated.find(z => z.id === selectedZimmer.id);
       if (updatedZimmer) setSelectedZimmer(updatedZimmer);

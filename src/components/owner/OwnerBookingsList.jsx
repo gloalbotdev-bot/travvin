@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { CheckCircle, XCircle, Clock, Eye, Trash2, PenLine, X, AlertTriangle, Plus } from 'lucide-react';
 import { calcBookingTotal, getBookingTotal, formatILS } from '@/lib/bookingPrice';
+import { bookingErrorMessage } from '@/lib/bookingErrors';
 
 const STATUS_CONFIG = {
   'ממתינה': { color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20', icon: Clock, label: 'ממתינה' },
@@ -227,7 +228,7 @@ function findAndCancelDuplicates(bookings, onCancelled) {
   if (toCancel.length > 0) onCancelled(toCancel);
 }
 
-export default function OwnerBookingsList({ ownerId, zimmers = [], onAddBooking, focusBookingId }) {
+export default function OwnerBookingsList({ ownerId, zimmers = [], onAddBooking, focusBookingId, refreshToken }) {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [calendarLoading, setCalendarLoading] = useState(null);
@@ -236,7 +237,7 @@ export default function OwnerBookingsList({ ownerId, zimmers = [], onAddBooking,
 
   useEffect(() => {
     if (ownerId) loadBookings();
-  }, [ownerId]);
+  }, [ownerId, refreshToken]);
 
   useEffect(() => {
     if (focusBookingId && bookings.length) {
@@ -247,18 +248,21 @@ export default function OwnerBookingsList({ ownerId, zimmers = [], onAddBooking,
 
   const loadBookings = async () => {
     setLoading(true);
-    const data = await base44.entities.BookingRequest.filter({ owner_id: ownerId });
+    const data = await api.entities.BookingRequest.filter({ owner_id: ownerId });
     const sorted = data.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
     setBookings(sorted);
     setLoading(false);
 
     // Auto-fix duplicates on load
     findAndCancelDuplicates(sorted, async (ids) => {
-      await Promise.all(ids.map(id => base44.entities.BookingRequest.update(id, { status: 'נדחתה' })));
-      setDuplicateCancelled(ids.length);
-      // reload after fix
-      const updated = await base44.entities.BookingRequest.filter({ owner_id: ownerId });
-      setBookings(updated.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
+      try {
+        await Promise.all(ids.map(id => api.entities.BookingRequest.update(id, { status: 'נדחתה' })));
+        setDuplicateCancelled(ids.length);
+        const updated = await api.entities.BookingRequest.filter({ owner_id: ownerId });
+        setBookings(updated.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
+      } catch (e) {
+        console.warn('Duplicate auto-cancel skipped:', e?.message || e);
+      }
     });
   };
 
@@ -277,11 +281,16 @@ export default function OwnerBookingsList({ ownerId, zimmers = [], onAddBooking,
         return;
       }
     }
-    await base44.entities.BookingRequest.update(booking.id, { status: newStatus });
+    try {
+      await api.entities.BookingRequest.update(booking.id, { status: newStatus });
+    } catch (e) {
+      alert(`⚠️ ${bookingErrorMessage(e, 'לא ניתן לעדכן את הסטטוס')}`);
+      return;
+    }
     if (newStatus === 'אושרה' && !booking.calendar_event_id) {
       setCalendarLoading(booking.id);
       try {
-        await base44.functions.invoke('addBookingToCalendar', { booking_id: booking.id });
+        await api.functions.invoke('addBookingToCalendar', { booking_id: booking.id });
       } catch (e) {
         console.error('Calendar error:', e);
       }
@@ -292,27 +301,31 @@ export default function OwnerBookingsList({ ownerId, zimmers = [], onAddBooking,
   };
 
   const handleSave = async (form) => {
-    await base44.entities.BookingRequest.update(form.id, {
-      guest_name: form.guest_name,
-      guest_phone: form.guest_phone,
-      check_in: form.check_in,
-      check_out: form.check_out,
-      num_guests: form.num_guests,
-      notes: form.notes,
-      total_price: form.total_price,
-    });
-    setSelectedBooking(null);
-    loadBookings();
+    try {
+      await api.entities.BookingRequest.update(form.id, {
+        guest_name: form.guest_name,
+        guest_phone: form.guest_phone,
+        check_in: form.check_in,
+        check_out: form.check_out,
+        num_guests: form.num_guests,
+        notes: form.notes,
+        total_price: form.total_price,
+      });
+      setSelectedBooking(null);
+      loadBookings();
+    } catch (e) {
+      alert(`⚠️ ${bookingErrorMessage(e, 'לא ניתן לשמור את ההזמנה')}`);
+    }
   };
 
   const handleDelete = async (id) => {
-    await base44.entities.BookingRequest.delete(id);
+    await api.entities.BookingRequest.delete(id);
     setSelectedBooking(null);
     loadBookings();
   };
 
   const handleRequestDeletion = async (booking, reason) => {
-    await base44.entities.BookingRequest.update(booking.id, {
+    await api.entities.BookingRequest.update(booking.id, {
       deletion_request_reason: reason || '—',
       deletion_request_at: new Date().toISOString(),
     });
@@ -321,7 +334,7 @@ export default function OwnerBookingsList({ ownerId, zimmers = [], onAddBooking,
   };
 
   const handleConfirmCancel = async (booking) => {
-    await base44.entities.BookingRequest.update(booking.id, {
+    await api.entities.BookingRequest.update(booking.id, {
       status: 'נדחתה',
       cancel_request_reason: '',
       cancel_request_at: '',
@@ -331,7 +344,7 @@ export default function OwnerBookingsList({ ownerId, zimmers = [], onAddBooking,
   };
 
   const handleDismissCancel = async (booking) => {
-    await base44.entities.BookingRequest.update(booking.id, {
+    await api.entities.BookingRequest.update(booking.id, {
       cancel_request_reason: '',
       cancel_request_at: '',
     });

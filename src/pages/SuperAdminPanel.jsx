@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Users, Home, ClipboardList, LogOut, UserPlus, MessageSquare, Search, X, Menu, UserCheck, ChevronRight, Trash2, Plus, PenLine, ShieldCheck, Megaphone, LayoutDashboard, Bot, Star } from 'lucide-react';
 import ChatHistoryPanel from '@/components/superadmin/ChatHistoryPanel';
 import CustomersPanel from '@/components/superadmin/CustomersPanel';
@@ -41,18 +41,23 @@ export default function SuperAdminPanel() {
   const [showBookingCreator, setShowBookingCreator] = useState(false);
 
   useEffect(() => {
-    base44.auth.me().then(async (u) => {
+    api.auth.me().then(async (u) => {
       setCurrentUser(u);
-      // Check if user email is in AdminPermission whitelist
-      const admins = await base44.entities.AdminPermission.filter({ email: u.email.toLowerCase() });
-      const match = admins.find(a => a.is_active !== false);
-      if (match) {
-        setAdminPermission(match);
-      } else if (u.role !== 'admin') {
-        setAccessDenied(true);
-      } else {
-        // Existing admins (by role) get full access
-        setAdminPermission({ allowed_pages: null }); // null = all pages
+      try {
+        // Check if user email is in AdminPermission whitelist
+        const admins = await api.entities.AdminPermission.filter({ email: u.email.toLowerCase() });
+        const match = admins.find(a => a.is_active !== false);
+        if (match) {
+          setAdminPermission(match);
+        } else if (u.role !== 'admin') {
+          setAccessDenied(true);
+        } else {
+          // Existing admins (by role) get full access
+          setAdminPermission({ allowed_pages: null }); // null = all pages
+        }
+      } catch {
+        if (u.role !== 'admin') setAccessDenied(true);
+        else setAdminPermission({ allowed_pages: null });
       }
     });
   }, []);
@@ -62,9 +67,9 @@ export default function SuperAdminPanel() {
   const loadAll = async () => {
     setLoading(true);
     const [users, zimmers, bookings] = await Promise.all([
-      base44.entities.User.list(),
-      base44.entities.Zimmer.list(),
-      base44.entities.BookingRequest.list('-created_date', 100),
+      api.entities.User.list(),
+      api.entities.Zimmer.list(),
+      api.entities.BookingRequest.list('-created_date', 100),
     ]);
     // Include owners by role AND users who have zimmers (self-registered)
     const zimmerOwnerIds = new Set(zimmers.map(z => z.owner_id).filter(Boolean));
@@ -82,7 +87,7 @@ export default function SuperAdminPanel() {
     setInviting(true);
     setInviteMsg('');
     try {
-      await base44.users.inviteUser(inviteEmail.trim(), 'owner');
+      await api.users.inviteUser(inviteEmail.trim(), 'owner');
       setInviteMsg(`✅ הזמנה נשלחה ל-${inviteEmail}`);
       setInviteEmail('');
     } catch (e) {
@@ -92,10 +97,10 @@ export default function SuperAdminPanel() {
   };
 
   const handleDeleteOwner = async (owner) => {
-    await base44.entities.User.delete(owner.id);
+    await api.entities.User.delete(owner.id);
     setDeletingOwner(null);
     if (currentUser?.id === owner.id) {
-      base44.auth.logout('/');
+      api.auth.logout('/');
     } else {
       loadAll();
     }
@@ -121,8 +126,8 @@ export default function SuperAdminPanel() {
   const allowedPages = adminPermission?.allowed_pages; // null = all pages allowed
 
   if (viewingZimmer) return <ZimmerView zimmer={viewingZimmer} onEdit={() => { setEditingZimmer(viewingZimmer); setViewingZimmer(null); }} onCancel={() => setViewingZimmer(null)} />;
-  if (editingZimmer) return <ZimmerEditor zimmer={editingZimmer} onSave={async (data) => { if (data.id) { await base44.entities.Zimmer.update(data.id, data); } else { await base44.entities.Zimmer.create(data); } setEditingZimmer(null); loadAll(); }} onCancel={() => setEditingZimmer(null)} />;
-  if (creatingZimmer) return <ZimmerCreatorChat onSave={async (data) => { await base44.entities.Zimmer.create({ ...data, owner_id: newZimmerOwnerId, owner_name: owners.find(o => o.id === newZimmerOwnerId)?.full_name || '' }); setCreatingZimmer(false); setNewZimmerOwnerId(''); loadAll(); }} onCancel={() => { setCreatingZimmer(false); setNewZimmerOwnerId(''); }} />;
+  if (editingZimmer) return <ZimmerEditor zimmer={editingZimmer} onSave={async (data) => { if (data.id) { await api.entities.Zimmer.update(data.id, data); } else { await api.entities.Zimmer.create(data); } setEditingZimmer(null); loadAll(); }} onCancel={() => setEditingZimmer(null)} />;
+  if (creatingZimmer) return <ZimmerCreatorChat onSave={async (data) => { await api.entities.Zimmer.create({ ...data, owner_id: newZimmerOwnerId, owner_name: owners.find(o => o.id === newZimmerOwnerId)?.full_name || '' }); setCreatingZimmer(false); setNewZimmerOwnerId(''); loadAll(); }} onCancel={() => { setCreatingZimmer(false); setNewZimmerOwnerId(''); }} />;
 
   const allNavItems = [
     { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard },
@@ -202,7 +207,7 @@ export default function SuperAdminPanel() {
             <p className="text-sm mb-6" style={{ color: '#6B7280' }}>האם למחוק את <strong>{deletingZimmer.name}</strong>?</p>
             <div className="flex gap-3">
               <button onClick={() => setDeletingZimmer(null)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ border: '1.5px solid #E8E5E0', color: '#6B7280' }}>ביטול</button>
-              <button onClick={async () => { await base44.entities.Zimmer.delete(deletingZimmer.id); setDeletingZimmer(null); loadAll(); }}
+              <button onClick={async () => { await api.entities.Zimmer.delete(deletingZimmer.id); setDeletingZimmer(null); loadAll(); }}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white hover:opacity-90" style={{ background: '#EF4444' }}>מחק</button>
             </div>
           </div>
@@ -241,7 +246,7 @@ export default function SuperAdminPanel() {
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#6B7280'; }}>
             <ChevronRight size={16} /><span>חזרה לצ'אט</span>
           </a>
-          <button onClick={() => base44.auth.logout('/')}
+          <button onClick={() => api.auth.logout('/')}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all"
             style={{ color: '#EF4444' }}
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.05)'}

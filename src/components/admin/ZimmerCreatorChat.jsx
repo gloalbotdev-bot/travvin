@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Send, Upload, X, ArrowRight, Check } from 'lucide-react';
 
 const formatTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
@@ -48,7 +48,7 @@ export default function ZimmerCreatorChat({ onSave, onCancel }) {
     setUploadingImg(true);
     const newUrls = [];
     for (const file of files) {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await api.integrations.Core.UploadFile({ file });
       newUrls.push(file_url);
     }
     const updated = [...uploadedImages, ...newUrls];
@@ -108,7 +108,7 @@ ${historyText}
 ה-description צריך להיות תיאור מפנה ומושך.
 ה-data_zones צריכים לכלול מידע ייחודי שנאמר בשיחה (כגון: מדיניות ביטול, חיות מחמד, ציוד מיוחד וכו').`;
 
-    const response = await base44.integrations.Core.InvokeLLM({
+    const response = await api.integrations.Core.InvokeLLM({
       prompt,
       response_json_schema: {
         type: 'object',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Megaphone, Users, Home, Send, Trash2, CheckCheck } from 'lucide-react';
 import RecipientPicker from '@/components/superadmin/RecipientPicker';
 
@@ -20,7 +20,7 @@ export default function MessagesPanel() {
 
   const loadAll = async () => {
     try {
-      const [u, z] = await Promise.all([base44.entities.User.list(), base44.entities.Zimmer.list()]);
+      const [u, z] = await Promise.all([api.entities.User.list(), api.entities.Zimmer.list()]);
       setUsers(u);
       setZimmers(z);
     } catch (e) { /* silent */ }
@@ -29,7 +29,7 @@ export default function MessagesPanel() {
   const loadMessages = async () => {
     setLoading(true);
     try {
-      const data = await base44.entities.SystemMessage.list('-created_date', 80);
+      const data = await api.entities.SystemMessage.list('-created_date', 80);
       setMessages(data);
     } catch (e) { /* silent */ }
     setLoading(false);
@@ -48,7 +48,7 @@ export default function MessagesPanel() {
       const target_user_ids = d.mode === 'all' ? [] : Array.from(d.selected);
       const audienceLabel = audience === 'customer' ? 'הלקוחות' : 'בעלי המתחמים';
       const target_label = d.mode === 'all' ? `כל ${audienceLabel}` : `${d.selected.size} נבחרו מ${audienceLabel}`;
-      await base44.entities.SystemMessage.create({
+      await api.entities.SystemMessage.create({
         audience, category: d.category, title: d.title.trim(), body: d.body.trim(),
         target_user_ids, target_label,
       });
@@ -62,7 +62,7 @@ export default function MessagesPanel() {
 
   const remove = async (id) => {
     if (!confirm('למחוק את ההודעה?')) return;
-    await base44.entities.SystemMessage.delete(id);
+    await api.entities.SystemMessage.delete(id);
     loadMessages();
   };
 

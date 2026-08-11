@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Plus, Home, ClipboardList, LogOut, MessageSquare, PenLine, LayoutDashboard, CalendarDays, Users, Settings, ChevronRight, Database, Star, Bot, Tag, Bell } from 'lucide-react';
 import AccountSettings from '@/pages/AccountSettings';
 import BookingCreatorChat from '@/components/owner/BookingCreatorChat';
@@ -15,7 +15,7 @@ import ZimmerDatabase from '@/components/owner/ZimmerDatabase';
 import ReviewsPanel from '@/components/owner/ReviewsPanel';
 import QuestionsPanel from '@/components/owner/QuestionsPanel';
 import PromotionsPanel from '@/components/owner/PromotionsPanel';
-import OwnerAgentChat from '@/components/owner/OwnerAgentChat';
+import OwnerInfoAssistant from '@/components/owner/OwnerInfoAssistant';
 import OwnerUpdatesPanel from '@/components/owner/OwnerUpdatesPanel';
 import { useOwnerSystemUnread } from '@/hooks/useOwnerSystemUnread';
 
@@ -33,9 +33,10 @@ export default function OwnerPanel() {
   const [focusQuestionId, setFocusQuestionId] = useState(null);
   const [focusChatId, setFocusChatId] = useState(null);
   const [focusReviewId, setFocusReviewId] = useState(null);
+  const [bookingsRefresh, setBookingsRefresh] = useState(0);
 
   useEffect(() => {
-    base44.auth.me().then(u => { setCurrentUser(u); loadZimmers(u.id); });
+    api.auth.me().then(u => { setCurrentUser(u); loadZimmers(u.id); });
   }, []);
 
   const openNotificationAction = (actionType, entityId) => {
@@ -63,16 +64,16 @@ export default function OwnerPanel() {
 
   const loadZimmers = async (ownerId) => {
     setLoading(true);
-    const data = await base44.entities.Zimmer.filter({ owner_id: ownerId });
+    const data = await api.entities.Zimmer.filter({ owner_id: ownerId });
     setZimmers(data);
     setLoading(false);
   };
 
   const handleSave = async (data) => {
     if (data.id) {
-      await base44.entities.Zimmer.update(data.id, data);
+      await api.entities.Zimmer.update(data.id, data);
     } else {
-      await base44.entities.Zimmer.create({ ...data, owner_id: currentUser?.id, owner_name: currentUser?.full_name, approval_status: 'אושר' });
+      await api.entities.Zimmer.create({ ...data, owner_id: currentUser?.id, owner_name: currentUser?.full_name, approval_status: 'אושר' });
     }
     setEditingZimmer(null);
     loadZimmers(currentUser?.id);
@@ -80,7 +81,7 @@ export default function OwnerPanel() {
 
   const handleDelete = async (id) => {
     if (!confirm('למחוק את הצימר?')) return;
-    await base44.entities.Zimmer.delete(id);
+    await api.entities.Zimmer.delete(id);
     loadZimmers(currentUser?.id);
   };
 
@@ -109,7 +110,7 @@ export default function OwnerPanel() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row" dir="rtl" style={{ background: '#F8F7F4', fontFamily: 'Heebo, sans-serif' }}>
       {showAssistant && <AdminAssistantChat onClose={() => setShowAssistant(false)} onRefresh={() => loadZimmers(currentUser?.id)} />}
-      {showBookingCreator && <BookingCreatorChat onClose={() => setShowBookingCreator(false)} onSaved={() => { setShowBookingCreator(false); setTab('bookings'); }} zimmers={zimmers} ownerId={currentUser?.id} />}
+      {showBookingCreator && <BookingCreatorChat onClose={() => setShowBookingCreator(false)} onSaved={() => { setShowBookingCreator(false); setTab('bookings'); setBookingsRefresh((n) => n + 1); }} zimmers={zimmers} ownerId={currentUser?.id} />}
 
       {/* === Mobile top header === */}
       <div className="lg:hidden sticky top-0 z-20 px-4 py-3 flex items-center justify-between" style={{ background: '#fff', borderBottom: '1px solid #F0EEE8' }}>
@@ -127,7 +128,7 @@ export default function OwnerPanel() {
             <PenLine size={12} /> הזמנה
           </button>
           <a href="/" className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#F8F7F4', color: '#6B7280' }}><ChevronRight size={15} /></a>
-          <button onClick={() => base44.auth.logout('/')} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.06)' }}><LogOut size={15} /></button>
+          <button onClick={() => api.auth.logout('/')} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.06)' }}><LogOut size={15} /></button>
         </div>
       </div>
 
@@ -185,7 +186,7 @@ export default function OwnerPanel() {
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#6B7280'; }}>
             <ChevronRight size={16} /><span>חזרה לצ'אט</span>
           </a>
-          <button onClick={() => base44.auth.logout('/')}
+          <button onClick={() => api.auth.logout('/')}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all"
             style={{ color: '#EF4444' }}
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.05)'}
@@ -228,8 +229,9 @@ export default function OwnerPanel() {
           else setTab(target);
         }} />}
         {tab === 'assistant' && (
-          <OwnerAgentChat
+          <OwnerInfoAssistant
             ownerId={currentUser?.id}
+            onMutated={() => loadZimmers(currentUser?.id)}
             onNavigate={(target) => {
               if (target === 'booking_creator') setShowBookingCreator(true);
               else if (target === 'new_zimmer') setUsingCreatorChat(true);
@@ -248,6 +250,7 @@ export default function OwnerPanel() {
           <OwnerBookingsList
             ownerId={currentUser?.id}
             zimmers={zimmers}
+            refreshToken={bookingsRefresh}
             onAddBooking={() => setShowBookingCreator(true)}
             focusBookingId={focusBookingId}
           />

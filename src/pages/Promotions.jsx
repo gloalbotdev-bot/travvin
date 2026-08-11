@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Tag, ArrowRight, MessageSquare, CalendarCheck, Sparkles } from 'lucide-react';
 import { Image } from '@/components/ui/image';
 import { calcNights, formatILS, promoOriginalPerNight, promoDiscountedPerNight, promoStayTotal } from '@/lib/bookingPrice';
@@ -16,12 +16,12 @@ export default function Promotions() {
   useEffect(() => {
     (async () => {
       try {
-        const all = await base44.entities.Promotion.filter({ status: 'פעיל' });
+        const all = await api.entities.Promotion.filter({ status: 'פעיל' });
         const active = all.filter(p => p.check_out && p.check_out >= todayStr());
         setPromos(active);
         if (active.length) {
           const uniqIds = [...new Set(active.map(p => p.zimmer_id))];
-          const zs = await Promise.all(uniqIds.map(id => base44.entities.Zimmer.get(id).catch(() => null)));
+          const zs = await Promise.all(uniqIds.map(id => api.entities.Zimmer.get(id).catch(() => null)));
           const map = {};
           zs.forEach(z => { if (z) map[z.id] = z; });
           setZimmers(map);

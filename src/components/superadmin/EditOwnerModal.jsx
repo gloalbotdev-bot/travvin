@@ -1,16 +1,25 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { X } from 'lucide-react';
 
 const inputStyle = { background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A', outline: 'none', borderRadius: '12px' };
 
 export default function EditOwnerModal({ owner, onClose, onSaved }) {
-  const [form, setForm] = useState({ full_name: owner.full_name || '', role: owner.role || 'owner' });
+  const isAdminUser = owner.role === 'admin';
+  const [form, setForm] = useState({
+    full_name: owner.full_name || '',
+    role: isAdminUser ? 'owner' : (owner.role || 'owner'),
+  });
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
-    await base44.entities.User.update(owner.id, form);
+    // M15 #19 — never send role:admin; do not demote existing admins via this modal
+    const patch = { full_name: form.full_name };
+    if (!isAdminUser && (form.role === 'owner' || form.role === 'user')) {
+      patch.role = form.role;
+    }
+    await api.entities.User.update(owner.id, patch);
     setSaving(false);
     onSaved();
     onClose();
@@ -31,12 +40,22 @@ export default function EditOwnerModal({ owner, onClose, onSaved }) {
           </div>
           <div>
             <label className="text-xs font-medium block mb-1.5" style={{ color: '#6B7280' }}>תפקיד</label>
-            <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-              className="w-full px-4 py-2.5 text-sm" style={inputStyle}>
-              <option value="owner">בעל מתחם</option>
-              <option value="admin">מנהל-על</option>
-              <option value="user">לקוח</option>
-            </select>
+            {isAdminUser ? (
+              <p className="text-sm px-4 py-2.5 rounded-xl" style={{ background: '#F8F7F4', color: '#1A1A1A' }}>
+                מנהל-על (לא ניתן לשינוי מכאן)
+              </p>
+            ) : (
+              <>
+                <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                  className="w-full px-4 py-2.5 text-sm" style={inputStyle}>
+                  <option value="owner">בעל מתחם</option>
+                  <option value="user">לקוח</option>
+                </select>
+                <p className="text-[11px] mt-1" style={{ color: '#9CA3AF' }}>
+                  הקצאת מנהל-על נעשית רק דרך הרשאות מנהלים, לא מכאן.
+                </p>
+              </>
+            )}
           </div>
           <p className="text-xs" style={{ color: '#9CA3AF' }}>אימייל: {owner.email}</p>
         </div>

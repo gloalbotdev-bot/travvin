@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Check, X, Clock, Trash2, AlertTriangle } from 'lucide-react';
 
 const STATUS_CONFIG = {
@@ -18,7 +18,7 @@ export default function BookingsList() {
 
   const load = async () => {
     setLoading(true);
-    let data = await base44.entities.BookingRequest.list('-created_date');
+    let data = await api.entities.BookingRequest.list('-created_date');
     // Deletion requests jump to the top of the list
     data = data.sort((a, b) => {
       const ad = a.deletion_request_reason ? 1 : 0;
@@ -31,10 +31,10 @@ export default function BookingsList() {
   };
 
   const updateStatus = async (booking, status) => {
-    await base44.entities.BookingRequest.update(booking.id, { status });
+    await api.entities.BookingRequest.update(booking.id, { status });
     if (status === 'אושרה' && !booking.calendar_event_id) {
       setCalendarLoading(booking.id);
-      try { await base44.functions.invoke('addBookingToCalendar', { booking_id: booking.id }); } catch (e) { console.error('Calendar error:', e); }
+      try { await api.functions.invoke('addBookingToCalendar', { booking_id: booking.id }); } catch (e) { console.error('Calendar error:', e); }
       setCalendarLoading(null);
     }
     load();
@@ -43,13 +43,13 @@ export default function BookingsList() {
   const handleDelete = async (id) => {
     if (!confirm('למחוק את ההזמנה לצמיתות?')) return;
     setDeleting(id);
-    try { await base44.entities.BookingRequest.delete(id); } catch (e) {}
+    try { await api.entities.BookingRequest.delete(id); } catch (e) {}
     setDeleting(null);
     load();
   };
 
   const dismissDeletion = async (booking) => {
-    await base44.entities.BookingRequest.update(booking.id, { deletion_request_reason: '', deletion_request_at: '' });
+    await api.entities.BookingRequest.update(booking.id, { deletion_request_reason: '', deletion_request_at: '' });
     load();
   };
 

@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
   const [status, setStatus] = useState('idle');
 
   useEffect(() => {
-    base44.auth.me().then(u => {
+    api.auth.me().then(u => {
       if (u.role === 'admin') navigate('/superadmin');
-      else { setStatus('denied'); base44.auth.logout('/admin-login'); }
+      else { setStatus('denied'); api.auth.logout('/admin-login'); }
     }).catch(() => setStatus('idle'));
   }, []);
 
@@ -37,7 +37,7 @@ export default function AdminLogin() {
           </div>
         )}
 
-        <button onClick={() => base44.auth.loginWithProvider('google', '/admin-login')}
+        <button onClick={() => api.auth.loginWithProvider('google', '/admin-login')}
           className="w-full text-white rounded-xl p-3.5 font-bold text-sm transition-all hover:opacity-90 hover:shadow-lg"
           style={{ background: '#F97316' }}>
           כניסה עם Google

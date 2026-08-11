@@ -1,9 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Send, X, Check } from 'lucide-react';
-import { calcBookingTotal, formatILS } from '@/lib/bookingPrice';
+import { calcBookingTotalForZimmer, formatILS } from '@/lib/bookingPrice';
+import { bookingErrorMessage } from '@/lib/bookingErrors';
 
 const formatTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+
+function inferBookingStatus(booking, userText) {
+  const s = booking?.status;
+  if (s === 'ממתינה' || s === 'אושרה') return s;
+  const blob = `${userText || ''} ${booking?.notes || ''}`;
+  if (/ממתינ|המתנ|לא\s*מאושר|pending/i.test(blob)) return 'ממתינה';
+  if (/אושר|מאושר|approved/i.test(blob)) return 'אושרה';
+  return 'אושרה';
+}
+
+function cleanBookingNotes(notes) {
+  if (!notes) return '';
+  return String(notes)
+    .replace(/הזמנה\s*בהמתנה/gi, '')
+    .replace(/ממתינה\s*לאישור/gi, '')
+    .replace(/סטטוס\s*ממתינה/gi, '')
+    .trim();
+}
 
 export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId }) {
   const [messages, setMessages] = useState([{
@@ -44,7 +63,7 @@ export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId 
 
     const prevDataStr = JSON.stringify(collectedData);
 
-    const response = await base44.integrations.Core.InvokeLLM({
+    const response = await api.integrations.Core.InvokeLLM({
       prompt: `אתה עוזר לבעל צימר להוסיף הזמנה אחת למערכת.
 הצימרים הזמינים (חובה לבחור אחד מהם לפי השם): ${zimmerNames}
 תאריך היום: ${today}
@@ -57,7 +76,10 @@ export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId 
 5. ב-booking החזר את התמונה המלאה והמעודכנת אחרי המיזוג (גם הפרטים שכבר היו + החדשים). אם נתון לא ידוע — רשום null/מחרוזת ריקה.
 
 שדות חובה: guest_name, guest_phone, check_in (YYYY-MM-DD), check_out (YYYY-MM-DD), zimmer_name (אחד מהרשימה למעלה).
-שדות רשות: num_guests, notes.
+שדות רשות: num_guests, notes, status ("ממתינה" או "אושרה").
+- אם הבעלים מבקש הזמנה "בהמתנה"/"ממתינה"/"לא מאושרת" → status חייב להיות "ממתינה". אל תכתוב את זה ב-notes.
+- אם לא צוין אחרת → status "אושרה".
+- notes רק להערות אמיתיות (לא סטטוס).
 
 פרטים שכבר נאספו עד כה:
 ${prevDataStr}
@@ -99,7 +121,8 @@ ${history}
               check_out: { type: 'string' },
               zimmer_name: { type: 'string' },
               num_guests: { type: 'number' },
-              notes: { type: 'string' }
+              notes: { type: 'string' },
+              status: { type: 'string', enum: ['ממתינה', 'אושרה'] }
             }
           }
         }
@@ -121,13 +144,23 @@ ${history}
         response.booking.zimmer_name?.includes(z.name)
       ) || zimmers[0];
 
+      const status = inferBookingStatus(response.booking, text);
+      const notes = cleanBookingNotes(response.booking.notes);
+
       const booking = {
         ...response.booking,
+        notes,
         zimmer_id: matchedZimmer?.id || '',
         zimmer_name: matchedZimmer?.name || response.booking.zimmer_name,
         owner_id: ownerId || matchedZimmer?.owner_id || '',
-        status: 'אושרה',
-        total_price: calcBookingTotal(response.booking.check_in, response.booking.check_out, matchedZimmer?.price_per_night),
+        status,
+        total_price: calcBookingTotalForZimmer(
+          matchedZimmer,
+          response.booking.check_in,
+          response.booking.check_out,
+          0,
+          0,
+        ),
       };
       setPendingBooking(booking);
       addMsg('bot', response.message || 'מצוין! הנה ההזמנה שאני מתכוון להוסיף:');
@@ -139,10 +172,15 @@ ${history}
   const handleSave = async () => {
     if (!pendingBooking) return;
     setSaving(true);
-    await base44.entities.BookingRequest.create(pendingBooking);
-    setSaving(false);
-    onSaved();
-    onClose();
+    try {
+      await api.entities.BookingRequest.create(pendingBooking);
+      onSaved();
+      onClose();
+    } catch (e) {
+      addMsg('bot', `⚠️ ${bookingErrorMessage(e)}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -186,6 +224,7 @@ ${history}
                 <p>👤 {pendingBooking.guest_name} · 📞 {pendingBooking.guest_phone}</p>
                 <p>🏠 {pendingBooking.zimmer_name}</p>
                 <p>📅 {pendingBooking.check_in} → {pendingBooking.check_out}</p>
+                <p>סטטוס: <span className={pendingBooking.status === 'ממתינה' ? 'text-yellow-400' : 'text-green-400'}>{pendingBooking.status}</span></p>
                 {pendingBooking.num_guests && <p>👥 {pendingBooking.num_guests} אורחים</p>}
                 {pendingBooking.total_price ? <p className="font-semibold text-green-400">💳 תשלום: {formatILS(pendingBooking.total_price)}</p> : null}
                 {pendingBooking.notes && <p className="text-gray-400 text-xs">{pendingBooking.notes}</p>}

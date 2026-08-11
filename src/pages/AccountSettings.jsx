@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
+import { getApiBase, getStoredToken } from '@/api/own/http';
 import { User, Bell, Link, ArrowRight, Save, Check } from 'lucide-react';
 
 const inputStyle = {
@@ -15,19 +16,34 @@ export default function AccountSettings({ embedded = false }) {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState({ full_name: '', phone: '', business_name: '' });
   const [notifications, setNotifications] = useState({ new_booking: true, booking_approved: true, booking_rejected: false, daily_summary: false });
+  const [calStatus, setCalStatus] = useState({ connected: false });
 
   useEffect(() => {
-    base44.auth.me().then(u => {
+    api.auth.me().then(async (u) => {
       setUser(u);
       setProfile({ full_name: u.full_name || '', phone: u.phone || '', business_name: u.business_name || '' });
-      if (u.notifications) setNotifications({ ...notifications, ...u.notifications });
+      if (u.notifications) setNotifications((n) => ({ ...n, ...u.notifications }));
       setLoading(false);
+      try {
+        const token = getStoredToken();
+        if (token) {
+          const res = await fetch(`${getApiBase()}/api/connectors/google-calendar/status`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) setCalStatus(await res.json());
+        }
+      } catch { /* ignore */ }
     });
   }, []);
 
+  const connectCalendar = () => {
+    const token = getStoredToken();
+    if (!token) return;
+    window.location.href = `${getApiBase()}/api/connectors/google-calendar/oauth?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent('/account-settings')}`;
+  };
   const handleSave = async () => {
-    if (tab === 'profile') await base44.auth.updateMe({ phone: profile.phone, business_name: profile.business_name });
-    else if (tab === 'notifications') await base44.auth.updateMe({ notifications });
+    if (tab === 'profile') await api.auth.updateMe({ phone: profile.phone, business_name: profile.business_name });
+    else if (tab === 'notifications') await api.auth.updateMe({ notifications });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -143,7 +159,17 @@ export default function AccountSettings({ embedded = false }) {
                   <p className="text-xs" style={{ color: '#9CA3AF' }}>סנכרן הזמנות ישירות ליומן שלך</p>
                 </div>
               </div>
-              <span className="text-xs px-3 py-1 rounded-full font-semibold" style={{ background: 'rgba(34,197,94,0.1)', color: '#16A34A' }}>מחובר ✓</span>
+              <span
+                className="text-xs px-3 py-1 rounded-full font-semibold cursor-pointer"
+                style={{
+                  background: calStatus.connected ? 'rgba(34,197,94,0.1)' : 'rgba(249,115,22,0.12)',
+                  color: calStatus.connected ? '#16A34A' : '#EA580C',
+                }}
+                onClick={() => { if (!calStatus.connected) connectCalendar(); }}
+                title={calStatus.connected ? calStatus.account_email || 'מחובר' : 'לחץ לחיבור'}
+              >
+                {calStatus.connected ? 'מחובר ✓' : 'חבר יומן'}
+              </span>
             </div>
             {[
               { label: 'WhatsApp Business', desc: 'שלח עדכונים ללקוחות דרך וואטסאפ', icon: '📱' },

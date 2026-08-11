@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Tag, X, Trash2, Sparkles } from 'lucide-react';
 import { calcBookingTotalForZimmer, calcNights, formatILS, clampDiscount } from '@/lib/bookingPrice';
 
@@ -26,9 +26,9 @@ export default function PromotionsPanel({ ownerId }) {
     if (!ownerId) return;
     setLoading(true);
     const [zs, bks, prs] = await Promise.all([
-      base44.entities.Zimmer.filter({ owner_id: ownerId }),
-      base44.entities.BookingRequest.filter({ status: 'אושרה' }),
-      base44.entities.Promotion.filter({ owner_id: ownerId }),
+      api.entities.Zimmer.filter({ owner_id: ownerId }),
+      api.entities.BookingRequest.filter({ owner_id: ownerId, status: 'אושרה' }),
+      api.entities.Promotion.filter({ owner_id: ownerId }),
     ]);
     setZimmers(zs);
     setBookings(bks);
@@ -36,7 +36,7 @@ export default function PromotionsPanel({ ownerId }) {
     const today = weekStart;
     for (const p of prs) {
       if (p.status === 'פעיל' && p.check_out && p.check_out < today) {
-        try { await base44.entities.Promotion.update(p.id, { status: 'פג תוקף' }); p.status = 'פג תוקף'; } catch (e) {}
+        try { await api.entities.Promotion.update(p.id, { status: 'פג תוקף' }); p.status = 'פג תוקף'; } catch (e) {}
       }
     }
     setPromos(prs);
@@ -76,7 +76,7 @@ export default function PromotionsPanel({ ownerId }) {
   const save = async () => {
     if (!creating || !form.check_in || !form.check_out) return;
     setSaving(true);
-    await base44.entities.Promotion.create({
+    await api.entities.Promotion.create({
       zimmer_id: creating.id,
       zimmer_name: creating.name,
       owner_id: ownerId,
@@ -92,7 +92,7 @@ export default function PromotionsPanel({ ownerId }) {
 
   const removePromo = async (id) => {
     if (!confirm('למחוק את המבצע?')) return;
-    await base44.entities.Promotion.delete(id);
+    await api.entities.Promotion.delete(id);
     load();
   };
 

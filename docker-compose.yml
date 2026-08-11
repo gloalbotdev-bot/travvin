@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: travvin
+      POSTGRES_PASSWORD: travvin
+      POSTGRES_DB: travvin
+    ports:
+      - "5432:5432"
+    volumes:
+      - travvin_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U travvin -d travvin"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  travvin_pgdata:

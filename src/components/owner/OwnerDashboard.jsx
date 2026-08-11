@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, LogIn, LogOut, TrendingUp, Sparkles, RefreshCw, MessageCircleQuestion, Bot, Plus, ArrowLeft, X, AlertTriangle, CalendarDays, Clock, Moon } from 'lucide-react';
 import { calcNights, getBookingTotal, formatILS } from '@/lib/bookingPrice';
@@ -37,9 +37,9 @@ export default function OwnerDashboard({ ownerId, zimmers, onNavigate, onAction 
   const loadBookings = async () => {
     setLoading(true);
     const [data, questions, chats] = await Promise.all([
-      base44.entities.BookingRequest.filter({ owner_id: ownerId }),
-      base44.entities.UnansweredQuestion.filter({ owner_id: ownerId, status: 'ממתינה' }),
-      base44.entities.DirectChat.filter({ owner_id: ownerId }, '-updated_date'),
+      api.entities.BookingRequest.filter({ owner_id: ownerId }),
+      api.entities.UnansweredQuestion.filter({ owner_id: ownerId, status: 'ממתינה' }),
+      api.entities.DirectChat.filter({ owner_id: ownerId }, '-updated_date'),
     ]);
     setBookings(data);
     setPendingQuestions(questions);
@@ -93,7 +93,7 @@ export default function OwnerDashboard({ ownerId, zimmers, onNavigate, onAction 
   const getAiTips = async () => {
     setLoadingAi(true);
     const zimmerNames = zimmers.map(z => z.name).join(', ');
-    const tip = await base44.integrations.Core.InvokeLLM({
+    const tip = await api.integrations.Core.InvokeLLM({
       prompt: `אתה יועץ עסקי לבעל צימרים בישראל. בעל המתחם מנהל את הצימרים: ${zimmerNames || 'צימר'}.
 נתונים: ${checkinsToday.length} צ'קאין היום, ${checkoutsToday.length} צ'קאאוט היום, ${currentlyStaying.length} אורחים כרגע, ${monthBookings.length} הזמנות החודש, הכנסה חזויה ₪${monthRevenue.toLocaleString()}, ${pendingCount} בקשות ממתינות.
 תן 3-4 המלצות קצרות ומעשיות לשיפור העסק. כל המלצה בשורה נפרדת עם ✨ בהתחלה. בעברית בלבד.`
@@ -117,7 +117,7 @@ export default function OwnerDashboard({ ownerId, zimmers, onNavigate, onAction 
             {new Date().toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
-        <CalendarSyncCard />
+        <CalendarSyncCard ownerId={ownerId} />
       </div>
 
       {dashboardActions.length > 0 && (

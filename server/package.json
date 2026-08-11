@@ -1,0 +1,47 @@
+{
+  "name": "travvin-server",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "db:apply-records": "node scripts/apply-records-sql.js",
+    "db:apply-auth": "node scripts/apply-auth-sql.js",
+    "db:apply-calendar": "node scripts/apply-calendar-sql.js",
+    "db:apply-delayed-jobs": "node scripts/apply-delayed-jobs-sql.js",
+    "seed": "node src/seed/run.js",
+    "seed:fresh": "node src/seed/run.js --fresh",
+    "test:contract": "node tests/contract/entities.smoke.js",
+    "test:authz": "node tests/contract/authz.smoke.js",
+    "test:auth": "node tests/contract/auth.smoke.js",
+    "test:geocode": "node tests/contract/geocode.smoke.js",
+    "test:functions": "node tests/contract/functions.smoke.js",
+    "test:calendar": "node tests/contract/calendar.smoke.js",
+    "test:workflows": "node tests/contract/workflows.smoke.js",
+    "test:booking": "node tests/contract/booking.smoke.js",
+    "test:validation": "node tests/contract/validation.smoke.js",
+    "test:assistant": "node tests/contract/owner-assistant-ops.smoke.js",
+    "test:all": "node tests/contract/validation.smoke.js && node tests/contract/entities.smoke.js && node tests/contract/auth.smoke.js && node tests/contract/authz.smoke.js && node tests/contract/booking.smoke.js && node tests/contract/calendar.smoke.js && node tests/contract/geocode.smoke.js && node tests/contract/functions.smoke.js && node tests/contract/workflows.smoke.js && node tests/contract/owner-assistant-ops.smoke.js && node tests/contract/upload.smoke.js",
+    "test:all:live": "npm run test:all && npm run test:llm",
+    "test:llm": "node tests/contract/invoke-llm.smoke.js",
+    "test:upload": "node tests/contract/upload.smoke.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.14.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.2.0",
+    "node-cron": "^3.0.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "prisma": "^6.14.0"
+  }
+}

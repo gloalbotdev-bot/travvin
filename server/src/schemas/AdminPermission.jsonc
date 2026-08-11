@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email",
+      "title": "\u05d0\u05d9\u05de\u05d9\u05d9\u05dc"
+    },
+    "is_primary": {
+      "type": "boolean",
+      "title": "\u05d0\u05d3\u05de\u05d9\u05df \u05e8\u05d0\u05e9\u05d9",
+      "default": false
+    },
+    "allowed_pages": {
+      "type": "array",
+      "title": "\u05d3\u05e4\u05d9\u05dd \u05de\u05d5\u05ea\u05e8\u05d9\u05dd",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "is_active": {
+      "type": "boolean",
+      "title": "\u05e4\u05e2\u05d9\u05dc",
+      "default": true
+    },
+    "notes": {
+      "type": "string",
+      "title": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    }
+  },
+  "required": [
+    "email"
+  ],
+  "name": "AdminPermission",
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": {
+      "$or": [
+        { "user_condition": { "role": "admin" } },
+        { "data.email": "{{user.email}}" }
+      ]
+    },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

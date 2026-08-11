@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { MessageCircleQuestion, X, ChevronUp, ArrowLeft, ClipboardList, CalendarX, MessageSquare, Check } from 'lucide-react';
 
 export default function FloatingPendingWidget({ ownerId, onAction }) {
@@ -14,9 +14,9 @@ export default function FloatingPendingWidget({ ownerId, onAction }) {
     setLoading(true);
     try {
       const [b, q, c] = await Promise.all([
-        base44.entities.BookingRequest.filter({ owner_id: ownerId }),
-        base44.entities.UnansweredQuestion.filter({ owner_id: ownerId, status: 'ממתינה' }, '-created_date', 50),
-        base44.entities.DirectChat.filter({ owner_id: ownerId }, '-updated_date'),
+        api.entities.BookingRequest.filter({ owner_id: ownerId }),
+        api.entities.UnansweredQuestion.filter({ owner_id: ownerId, status: 'ממתינה' }, '-created_date', 50),
+        api.entities.DirectChat.filter({ owner_id: ownerId }, '-updated_date'),
       ]);
       setBookings(b || []);
       setQuestions(q || []);
@@ -29,9 +29,9 @@ export default function FloatingPendingWidget({ ownerId, onAction }) {
 
   // realtime refresh while closed so the badge stays fresh
   useEffect(() => {
-    const u1 = base44.entities.BookingRequest.subscribe(() => { if (!open) load(); });
-    const u2 = base44.entities.UnansweredQuestion.subscribe(() => { if (!open) load(); });
-    const u3 = base44.entities.DirectChat.subscribe(() => { if (!open) load(); });
+    const u1 = api.entities.BookingRequest.subscribe(() => { if (!open) load(); });
+    const u2 = api.entities.UnansweredQuestion.subscribe(() => { if (!open) load(); });
+    const u3 = api.entities.DirectChat.subscribe(() => { if (!open) load(); });
     return () => { u1(); u2(); u3(); };
   }, [open, load]);
 

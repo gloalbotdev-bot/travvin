@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Home, Users, ClipboardList, Wallet, Star, Tag, AlertTriangle, Clock, CheckCircle, XCircle, MessageSquare, TrendingUp, Calendar, LayoutDashboard, Bell, Phone } from 'lucide-react';
 import FloatingQuestionsWidget from '@/components/superadmin/FloatingQuestionsWidget';
@@ -19,13 +19,13 @@ export default function SuperAdminDashboard({ onNavigate }) {
     setLoading(true);
     try {
       const [zimmers, bookings, users, reviews, promos, sessions, questions] = await Promise.all([
-        base44.entities.Zimmer.list(),
-        base44.entities.BookingRequest.list('-created_date', 500),
-        base44.entities.User.list(),
-        base44.entities.Review.list('-created_date', 200),
-        base44.entities.Promotion.list(),
-        base44.entities.ChatSession.list('-created_date', 200),
-        base44.entities.UnansweredQuestion.list('-created_date', 100),
+        api.entities.Zimmer.list(),
+        api.entities.BookingRequest.list('-created_date', 500),
+        api.entities.User.list(),
+        api.entities.Review.list('-created_date', 200),
+        api.entities.Promotion.list(),
+        api.entities.ChatSession.list('-created_date', 200),
+        api.entities.UnansweredQuestion.list('-created_date', 100),
       ]);
 
       // Zimmers

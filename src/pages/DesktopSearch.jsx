@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import SearchChat from '@/components/desktop/SearchChat';
 import ResultsList from '@/components/desktop/ResultsList';
 import SearchMap from '@/components/desktop/SearchMap';
@@ -7,6 +7,7 @@ import ZimmerDetailDrawer from '@/components/chat/ZimmerDetailDrawer';
 import BookingForm from '@/components/chat/BookingForm';
 import DirectChat, { getOrCreateDirectThread } from '@/components/chat/DirectChat';
 import { getBookedZimmerIds, datesOverlap } from '@/components/chat/DateSearchWidget';
+import { bookingErrorMessage } from '@/lib/bookingErrors';
 
 export default function DesktopSearch() {
   const [user, setUser] = useState(null);
@@ -20,7 +21,7 @@ export default function DesktopSearch() {
   const [bookingMessage, setBookingMessage] = useState(null);
 
   useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
+    api.auth.me().then(setUser).catch(() => {});
   }, []);
 
   // Attach coords from cache to results (for map + list)
@@ -47,7 +48,7 @@ export default function DesktopSearch() {
     });
     (async () => {
       try {
-        const res = await base44.functions.invoke('geocodeAddresses', { addresses: pending });
+        const res = await api.functions.invoke('geocodeAddresses', { addresses: pending });
         const out = res?.data?.results || [];
         setCoordsCache((prev) => {
           const next = { ...prev };
@@ -94,23 +95,23 @@ export default function DesktopSearch() {
   };
 
   const handleBookingSubmit = async (data, zimmer) => {
-    const bookedIds = await getBookedZimmerIds(base44, data.check_in, data.check_out);
+    const bookedIds = await getBookedZimmerIds(api, data.check_in, data.check_out);
     if (bookedIds.includes(zimmer.id)) {
       setBookingMessage(`⚠️ ${zimmer.name} תפוס בתאריכים האלה. נסה תאריכים אחרים.`);
       setBookingZimmer(null);
       return;
     }
     try {
-      await base44.entities.BookingRequest.create({ zimmer_id: zimmer.id, zimmer_name: zimmer.name, owner_id: zimmer.owner_id, ...data, status: 'ממתינה' });
+      await api.entities.BookingRequest.create({ zimmer_id: zimmer.id, zimmer_name: zimmer.name, owner_id: zimmer.owner_id, ...data, status: 'ממתינה' });
       try {
-        const promos = await base44.entities.Promotion.filter({ zimmer_id: zimmer.id, status: 'פעיל' });
-        for (const p of promos) if (datesOverlap(data.check_in, data.check_out, p.check_in, p.check_out)) await base44.entities.Promotion.update(p.id, { status: 'נתפס' });
+        const promos = await api.entities.Promotion.filter({ zimmer_id: zimmer.id, status: 'פעיל' });
+        for (const p of promos) if (datesOverlap(data.check_in, data.check_out, p.check_in, p.check_out)) await api.entities.Promotion.update(p.id, { status: 'נתפס' });
       } catch {}
       setBookingZimmer(null);
       setSelectedZimmer(null);
       setBookingMessage(`✅ בקשת ההזמנה ל-${zimmer.name} התקבלה! בעל הצימר ייצור איתך קשר בקרוב. 🎉`);
     } catch (e) {
-      setBookingMessage('לא הצלחתי לשמור את הבקשה. נסה שוב.');
+      setBookingMessage(`⚠️ ${bookingErrorMessage(e)}`);
     }
   };
 

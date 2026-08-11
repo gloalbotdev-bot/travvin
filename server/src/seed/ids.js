@@ -1,0 +1,21 @@
+/** Fixed UUIDs for idempotent demo seed (re-run safe). */
+export const IDS = {
+  zimmerGalil: 'a1000001-0001-4001-8001-000000000001',
+  zimmerGolan: 'a1000001-0001-4001-8001-000000000002',
+  bookingPending: 'a2000002-0002-4002-8002-000000000001',
+  bookingApproved: 'a2000002-0002-4002-8002-000000000002',
+  promoActive: 'a3000003-0003-4003-8003-000000000001',
+  reviewPublished: 'a4000004-0004-4004-8004-000000000001',
+  questionPending: 'a5000005-0005-4005-8005-000000000001',
+  chatSession: 'a6000006-0006-4006-8006-000000000001',
+  directChat: 'a7000007-0007-4007-8007-000000000001',
+  adminPerm: 'a8000008-0008-4008-8008-000000000001',
+  sysMsgCustomer: 'a9000009-0009-4009-8009-000000000001',
+  sysMsgOwner: 'a9000009-0009-4009-8009-000000000002',
+  contact1: 'aa000010-0010-4010-8010-000000000001',
+  customerProfile: 'ab000011-0011-4011-8011-000000000001',
+  syncState: 'ac000012-0012-4012-8012-000000000001',
+};
+
+export const DEFAULT_OWNER_EMAIL = 'gw38452@gmail.com';
+export const DEFAULT_CUSTOMER_EMAIL = 'customer.demo@travvin.local';

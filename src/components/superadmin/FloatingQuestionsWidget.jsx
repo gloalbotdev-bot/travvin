@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { MessageCircleQuestion, X, Check, BookOpen, Send, ChevronUp } from 'lucide-react';
 
 const inputStyle = { background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A', borderRadius: '12px' };
@@ -18,7 +18,7 @@ export default function FloatingQuestionsWidget() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await base44.entities.UnansweredQuestion.filter({ status: 'ממתינה' }, '-created_date', 50);
+      const data = await api.entities.UnansweredQuestion.filter({ status: 'ממתינה' }, '-created_date', 50);
       setQuestions(data);
     } catch (e) { /* silent */ }
     setLoading(false);
@@ -28,7 +28,7 @@ export default function FloatingQuestionsWidget() {
 
   // realtime refresh when unopened so the badge count stays fresh
   useEffect(() => {
-    const unsub = base44.entities.UnansweredQuestion.subscribe(() => { if (!open) load(); });
+    const unsub = api.entities.UnansweredQuestion.subscribe(() => { if (!open) load(); });
     return unsub;
   }, [open, load]);
 
@@ -38,14 +38,14 @@ export default function FloatingQuestionsWidget() {
     if (!answer.trim()) return;
     setSaving(true);
     try {
-      await base44.entities.UnansweredQuestion.update(q.id, {
+      await api.entities.UnansweredQuestion.update(q.id, {
         status: 'נענתה',
         owner_answer: answer.trim(),
         save_to_knowledge: saveToKnowledge,
         answered_at: new Date().toISOString().split('T')[0],
       });
       if (saveToKnowledge) {
-        const zimmer = await base44.entities.Zimmer.get(q.zimmer_id).catch(() => null);
+        const zimmer = await api.entities.Zimmer.get(q.zimmer_id).catch(() => null);
         if (zimmer) {
           const zones = zimmer.data_zones || [];
           zones.push({
@@ -54,7 +54,7 @@ export default function FloatingQuestionsWidget() {
             source_label: 'שאלת לקוח',
             source_date: new Date().toISOString().split('T')[0],
           });
-          await base44.entities.Zimmer.update(q.zimmer_id, { data_zones: zones });
+          await api.entities.Zimmer.update(q.zimmer_id, { data_zones: zones });
         }
       }
       setAnsweringId(null);
@@ -66,7 +66,7 @@ export default function FloatingQuestionsWidget() {
   };
 
   const handleDismiss = async (id) => {
-    await base44.entities.UnansweredQuestion.update(id, { status: 'נדחתה' });
+    await api.entities.UnansweredQuestion.update(id, { status: 'נדחתה' });
     if (answeringId === id) { setAnsweringId(null); setAnswer(''); }
     load();
   };

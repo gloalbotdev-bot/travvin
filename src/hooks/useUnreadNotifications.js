@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 
 const KEY_FOR = (audience) => `zb_lastSeen_notif_${audience}`;
 
@@ -9,7 +9,7 @@ export function useUnreadNotifications(audience, userId) {
   const load = useCallback(async () => {
     if (!audience) return;
     try {
-      const msgs = await base44.entities.SystemMessage.filter({ audience }, '-created_date', 30);
+      const msgs = await api.entities.SystemMessage.filter({ audience }, '-created_date', 30);
       const mine = (msgs || []).filter(m =>
         !m.target_user_ids?.length || (m.target_user_ids || []).includes(userId)
       );
@@ -24,7 +24,7 @@ export function useUnreadNotifications(audience, userId) {
   // Live updates: re-count when a system message is created/updated (e.g. owner answered a question)
   useEffect(() => {
     if (!audience) return;
-    const unsub = base44.entities.SystemMessage.subscribe(() => { load(); });
+    const unsub = api.entities.SystemMessage.subscribe(() => { load(); });
     return unsub;
   }, [audience, load]);
 

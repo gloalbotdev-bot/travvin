@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Send } from 'lucide-react';
 import QuickOptions from '@/components/chat/QuickOptions';
 import DateSearchWidget, { getBookedZimmerIds, datesOverlap } from '@/components/chat/DateSearchWidget';
 import { rankZimmersByFit, zimmerPriceSummary, formatILS } from '@/lib/bookingPrice';
+import { formatDataZonesForPrompt } from '@/lib/sanitizePromptData';
 import { REGION_KEYWORDS } from '@/lib/regions';
 
 const BOT_NAME = 'ZimmerBot';
@@ -87,8 +88,8 @@ export default function SearchChat({ user, onResults, onSelectZimmer, onBookZimm
     addMsg('user', 'text', `🔍 ${label}`);
     setIsTyping(true);
     try {
-      const all = await base44.entities.Zimmer.filter({ approval_status: 'אושר' });
-      const bookedIds = await getBookedZimmerIds(base44, checkIn, checkOut);
+      const all = await api.entities.Zimmer.filter({ approval_status: 'אושר' });
+      const bookedIds = await getBookedZimmerIds(api, checkIn, checkOut);
       let avail = all.filter((z) => !bookedIds.includes(z.id) && (!z.max_guests || z.max_guests >= p.numGuests));
       if (p.max_budget) avail = avail.filter((z) => zimmerPriceSummary(z, priceCheckIn, priceCheckOut, numAdults, numChildren).avg <= p.max_budget);
       if (p.regions?.length || p.freeText) {
@@ -113,7 +114,7 @@ export default function SearchChat({ user, onResults, onSelectZimmer, onBookZimm
 
       // LLM picks top 5 for the chat
       const ctx = avail.map((z) => {
-        const zones = (z.data_zones || []).map((dz) => `[${dz.source_type || 'מידע'}]: ${dz.content || ''}`).join('\n');
+        const zones = formatDataZonesForPrompt(z.data_zones);
         const pr = zimmerPriceSummary(z, priceCheckIn, priceCheckOut, numAdults, numChildren);
         const priceLine = pr.isPartial
           ? `${formatILS(pr.avg)}/לילה (חלקי, סה"כ ${formatILS(pr.total)})`
@@ -121,7 +122,7 @@ export default function SearchChat({ user, onResults, onSelectZimmer, onBookZimm
         return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || '—'} | ${priceLine} | חדרים: ${z.num_rooms || '?'} | מקס אורחים: ${z.max_guests || '?'}\n${zones}`;
       }).join('\n');
       const prompt = `אתה בוט צימרים. ענה בעברית. מחפש ${label}, ${numAdults} מבוגרים ו-${numChildren} ילדים.\nצימרים פנויים (מסודרים לפי התאמת קיבולת):\n${ctx}\nבחר עד 5 מועמדים מתאימים. החזר JSON {"action":"search","zimmer_ids":[...],"message":"..."}.\nmessage: הסבר קצר. JSON בלבד.`;
-      const res = await base44.integrations.Core.InvokeLLM({
+      const res = await api.integrations.Core.InvokeLLM({
         prompt,
         response_json_schema: { type: 'object', properties: { action: { type: 'string' }, message: { type: 'string' }, zimmer_ids: { type: 'array', items: { type: 'string' } } } },
       });
@@ -159,14 +160,14 @@ export default function SearchChat({ user, onResults, onSelectZimmer, onBookZimm
     addMsg('user', 'text', text);
     setIsTyping(true);
     try {
-      const all = await base44.entities.Zimmer.filter({ approval_status: 'אושר' });
+      const all = await api.entities.Zimmer.filter({ approval_status: 'אושר' });
       let avail = all;
       let datesInfo = '';
       let numAdults = 0, numChildren = 0, priceCheckIn = null, priceCheckOut = null;
       if (searchDates) {
         const ci = searchDates.checkIn || searchDates.rangeStart;
         const co = searchDates.checkOut || searchDates.rangeEnd;
-        const bookedIds = await getBookedZimmerIds(base44, ci, co);
+        const bookedIds = await getBookedZimmerIds(api, ci, co);
         avail = all.filter((z) => !bookedIds.includes(z.id) && (!z.max_guests || z.max_guests >= (searchDates.numGuests || 1)));
         numAdults = searchDates.num_adults || 0; numChildren = searchDates.num_children || 0;
         if (searchDates.checkIn) { priceCheckIn = searchDates.checkIn; priceCheckOut = searchDates.checkOut; datesInfo = `תאריכים: ${searchDates.checkIn} עד ${searchDates.checkOut}, ${numAdults} מבוגרים ו-${numChildren} ילדים.`; }
@@ -175,7 +176,7 @@ export default function SearchChat({ user, onResults, onSelectZimmer, onBookZimm
       }
 
       const zctx = avail.map((z) => {
-        const zones = (z.data_zones || []).map((dz) => `[${dz.source_type || 'מידע'}]: ${dz.content || ''}`).join('\n');
+        const zones = formatDataZonesForPrompt(z.data_zones);
         let priceStr = `מחיר: ${z.price_per_night ? z.price_per_night + '₪/לילה' : '—'}`;
         if (priceCheckIn && priceCheckOut) {
           const pr = zimmerPriceSummary(z, priceCheckIn, priceCheckOut, numAdults, numChildren);
@@ -185,7 +186,7 @@ export default function SearchChat({ user, onResults, onSelectZimmer, onBookZimm
       }).join('\n\n');
       const hist = messages.slice(-6).map((m) => (m.role === 'user' ? `לקוח: ${m.content}` : `בוט: ${typeof m.content === 'string' ? m.content : '[תוצאות]'}`)).join('\n');
       const prompt = `אתה בוט צימרים, ענה בעברית. ${datesInfo}\nצימרים פנויים:\n${zctx}\nהיסטוריה: ${hist}\nהודעה: "${text}"\nהחזר JSON: {"action":"search"|"answer"|"booking"|"view","zimmer_ids":[...],"zimmer_id":"...","message":"...","unanswered_question":bool}.\nחוקי חובה:\n- כל אילוץ שהלקוח הזכיר בשיחה (אזור, כמות אורחים, מתקנים, תקציב) מצטבר — החזר ב-zimmer_ids רק צימרים העונים לכל האילוצים גם יחד. לדוגמה: אם קודם אמר "צפון" ועכשיו הוסיף "זוג" — החזר רק צימרים בצפון שמתאימים לזוג.\n- החזר zimmer_ids מתוך רשימת הצימרים הפנויים למעלה בלבד. החזר עד 20 תוצאות רלוונטיות.\n- בקשה להזמין צימר מוזכר → action="booking", zimmer_id.\n- בקשה לראות דף צימר / תמונות / פרטים מלאים / "תן לי לראות את" / "פתח דף צימר" / "אני רוצה לראות תמונות" → action="view", zimmer_id.\n- שאלת המשך על צימר שמוזכר → action="answer" בלבד.\n- לראות תוצאות/חיפוש מחדש → action="search". JSON בלבד.`;
-      const res = await base44.integrations.Core.InvokeLLM({
+      const res = await api.integrations.Core.InvokeLLM({
         prompt,
         response_json_schema: { type: 'object', properties: { action: { type: 'string' }, message: { type: 'string' }, zimmer_ids: { type: 'array', items: { type: 'string' } }, zimmer_id: { type: 'string' }, unanswered_question: { type: 'boolean' } } },
       });
@@ -217,7 +218,7 @@ export default function SearchChat({ user, onResults, onSelectZimmer, onBookZimm
                   ? `${searchDates.checkIn} עד ${searchDates.checkOut}, ${searchDates.numGuests} אורחים`
                   : `${searchDates.numNights} לילות בין ${searchDates.rangeStart} ל-${searchDates.rangeEnd}, ${searchDates.numGuests} אורחים`)
               : null;
-            await base44.entities.UnansweredQuestion.create({
+            await api.entities.UnansweredQuestion.create({
               zimmer_id: z.id,
               zimmer_name: z.name,
               owner_id: z.owner_id,

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Send, MoreVertical, User, Tag, PlusCircle, Search as SearchIcon, Sparkles, Bell } from 'lucide-react';
 import ZimmerCard from '@/components/chat/ZimmerCard';
 import ZimmerDetailDrawer from '@/components/chat/ZimmerDetailDrawer';
 import BookingForm from '@/components/chat/BookingForm';
 import QuickOptions from '@/components/chat/QuickOptions';
 import DateSearchWidget, { getBookedZimmerIds, datesOverlap } from '@/components/chat/DateSearchWidget';
+import { bookingErrorMessage } from '@/lib/bookingErrors';
 import { rankZimmersByFit, zimmerPriceSummary, formatILS } from '@/lib/bookingPrice';
+import { formatDataZonesForPrompt } from '@/lib/sanitizePromptData';
 import { REGION_KEYWORDS } from '@/lib/regions';
 import VacationAgentChat from '@/components/chat/VacationAgentChat';
 import DirectChat, { getOrCreateDirectThread } from '@/components/chat/DirectChat';
@@ -101,47 +103,73 @@ export default function CustomerChat() {
   };
 
   useEffect(() => {
-    base44.entities.Zimmer.list().then(setZimmers);
-    base44.auth.me().then(u => { setCurrentUser(u); }).catch(() => {});
-
-    const resumeId = sessionStorage.getItem('resume_session_id');
-    const resumeMessages = sessionStorage.getItem('resume_messages');
-    if (resumeId && resumeMessages) {
-      sessionStorage.removeItem('resume_session_id');
-      sessionStorage.removeItem('resume_messages');
-      clearPersistedChat();
-      currentSessionId = resumeId;
+    api.entities.Zimmer.list().then(setZimmers);
+    let cancelled = false;
+    (async () => {
+      let user = null;
       try {
-        const prev = JSON.parse(resumeMessages);
-        const restored = prev.map((m, i) => ({
-          id: Date.now() + i,
-          role: m.role === 'user' ? 'user' : 'bot',
-          type: 'text',
-          content: m.content,
-          time: m.time || '',
-        }));
-        const continuationMsg = {
-          id: Date.now() + 9999,
-          role: 'bot',
-          type: 'text',
-          content: '👋 ממשיכים מאיפה שעצרנו! במה אוכל לעזור?',
-          time: formatTime(),
-        };
-        setMessages([...restored, continuationMsg]);
+        user = await api.auth.me();
+        if (!cancelled) setCurrentUser(user);
+      } catch { /* guest */ }
+      if (cancelled) return;
+      const ownerKey = user?.id || 'guest';
+
+      const resumeId = sessionStorage.getItem('resume_session_id');
+      const resumeMessages = sessionStorage.getItem('resume_messages');
+      if (resumeId && resumeMessages) {
+        // History resume is only for the signed-in owner of those sessions
+        if (!user) {
+          sessionStorage.removeItem('resume_session_id');
+          sessionStorage.removeItem('resume_messages');
+        } else {
+          sessionStorage.removeItem('resume_session_id');
+          sessionStorage.removeItem('resume_messages');
+          clearPersistedChat();
+          currentSessionId = resumeId;
+          try {
+            const prev = JSON.parse(resumeMessages);
+            const restored = prev.map((m, i) => ({
+              id: Date.now() + i,
+              role: m.role === 'user' ? 'user' : 'bot',
+              type: 'text',
+              content: m.content,
+              time: m.time || '',
+            }));
+            const continuationMsg = {
+              id: Date.now() + 9999,
+              role: 'bot',
+              type: 'text',
+              content: '👋 ממשיכים מאיפה שעצרנו! במה אוכל לעזור?',
+              time: formatTime(),
+            };
+            setMessages([...restored, continuationMsg]);
+            return;
+          } catch { /* fall through */ }
+        }
+      }
+
+      const persisted = loadPersistedChat();
+      if (persisted && persisted.ownerKey && persisted.ownerKey !== ownerKey) {
+        clearPersistedChat();
+      } else if (
+        persisted &&
+        persisted.ownerKey === ownerKey &&
+        Array.isArray(persisted.messages) &&
+        persisted.messages.length > 0
+      ) {
+        currentSessionId = persisted.sessionId || null;
+        sessionMessages = persisted.sessionMessages || [];
+        sessionZimmerIds = persisted.sessionZimmerIds || [];
+        if (persisted.searchDates) setSearchDates(persisted.searchDates);
+        if (Array.isArray(persisted.quickOptions) && persisted.quickOptions.length) {
+          setQuickOptions(persisted.quickOptions);
+        }
+        setMessages(persisted.messages);
         return;
-      } catch { /* fall through */ }
-    }
-    const persisted = loadPersistedChat();
-    if (persisted && Array.isArray(persisted.messages) && persisted.messages.length > 0) {
-      currentSessionId = persisted.sessionId || null;
-      sessionMessages = persisted.sessionMessages || [];
-      sessionZimmerIds = persisted.sessionZimmerIds || [];
-      if (persisted.searchDates) setSearchDates(persisted.searchDates);
-      if (Array.isArray(persisted.quickOptions) && persisted.quickOptions.length) setQuickOptions(persisted.quickOptions);
-      setMessages(persisted.messages);
-      return;
-    }
-    initChat();
+      }
+      initChat();
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -152,6 +180,7 @@ export default function CustomerChat() {
   useEffect(() => {
     if (messages.length > 0) {
       persistChat({
+        ownerKey: currentUser?.id || 'guest',
         messages,
         searchDates,
         quickOptions,
@@ -160,7 +189,7 @@ export default function CustomerChat() {
         sessionId: currentSessionId,
       });
     }
-  }, [messages, searchDates, quickOptions]);
+  }, [messages, searchDates, quickOptions, currentUser]);
 
   // Load a promotion the customer clicked from the Promotions page
   useEffect(() => {
@@ -170,9 +199,9 @@ export default function CustomerChat() {
     (async () => {
       try {
         const { promoId, action } = JSON.parse(ctx);
-        const promo = await base44.entities.Promotion.get(promoId);
+        const promo = await api.entities.Promotion.get(promoId);
         if (!promo || promo.status !== 'פעיל') return;
-        const zimmer = await base44.entities.Zimmer.get(promo.zimmer_id);
+        const zimmer = await api.entities.Zimmer.get(promo.zimmer_id);
         if (!zimmer) return;
         const nights = Math.round((new Date(promo.check_out) - new Date(promo.check_in)) / 86400000);
         const promoDates = { checkIn: promo.check_in, checkOut: promo.check_out, numGuests: 2, num_adults: 2, num_children: 0 };
@@ -231,9 +260,9 @@ export default function CustomerChat() {
         booking_created: bookingCreated,
       };
       if (currentSessionId) {
-        await base44.entities.ChatSession.update(currentSessionId, sessionData);
+        await api.entities.ChatSession.update(currentSessionId, sessionData);
       } else {
-        const s = await base44.entities.ChatSession.create(sessionData);
+        const s = await api.entities.ChatSession.create(sessionData);
         currentSessionId = s.id;
       }
     } catch (e) { /* silent */ }
@@ -247,7 +276,7 @@ export default function CustomerChat() {
 
   // Get available zimmer IDs after filtering out booked ones for given dates
   const getAvailableZimmerIds = async (checkIn, checkOut) => {
-    const bookedIds = await getBookedZimmerIds(base44, checkIn, checkOut);
+    const bookedIds = await getBookedZimmerIds(api, checkIn, checkOut);
     return bookedIds;
   };
 
@@ -283,7 +312,7 @@ export default function CustomerChat() {
     setIsTyping(true);
 
     try {
-      const freshZimmers = await base44.entities.Zimmer.filter({ approval_status: 'אושר' });
+      const freshZimmers = await api.entities.Zimmer.filter({ approval_status: 'אושר' });
       setZimmers(freshZimmers);
 
       // Get booked zimmer IDs for the date range
@@ -346,9 +375,7 @@ export default function CustomerChat() {
       }
 
       const zimmerContext = availableZimmers.map(z => {
-        const zones = (z.data_zones || []).map((dz, i) =>
-          `[${dz.source_type || 'מידע'}]: ${dz.content || ''}`
-        ).join('\n');
+        const zones = formatDataZonesForPrompt(z.data_zones);
         const price = zimmerPriceSummary(z, priceCheckIn, priceCheckOut, numAdults, numChildren);
         const priceLine = price.isPartial
           ? `מחיר ללילה: ${formatILS(price.avg)} (תמחור חלקי לפי אדם, סה"כ ${formatILS(price.total)} ל-${price.nights} לילות)`
@@ -366,7 +393,7 @@ ${zimmerContext}
 ${searchParams.amenities?.length ? 'אם יש מתקנים מבוקשים ועדיין נותרו מקומות פנויים באותה קיבולת מדויקת, העדף מביניהם את אלה שכוללים את המתקנים.' : ''}
 message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await api.integrations.Core.InvokeLLM({
         prompt,
         response_json_schema: {
           type: 'object',
@@ -446,7 +473,7 @@ message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
     setIsTyping(true);
 
     try {
-      const freshZimmers = await base44.entities.Zimmer.filter({ approval_status: 'אושר' });
+      const freshZimmers = await api.entities.Zimmer.filter({ approval_status: 'אושר' });
       setZimmers(freshZimmers);
 
       // Filter by availability if we have dates
@@ -456,7 +483,7 @@ message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
       if (searchDates) {
         const checkIn = searchDates.checkIn || searchDates.rangeStart;
         const checkOut = searchDates.checkOut || searchDates.rangeEnd;
-        const bookedIds = await getBookedZimmerIds(base44, checkIn, checkOut);
+        const bookedIds = await getBookedZimmerIds(api, checkIn, checkOut);
         availableZimmers = freshZimmers.filter(z =>
           !bookedIds.includes(z.id) &&
           (!z.max_guests || z.max_guests >= (searchDates.numGuests || 1))
@@ -476,7 +503,7 @@ message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
       }
 
       const zimmerContext = availableZimmers.map(z => {
-        const zones = (z.data_zones || []).map(dz => `[${dz.source_type || 'מידע'}]: ${dz.content || ''}`).join('\n');
+        const zones = formatDataZonesForPrompt(z.data_zones);
         let priceStr = `מחיר: ${z.price_per_night ? z.price_per_night + '₪/לילה' : 'לא צוין'}`;
         if (priceCheckIn && priceCheckOut) {
           const price = zimmerPriceSummary(z, priceCheckIn, priceCheckOut, numAdults, numChildren);
@@ -501,8 +528,8 @@ message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
         try {
           // Fetch all bookings and match by email OR name (since guest submits name in form)
           const [bookings, sessions] = await Promise.all([
-            base44.entities.BookingRequest.filter({ created_by_id: currentUser.id }, '-created_date', 50),
-            base44.entities.ChatSession.filter({ user_id: currentUser.id }, '-created_date', 3),
+            api.entities.BookingRequest.filter({ created_by_id: currentUser.id }, '-created_date', 50),
+            api.entities.ChatSession.filter({ user_id: currentUser.id }, '-created_date', 3),
           ]);
           const now = new Date();
           const upcoming = bookings
@@ -556,7 +583,7 @@ ${customerContext ? '- שאלה על הפרופיל/הזמנות/היסטורי�
 - רק תשובות שאינן כוללות שום צימר ספציפי (שאלות כלליות, פרופיל, היסטוריה) → action="answer", message="...".
 JSON בלבד.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await api.integrations.Core.InvokeLLM({
         prompt,
         response_json_schema: {
           type: 'object',
@@ -589,7 +616,7 @@ JSON בלבד.`;
         if (response.message) addMessage('bot', 'text', response.message);
         let targetZimmer = availableZimmers.find(z => z.id === response.zimmer_id);
         if (!targetZimmer && response.zimmer_id) {
-          try { targetZimmer = await base44.entities.Zimmer.get(response.zimmer_id); } catch {}
+          try { targetZimmer = await api.entities.Zimmer.get(response.zimmer_id); } catch {}
         }
         if (targetZimmer) {
           sessionZimmerIds.push(targetZimmer.id);
@@ -645,7 +672,7 @@ JSON בלבד.`;
 
   const handleBookingSubmit = async (data, zimmer) => {
     // Final availability check before saving
-    const bookedIds = await getBookedZimmerIds(base44, data.check_in, data.check_out);
+    const bookedIds = await getBookedZimmerIds(api, data.check_in, data.check_out);
     if (bookedIds.includes(zimmer.id)) {
       addMessage('bot', 'text', `⚠️ הצימר *${zimmer.name}* כבר תפוס בתאריכים שבחרת. נסה תאריכים אחרים.`);
       setPendingBooking(null);
@@ -654,7 +681,7 @@ JSON בלבד.`;
     }
 
     try {
-      await base44.entities.BookingRequest.create({
+      await api.entities.BookingRequest.create({
         zimmer_id: zimmer.id,
         zimmer_name: zimmer.name,
         owner_id: zimmer.owner_id,
@@ -663,10 +690,10 @@ JSON בלבד.`;
       });
       // Mark matching active promotions as captured so they disappear from the deals page
       try {
-        const promos = await base44.entities.Promotion.filter({ zimmer_id: zimmer.id, status: 'פעיל' });
+        const promos = await api.entities.Promotion.filter({ zimmer_id: zimmer.id, status: 'פעיל' });
         for (const p of promos) {
           if (datesOverlap(data.check_in, data.check_out, p.check_in, p.check_out)) {
-            await base44.entities.Promotion.update(p.id, { status: 'נתפס' });
+            await api.entities.Promotion.update(p.id, { status: 'נתפס' });
           }
         }
       } catch (e) { /* silent */ }
@@ -678,13 +705,13 @@ JSON בלבד.`;
         return updated;
       });
     } catch (e) {
-      addMessage('bot', 'text', 'מצטער, לא הצלחתי לשמור את הבקשה. נסה שוב.');
+      addMessage('bot', 'text', `⚠️ ${bookingErrorMessage(e)}`);
     }
   };
 
   const handleQuestionSubmit = async (qText, zimmer, searchSummary) => {
     try {
-      await base44.entities.UnansweredQuestion.create({
+      await api.entities.UnansweredQuestion.create({
         zimmer_id: zimmer.id,
         zimmer_name: zimmer.name,
         owner_id: zimmer.owner_id,

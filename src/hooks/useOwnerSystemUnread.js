@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 
 // Per-message read tracking for owner system messages.
 // A message stays "unread" until the owner opens the system sub-tab.
@@ -18,7 +18,7 @@ export function useOwnerSystemUnread(userId) {
 
   const load = useCallback(async () => {
     try {
-      const msgs = await base44.entities.SystemMessage.filter({ audience: 'owner' }, '-created_date', 50);
+      const msgs = await api.entities.SystemMessage.filter({ audience: 'owner' }, '-created_date', 50);
       const mine = (msgs || []).filter(m =>
         !m.target_user_ids?.length || (m.target_user_ids || []).includes(userId)
       );
@@ -29,7 +29,7 @@ export function useOwnerSystemUnread(userId) {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    const unsub = base44.entities.SystemMessage.subscribe(() => { load(); });
+    const unsub = api.entities.SystemMessage.subscribe(() => { load(); });
     return unsub;
   }, [load]);
 

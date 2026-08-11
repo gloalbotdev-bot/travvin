@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { X } from 'lucide-react';
 import { calcBookingTotalForZimmer, formatILS, calcNights, promoStayTotal, clampDiscount } from '@/lib/bookingPrice';
 import { getBookedRangesForZimmer } from '@/components/chat/DateSearchWidget';
@@ -28,7 +28,7 @@ export default function BookingForm({ zimmer, onSubmit, prefillDates, promo, onC
   useEffect(() => {
     let active = true;
     setLoadingAvailability(true);
-    getBookedRangesForZimmer(base44, zimmer.id)
+    getBookedRangesForZimmer(api, zimmer.id)
       .then(ranges => { if (active) { setBookedRanges(ranges); setLoadingAvailability(false); } })
       .catch(() => { if (active) setLoadingAvailability(false); });
     return () => { active = false; };

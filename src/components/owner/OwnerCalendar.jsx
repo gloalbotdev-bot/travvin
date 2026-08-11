@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import { getBookingTotal, formatILS } from '@/lib/bookingPrice';
 import ManualBookingForm from '@/components/owner/ManualBookingForm';
@@ -34,7 +34,7 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBooking, onAddBoo
 
   useEffect(() => {
     if (!ownerId) return;
-    base44.entities.BookingRequest.filter({ owner_id: ownerId }).then((data) => {
+    api.entities.BookingRequest.filter({ owner_id: ownerId }).then((data) => {
       setBookings(data.filter((b) => b.status !== 'נדחתה'));
       setLoading(false);
     });
@@ -379,7 +379,7 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBooking, onAddBoo
         onSaved={() => {
           setShowManual(false);
           setLoading(true);
-          base44.entities.BookingRequest.filter({ owner_id: ownerId }).then((data) => {
+          api.entities.BookingRequest.filter({ owner_id: ownerId }).then((data) => {
             setBookings(data.filter((b) => b.status !== 'נדחתה'));
             setLoading(false);
           });

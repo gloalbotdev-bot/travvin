@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Bell, ChevronLeft } from 'lucide-react';
 
 export default function UpdatesPopover({ userId, fullUserName, onGoAll }) {
@@ -11,12 +11,12 @@ export default function UpdatesPopover({ userId, fullUserName, onGoAll }) {
     (async () => {
       try {
         const [sys, allQ] = await Promise.all([
-          base44.entities.SystemMessage.filter({ audience: 'customer' }, '-created_date', 30),
-          base44.entities.UnansweredQuestion.list('-created_date', 100),
+          api.entities.SystemMessage.filter({ audience: 'customer' }, '-created_date', 30),
+          api.entities.UnansweredQuestion.filter({ created_by_id: userId }, '-created_date', 100),
         ]);
         if (!alive) return;
         const mineSys = (sys || []).filter(m => !m.target_user_ids?.length || (m.target_user_ids || []).includes(userId));
-        const mineQ = (allQ || []).filter(q => q.created_by_id === userId || (q.customer_name && q.customer_name.trim() === (fullUserName || '').trim()));
+        const mineQ = allQ || [];
         const feed = [];
         mineSys.forEach(m => feed.push({
           key: 's_' + m.id, kind: 'system', date: m.created_date, title: m.title, body: m.body,

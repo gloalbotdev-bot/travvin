@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Star, Plus, X, Trash2 } from 'lucide-react';
 import OwnerReviewCard from '@/components/reviews/OwnerReviewCard';
 import ReviewActionModal from '@/components/reviews/ReviewActionModal';
-import { getBookingTotal, formatILS } from '@/lib/bookingPrice';
+import { getBookingTotal } from '@/lib/bookingPrice';
 
 const SOURCE_OPTIONS = ['ידני', 'Google', 'Booking.com', 'Airbnb', 'WhatsApp'];
 
@@ -24,9 +24,9 @@ export default function SuperAdminReviewsPanel() {
   const load = async () => {
     setLoading(true);
     const [revs, zims, users] = await Promise.all([
-      base44.entities.Review.list('-created_date', 500),
-      base44.entities.Zimmer.list(),
-      base44.entities.User.list(),
+      api.entities.Review.list('-created_date', 500),
+      api.entities.Zimmer.list(),
+      api.entities.User.list(),
     ]);
     setReviews(revs || []);
     setZimmers(zims || []);
@@ -44,7 +44,7 @@ export default function SuperAdminReviewsPanel() {
     let bookingTotal = 0;
     if (review.booking_id) {
       try {
-        booking = await base44.entities.BookingRequest.get(review.booking_id);
+        booking = await api.entities.BookingRequest.get(review.booking_id);
         const z = zimmers.find(zz => zz.id === review.zimmer_id);
         bookingTotal = getBookingTotal(booking, z);
       } catch {}
@@ -59,22 +59,14 @@ export default function SuperAdminReviewsPanel() {
     const now = new Date().toISOString();
     try {
       if (modal.mode === 'respond') {
-        await base44.entities.Review.update(r.id, { status: 'published', owner_response: data.owner_response, owner_response_at: now, published_at: now });
+        await api.entities.Review.update(r.id, { status: 'published', owner_response: data.owner_response, owner_response_at: now, published_at: now });
       } else if (modal.mode === 'compromise') {
-        await base44.entities.Review.update(r.id, {
+        await api.entities.Review.update(r.id, {
           status: 'compromise_offered',
           settlement_offer: { percentage: data.percentage, amount: data.amount, owner_note: data.owner_note, status: 'pending', offered_at: now },
         });
-        if (r.customer_id) {
-          await base44.functions.invoke('pushInAppNotification', {
-            audience: 'customer', target_user_ids: [r.customer_id], category: 'הודעה',
-            title: 'הצעת פשרה על ביקורתך',
-            body: `הוצע לך החזר של ${data.percentage}% (${formatILS(data.amount)}) תמורת הסרת הביקורת.`,
-            action_type: 'open_review', action_entity_id: r.id,
-          });
-        }
       } else if (modal.mode === 'dispute') {
-        await base44.entities.Review.update(r.id, { status: 'disputed', dispute_reason: data.dispute_reason, disputed_at: now });
+        await api.entities.Review.update(r.id, { status: 'disputed', dispute_reason: data.dispute_reason, disputed_at: now });
       }
       await load();
     } catch (e) { alert('שגיאה: ' + e.message); }
@@ -83,13 +75,13 @@ export default function SuperAdminReviewsPanel() {
   };
 
   const doDelete = async (review) => {
-    await base44.entities.Review.update(review.id, { status: 'removed' });
+    await api.entities.Review.update(review.id, { status: 'removed' });
     setConfirmDelete(null);
     load();
   };
 
   const hardDelete = async (review) => {
-    await base44.entities.Review.delete(review.id);
+    await api.entities.Review.delete(review.id);
     setConfirmDelete(null);
     load();
   };
@@ -97,7 +89,7 @@ export default function SuperAdminReviewsPanel() {
   const saveManual = async (e) => {
     e.preventDefault();
     const zimmer = zimmers.find(z => z.id === manual.zimmer_id);
-    await base44.entities.Review.create({
+    await api.entities.Review.create({
       ...manual,
       owner_id: zimmer?.owner_id || '',
       zimmer_name: zimmer?.name || '',

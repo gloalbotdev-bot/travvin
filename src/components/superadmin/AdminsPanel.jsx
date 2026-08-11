@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Plus, Trash2, Shield, ShieldCheck, Save, X } from 'lucide-react';
 
 const ALL_PAGES = [
@@ -34,7 +34,7 @@ export default function AdminsPanel() {
 
   const load = async () => {
     setLoading(true);
-    const data = await base44.entities.AdminPermission.list();
+    const data = await api.entities.AdminPermission.list();
     setAdmins(data);
     setLoading(false);
   };
@@ -43,7 +43,7 @@ export default function AdminsPanel() {
     if (!newEmail.trim()) return;
     setAdding(true);
     setAddMsg('');
-    await base44.entities.AdminPermission.create({
+    await api.entities.AdminPermission.create({
       email: newEmail.trim().toLowerCase(),
       is_primary: false,
       is_active: true,
@@ -78,13 +78,13 @@ export default function AdminsPanel() {
   };
 
   const handleSave = async () => {
-    await base44.entities.AdminPermission.update(editingId, editState);
+    await api.entities.AdminPermission.update(editingId, editState);
     setEditingId(null);
     await load();
   };
 
   const handleDelete = async () => {
-    await base44.entities.AdminPermission.delete(deletingAdmin.id);
+    await api.entities.AdminPermission.delete(deletingAdmin.id);
     setDeletingAdmin(null);
     await load();
   };

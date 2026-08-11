@@ -1,0 +1,132 @@
+// Milestone 4: generic JSONB entity store + Milestone 5: auth users.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model HealthProbe {
+  id        Int      @id @default(1)
+  checkedAt DateTime @default(now()) @map("checked_at")
+
+  @@map("health_probe")
+}
+
+model Record {
+  id          String   @id @default(uuid()) @db.Uuid
+  entityType  String   @map("entity_type")
+  data        Json
+  createdDate DateTime @default(now()) @map("created_date") @db.Timestamptz(3)
+  updatedDate DateTime @updatedAt @map("updated_date") @db.Timestamptz(3)
+  createdById String?  @map("created_by_id")
+  createdBy   String?  @map("created_by")
+
+  @@index([entityType])
+  @@index([createdById])
+  @@index([entityType, createdDate])
+  @@index([entityType, updatedDate])
+  @@map("records")
+}
+
+/// Platform users (M5). User entity CRUD hits this table, not `records`.
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  passwordHash  String?  @map("password_hash")
+  fullName      String?  @map("full_name")
+  role          String   @default("user")
+  phone         String?
+  businessName  String?  @map("business_name")
+  notifications Json?
+  googleId      String?  @unique @map("google_id")
+  emailVerified Boolean  @default(false) @map("email_verified")
+  registered    Boolean  @default(true)
+  createdDate   DateTime @default(now()) @map("created_date") @db.Timestamptz(3)
+  updatedDate   DateTime @updatedAt @map("updated_date") @db.Timestamptz(3)
+
+  @@map("users")
+}
+
+model OtpCode {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String
+  code      String
+  purpose   String   @default("register")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([email, purpose])
+  @@map("otp_codes")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String
+  token     String   @unique
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([email])
+  @@map("password_reset_tokens")
+}
+
+model AppSettings {
+  id             String @id @default("default")
+  publicSettings Json   @default("{}") @map("public_settings")
+
+  @@map("app_settings")
+}
+
+/// M8: per-owner calendar OAuth (provider-ready).
+enum CalendarProvider {
+  google
+
+  @@map("calendar_provider")
+}
+
+enum CalendarConnectionStatus {
+  active
+  revoked
+  error
+
+  @@map("calendar_connection_status")
+}
+
+model CalendarConnection {
+  id              String                   @id @default(uuid()) @db.Uuid
+  ownerId         String                   @map("owner_id") @db.Uuid
+  provider        CalendarProvider
+  refreshTokenEnc String                   @map("refresh_token_enc")
+  calendarId      String                   @map("calendar_id")
+  accountEmail    String?                  @map("account_email")
+  scopes          String?
+  tokenExpiry     DateTime?                @map("token_expiry") @db.Timestamptz(3)
+  status          CalendarConnectionStatus
+  lastError       String?                  @map("last_error")
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([ownerId, provider])
+  @@index([ownerId])
+  @@map("calendar_connections")
+}
+
+/// M9: delayed jobs (Review Auto Publish wait PT12H/PT48H).
+model DelayedJob {
+  id        String   @id @default(uuid()) @db.Uuid
+  kind      String
+  payload   Json     @default("{}")
+  runAt     DateTime @map("run_at") @db.Timestamptz(3)
+  status    String   @default("pending")
+  attempts  Int      @default(0)
+  lastError String?  @map("last_error")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([status, runAt])
+  @@map("delayed_jobs")
+}

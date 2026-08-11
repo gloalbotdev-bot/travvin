@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Save, CheckCircle } from 'lucide-react';
 
 export default function CustomerProfileTab({ user }) {
@@ -9,7 +9,7 @@ export default function CustomerProfileTab({ user }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    base44.entities.CustomerProfile.filter({ user_id: user.id }).then(data => {
+    api.entities.CustomerProfile.filter({ user_id: user.id }).then(data => {
       if (data.length > 0) {
         setProfile(data[0]);
         setForm({
@@ -26,9 +26,9 @@ export default function CustomerProfileTab({ user }) {
   const handleSave = async () => {
     const data = { user_id: user.id, user_name: user.full_name, user_email: user.email, ...form };
     if (profile) {
-      await base44.entities.CustomerProfile.update(profile.id, data);
+      await api.entities.CustomerProfile.update(profile.id, data);
     } else {
-      const created = await base44.entities.CustomerProfile.create(data);
+      const created = await api.entities.CustomerProfile.create(data);
       setProfile(created);
     }
     setSaved(true);

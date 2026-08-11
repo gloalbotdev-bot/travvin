@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Send, X, Home } from 'lucide-react';
 
 const fmtTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
 // Resolve an existing thread between this customer and the zimmer's owner, or create one.
 export async function getOrCreateDirectThread({ zimmer, customer, bookingId }) {
-  if (!base44.entities || !base44.entities.DirectChat) {
+  if (!api.entities || !api.entities.DirectChat) {
     throw new Error('מודול הצ׳אט הישיר עדיין לא נטען. רענן את הדף (F5) ונסה שוב.');
   }
   try {
-    const existing = await base44.entities.DirectChat.filter({ zimmer_id: zimmer.id, customer_id: customer.id });
+    const existing = await api.entities.DirectChat.filter({ zimmer_id: zimmer.id, customer_id: customer.id });
     if (existing && existing.length > 0) return existing[0];
   } catch (e) { /* fall through to create */ }
-  return await base44.entities.DirectChat.create({
+  return await api.entities.DirectChat.create({
     zimmer_id: zimmer.id,
     zimmer_name: zimmer.name || '',
     customer_id: customer.id,
@@ -34,7 +34,7 @@ export default function DirectChat({ thread, isOwner, user, counterpartName, zim
   useEffect(() => { setMessages(thread?.messages || []); }, [thread?.id]);
 
   useEffect(() => {
-    const unsub = base44.entities.DirectChat.subscribe((ev) => {
+    const unsub = api.entities.DirectChat.subscribe((ev) => {
       if (ev.id === thread?.id && ev.type === 'update' && ev.data) {
         setMessages(ev.data.messages || []);
       }
@@ -55,7 +55,7 @@ export default function DirectChat({ thread, isOwner, user, counterpartName, zim
     const updated = [...messages, newMsg];
     setMessages(updated);
     try {
-      await base44.entities.DirectChat.update(thread.id, { messages: updated });
+      await api.entities.DirectChat.update(thread.id, { messages: updated });
     } catch (e) {
       setMessages(messages);
     }

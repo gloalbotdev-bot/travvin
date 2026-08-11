@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { X, Camera, Loader2 } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import StarRating from './StarRating';
 import { Image } from '@/components/ui/image';
 
@@ -36,7 +36,7 @@ export default function ReviewForm({ booking, zimmer, onSubmit, onCancel, saving
       const uploaded = [];
       for (const f of list) {
         try {
-          const { file_url } = await base44.integrations.Core.UploadFile({ file: f });
+          const { file_url } = await api.integrations.Core.UploadFile({ file: f });
           if (file_url) uploaded.push(file_url);
         } catch {}
       }

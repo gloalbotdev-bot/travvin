@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/client';
 import { Bell, MessageCircle, MessageCircleQuestion } from 'lucide-react';
 import QuestionsPanel from '@/components/owner/QuestionsPanel';
 import DirectChat from '@/components/chat/DirectChat';
@@ -41,7 +41,7 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
     if (!focusChatId) return;
     setSubtab('chats');
     (async () => {
-      try { const t = await base44.entities.DirectChat.get(focusChatId); if (t) setActiveThread(t); } catch {}
+      try { const t = await api.entities.DirectChat.get(focusChatId); if (t) setActiveThread(t); } catch {}
     })();
   }, [focusChatId]);
 
@@ -50,9 +50,9 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
     setLoading(true);
     try {
       const [direct, sys, qs] = await Promise.all([
-        base44.entities.DirectChat.filter({ owner_id: user.id }, '-updated_date'),
-        base44.entities.SystemMessage.filter({ audience: 'owner' }, '-created_date', 30),
-        base44.entities.UnansweredQuestion.filter({ owner_id: user.id, status: 'ממתינה' }, '-created_date', 50),
+        api.entities.DirectChat.filter({ owner_id: user.id }, '-updated_date'),
+        api.entities.SystemMessage.filter({ audience: 'owner' }, '-created_date', 30),
+        api.entities.UnansweredQuestion.filter({ owner_id: user.id, status: 'ממתינה' }, '-created_date', 50),
       ]);
       setThreads(direct || []);
       setSystemMsgs((sys || []).filter(m => !m.target_user_ids?.length || (m.target_user_ids || []).includes(user?.id)));
