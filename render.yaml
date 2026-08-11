@@ -59,8 +59,6 @@ services:
   - type: web
     name: travvin
     runtime: static
-    plan: free
-    region: frankfurt
     branch: main
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
