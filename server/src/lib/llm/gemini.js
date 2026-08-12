@@ -253,7 +253,11 @@ function convertNode(node) {
       properties: outProps,
     };
     const keys = Object.keys(outProps);
-    if (keys.length) out.required = node.required || keys;
+    if (Array.isArray(node.required)) {
+      if (node.required.length) out.required = node.required;
+    } else if (keys.length) {
+      out.required = keys;
+    }
     return out;
   }
 

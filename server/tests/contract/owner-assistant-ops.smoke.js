@@ -100,6 +100,12 @@ async function main() {
     weekdayWeekend.zimmer.weekday_price === 550 && weekdayWeekend.zimmer.weekend_price === 780,
     'update weekday_price and weekend_price',
   );
+  assert(
+    weekdayWeekend.message.includes('550') &&
+      weekdayWeekend.message.includes('780') &&
+      !weekdayWeekend.message.includes('720'),
+    'update message shows weekday/weekend prices, not base price',
+  );
 
   try {
     await executeOwnerAssistantOp(store, {

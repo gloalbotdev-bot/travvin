@@ -83,6 +83,7 @@ const ZIMMER_FIELDS_SCHEMA = {
     images: { type: 'array', items: { type: 'string' } },
     info_summary: { type: 'string' },
   },
+  required: [],
 };
 
 export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated }) {
@@ -290,7 +291,7 @@ ${historyText}
 כללים:
 - אם חסר מידע לפעולה — שאל שאלה אחת ספציפית, והחזר operation=null.
 - עדכון צימר: חובה לכלול zimmer_id של צימר קיים מתוך הנתונים. ב-fields רק שדות שהמשתמש ביקש לשנות. שדות אפשריים: name, location, price_per_night, weekday_price (אמצ"ש א'-ה'), weekend_price (סופ"ש ה'-ש'), num_rooms, max_guests, description, partial_pricing_enabled (boolean), min_guests, price_per_adult, price_per_child, seasonal_pricing (מערך), images (מערך), info_summary.
-- יצירת/עדכון מחירים: אם הבעלים מבקש "מחיר אמצ"ש" — weekday_price; "סופ"ש" — weekend_price. אם נתן מחיר אחד בלי חלוקה — price_per_night (ואפשר גם weekday/weekend באותו ערך).
+- יצירת/עדכון מחירים: אם הבעלים מבקש "מחיר אמצ"ש" — weekday_price בלבד; "סופ"ש" — weekend_price בלבד. אל תכלול price_per_night אלא אם ביקשו במפורש לשנות את מחיר הבסיס. אם נתן מחיר אחד בלי חלוקה — price_per_night בלבד.
 - יצירת הזמנה: חובה guest_name, guest_phone, zimmer_name (חייב להתאים לצימר קיים), check_in, check_out. num_guests אופציונלי.
 - אל תמציא נתונים, מחירים או תאריכים. אם לא ברור — שאל.
 - ענה תמיד בעברית.`;
@@ -322,7 +323,8 @@ ${historyText}
               check_out: { type: 'string' },
               num_guests: { type: 'number' },
               notes: { type: 'string' }
-            }
+            },
+            required: ['type'],
           },
           actions: { type: 'array', items: { type: 'string' } }
         }

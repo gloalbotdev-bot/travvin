@@ -199,13 +199,43 @@ async function updateZimmer(store, op, ownerId, actor) {
   }
 
   const updated = await store.update('Zimmer', zid, clean, actor);
-  const detail =
-    clean.price_per_night != null ? `מחיר: ₪${clean.price_per_night}` : Object.keys(clean).join(', ');
   return {
     kind: 'update_zimmer',
     zimmer: updated,
-    message: `✅ עדכנתי את "${updated.name || zimmer.name}" — ${detail}.`,
+    message: `✅ עדכנתי את "${updated.name || zimmer.name}" — ${formatUpdateDetail(clean)}.`,
   };
+}
+
+const UPDATE_FIELD_LABELS = {
+  name: 'שם',
+  location: 'מיקום',
+  description: 'תיאור',
+  num_rooms: 'חדרים',
+  max_guests: 'אורחים מקס',
+  partial_pricing_enabled: 'תמחור חלקי',
+  min_guests: 'מינימום אורחים',
+  price_per_adult: 'מחיר למבוגר',
+  price_per_child: 'מחיר לילד',
+  seasonal_pricing: 'תמחור עונתי',
+  images: 'תמונות',
+  info_summary: 'סיכום מידע',
+};
+
+function formatUpdateDetail(clean) {
+  const parts = [];
+  if (clean.price_per_night != null) parts.push(`מחיר בסיס: ₪${clean.price_per_night}`);
+  if (clean.weekday_price != null) parts.push(`אמצ"ש: ₪${clean.weekday_price}`);
+  if (clean.weekend_price != null) parts.push(`סופ"ש: ₪${clean.weekend_price}`);
+  for (const [key, value] of Object.entries(clean)) {
+    if (key === 'price_per_night' || key === 'weekday_price' || key === 'weekend_price') continue;
+    const label = UPDATE_FIELD_LABELS[key] || key;
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
+      parts.push(`${label}: ${value}`);
+    } else {
+      parts.push(label);
+    }
+  }
+  return parts.join(' · ') || Object.keys(clean).join(', ');
 }
 
 async function createBooking(store, op, ownerId, actor) {
