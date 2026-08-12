@@ -53,24 +53,34 @@ export async function invokeGemini({
     add_context_from_internet,
   });
 
+  const JSON_PARSE_ATTEMPTS = 3;
   let lastErr = null;
   for (let i = 0; i < candidates.length; i += 1) {
     const mapped = candidates[i];
-    try {
-      return await callGeminiOnce({
-        apiKey,
-        model: mapped,
-        body,
-        response_json_schema,
-        fetchImpl,
-      });
-    } catch (err) {
-      lastErr = err;
-      const retryable = isCapacityError(err);
-      if (!retryable || i === candidates.length - 1) throw err;
-      console.warn(
-        `[llm] ${mapped} busy/unavailable — trying ${candidates[i + 1]}`,
-      );
+    for (let attempt = 0; attempt < JSON_PARSE_ATTEMPTS; attempt += 1) {
+      try {
+        return await callGeminiOnce({
+          apiKey,
+          model: mapped,
+          body,
+          response_json_schema,
+          fetchImpl,
+        });
+      } catch (err) {
+        lastErr = err;
+        if (isParseError(err) && attempt < JSON_PARSE_ATTEMPTS - 1) {
+          console.warn(
+            `[llm] ${mapped} non-JSON response — retry ${attempt + 2}/${JSON_PARSE_ATTEMPTS}`,
+          );
+          continue;
+        }
+        const retryable = isCapacityError(err);
+        if (!retryable || i === candidates.length - 1) throw err;
+        console.warn(
+          `[llm] ${mapped} busy/unavailable — trying ${candidates[i + 1]}`,
+        );
+        break;
+      }
     }
   }
   throw lastErr;
@@ -148,15 +158,38 @@ async function callGeminiOnce({
 
   if (response_json_schema) {
     try {
-      return JSON.parse(text);
+      return parseJsonFromLlmText(text);
     } catch {
       const err = new Error('Gemini returned non-JSON content for schema request');
       err.status = 502;
+      err.code = 'JSON_PARSE';
       throw err;
     }
   }
 
   return text;
+}
+
+/**
+ * Parse JSON from Gemini text output — tolerates markdown fences and stray backticks.
+ * @param {string} text
+ */
+export function parseJsonFromLlmText(text) {
+  let s = String(text || '').trim();
+  const fenced = s.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fenced) {
+    s = fenced[1].trim();
+  } else {
+    if (s.startsWith('```json')) s = s.slice(7).trim();
+    else if (s.startsWith('```')) s = s.slice(3).trim();
+    if (s.endsWith('```')) s = s.slice(0, -3).trim();
+  }
+  s = s.replace(/`+$/, '').trim();
+  return JSON.parse(s);
+}
+
+function isParseError(err) {
+  return err?.code === 'JSON_PARSE';
 }
 
 function isCapacityError(err) {

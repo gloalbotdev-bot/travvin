@@ -5,7 +5,7 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { toGeminiSchema } from '../../src/lib/llm/gemini.js';
+import { toGeminiSchema, parseJsonFromLlmText } from '../../src/lib/llm/gemini.js';
 import { invokeLlm } from '../../src/lib/llm/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +52,36 @@ async function main() {
   });
   assert(obj && typeof obj === 'object', 'schema mode returns object');
 
+  assert(parseJsonFromLlmText('{"a":1}').a === 1, 'parse plain JSON');
+  assert(parseJsonFromLlmText('```json\n{"a":1}\n```').a === 1, 'parse fenced JSON');
+  assert(parseJsonFromLlmText('{"a":1}\n`').a === 1, 'parse JSON with trailing backtick');
+
+  const ownerFieldsSchema = {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      operation: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            enum: ['create_zimmer', 'update_zimmer', 'create_booking'],
+          },
+          fields: {
+            type: 'object',
+            properties: {
+              price_per_night: { type: 'number' },
+              description: { type: 'string' },
+            },
+          },
+        },
+      },
+      actions: { type: 'array', items: { type: 'string' } },
+    },
+  };
+  const ownerConverted = toGeminiSchema(ownerFieldsSchema);
+  assert(ownerConverted?.type === 'OBJECT', 'owner assistant schema converts for Gemini');
+
   const loose = toGeminiSchema({
     type: 'object',
     properties: {
@@ -62,24 +92,9 @@ async function main() {
 
   const ownerLike = await invokeLlm({
     prompt: 'החזר JSON עם message',
-    response_json_schema: {
-      type: 'object',
-      properties: {
-        message: { type: 'string' },
-        operation: {
-          type: 'object',
-          properties: {
-            type: {
-              type: 'string',
-              enum: ['create_zimmer', 'update_zimmer', 'create_booking'],
-            },
-            fields: { type: 'object', additionalProperties: true },
-          },
-        },
-      },
-    },
+    response_json_schema: ownerFieldsSchema,
   });
-  assert(typeof ownerLike === 'object', 'loose schema still returns object');
+  assert(typeof ownerLike === 'object', 'owner-like schema still returns object');
 
   const net = await invokeLlm({
     prompt: 'test internet',

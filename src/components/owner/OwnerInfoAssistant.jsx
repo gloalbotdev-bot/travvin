@@ -52,6 +52,36 @@ const ZIMMER_FIELDS = [
   'seasonal_pricing', 'images', 'info_summary'
 ]; // kept for LLM prompt docs; server whitelists the same set (M15 #8ב)
 
+/** Gemini-compatible schema for update_zimmer.fields (matches server ZIMMER_MUTABLE_FIELDS). */
+const ZIMMER_FIELDS_SCHEMA = {
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    location: { type: 'string' },
+    price_per_night: { type: 'number' },
+    num_rooms: { type: 'number' },
+    max_guests: { type: 'number' },
+    description: { type: 'string' },
+    partial_pricing_enabled: { type: 'boolean' },
+    min_guests: { type: 'number' },
+    price_per_adult: { type: 'number' },
+    price_per_child: { type: 'number' },
+    seasonal_pricing: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          start_date: { type: 'string' },
+          end_date: { type: 'string' },
+          price_per_night: { type: 'number' },
+        },
+      },
+    },
+    images: { type: 'array', items: { type: 'string' } },
+    info_summary: { type: 'string' },
+  },
+};
+
 export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated }) {
   const [mode, setMode] = useState('info'); // 'info' | 'edit' — matches Base44 OwnerAgentChat
   const [messages, setMessages] = useState([]);
@@ -276,7 +306,7 @@ ${historyText}
               num_rooms: { type: 'number' },
               max_guests: { type: 'number' },
               zimmer_id: { type: 'string' },
-              fields: { type: 'object', additionalProperties: true },
+              fields: ZIMMER_FIELDS_SCHEMA,
               guest_name: { type: 'string' },
               guest_phone: { type: 'string' },
               zimmer_name: { type: 'string' },
