@@ -7,12 +7,17 @@ const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO = 'https://www.googleapis.com/oauth2/v2/userinfo';
 
+function trimEnv(key) {
+  const v = process.env[key];
+  return typeof v === 'string' ? v.trim() : '';
+}
+
 export function getGoogleConfig() {
   return {
-    clientId: process.env.GOOGLE_CLIENT_ID || '',
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    clientId: trimEnv('GOOGLE_CLIENT_ID'),
+    clientSecret: trimEnv('GOOGLE_CLIENT_SECRET'),
     redirectUri:
-      process.env.GOOGLE_REDIRECT_URI ||
+      trimEnv('GOOGLE_REDIRECT_URI') ||
       `http://localhost:${process.env.PORT || 3001}/api/auth/google/callback`,
   };
 }

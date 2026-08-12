@@ -3,6 +3,11 @@
  */
 import { encryptSecret } from './token-crypto.js';
 
+function trimEnv(key) {
+  const v = process.env[key];
+  return typeof v === 'string' ? v.trim() : '';
+}
+
 const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 const CALENDAR_LIST = 'https://www.googleapis.com/calendar/v3/users/me/calendarList';
@@ -17,15 +22,12 @@ export const CALENDAR_SCOPES = [
 export function getCalendarGoogleConfig() {
   return {
     clientId:
-      process.env.GOOGLE_CALENDAR_CLIENT_ID ||
-      process.env.GOOGLE_CLIENT_ID ||
-      '',
+      trimEnv('GOOGLE_CALENDAR_CLIENT_ID') || trimEnv('GOOGLE_CLIENT_ID'),
     clientSecret:
-      process.env.GOOGLE_CALENDAR_CLIENT_SECRET ||
-      process.env.GOOGLE_CLIENT_SECRET ||
-      '',
+      trimEnv('GOOGLE_CALENDAR_CLIENT_SECRET') ||
+      trimEnv('GOOGLE_CLIENT_SECRET'),
     redirectUri:
-      process.env.GOOGLE_CALENDAR_REDIRECT_URI ||
+      trimEnv('GOOGLE_CALENDAR_REDIRECT_URI') ||
       `http://localhost:${process.env.PORT || 3001}/api/connectors/google-calendar/oauth/callback`,
   };
 }
