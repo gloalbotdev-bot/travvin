@@ -10,6 +10,8 @@ export const ZIMMER_MUTABLE_FIELDS = new Set([
   'name',
   'location',
   'price_per_night',
+  'weekday_price',
+  'weekend_price',
   'num_rooms',
   'max_guests',
   'description',

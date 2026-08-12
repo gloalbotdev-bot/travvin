@@ -47,7 +47,8 @@ function ActionButton({ actionKey, onNavigate }) {
 }
 
 const ZIMMER_FIELDS = [
-  'name', 'location', 'price_per_night', 'num_rooms', 'max_guests', 'description',
+  'name', 'location', 'price_per_night', 'weekday_price', 'weekend_price',
+  'num_rooms', 'max_guests', 'description',
   'partial_pricing_enabled', 'min_guests', 'price_per_adult', 'price_per_child',
   'seasonal_pricing', 'images', 'info_summary'
 ]; // kept for LLM prompt docs; server whitelists the same set (M15 #8ב)
@@ -59,6 +60,8 @@ const ZIMMER_FIELDS_SCHEMA = {
     name: { type: 'string' },
     location: { type: 'string' },
     price_per_night: { type: 'number' },
+    weekday_price: { type: 'number' },
+    weekend_price: { type: 'number' },
     num_rooms: { type: 'number' },
     max_guests: { type: 'number' },
     description: { type: 'string' },
@@ -215,7 +218,7 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated }) {
 היום: ${today}
 
 צימרים (${zimmers.length}):
-${zimmers.map(z => `id:${z.id} | ${z.name} | מיקום: ${z.location || '—'} | מחיר/לילה: ${z.price_per_night ?? '—'} | חדרים: ${z.num_rooms ?? '—'} | אורחים מקס: ${z.max_guests ?? '—'} | סטטוס: ${z.approval_status} | תיאור: ${z.description || 'אין'}`).join('\n')}
+${zimmers.map(z => `id:${z.id} | ${z.name} | מיקום: ${z.location || '—'} | מחיר/לילה: ${z.price_per_night ?? '—'} | אמצ"ש: ${z.weekday_price ?? '—'} | סופ"ש: ${z.weekend_price ?? '—'} | חדרים: ${z.num_rooms ?? '—'} | אורחים מקס: ${z.max_guests ?? '—'} | סטטוס: ${z.approval_status} | תיאור: ${z.description || 'אין'}`).join('\n')}
 
 הזמנות (${bookings.length}):
 ${bookings.map(b => `• ${b.guest_name} | צימר: ${b.zimmer_name} | כניסה: ${b.check_in} | יציאה: ${b.check_out} | אורחים: ${b.num_guests || 1} | סטטוס: ${b.status} | טלפון: ${b.guest_phone}`).join('\n')}
@@ -243,7 +246,7 @@ ${modeBlock}
 יכולותיך:
 1. לספק מידע מהנתונים (הזמנות, צימרים, ביקורות, שאלות, הכנסות, תאריכים).
 2. במצב עריכה בלבד: ליצור צימר חדש — כשיש לפחות שם, החזר operation מסוג create_zimmer.
-3. במצב עריכה בלבד: לעדכן צימר קיים — שינוי מחיר/תיאור/מיקום/חדרים/אורחים. החזר operation מסוג update_zimmer עם zimmer_id ו-fields.
+3. במצב עריכה בלבד: לעדכן צימר קיים — שינוי מחיר (כללי, אמצ"ש א'-ה', סופ"ש ה'-ש'), תיאור, מיקום, חדרים, אורחים. החזר operation מסוג update_zimmer עם zimmer_id ו-fields.
 4. במצב עריכה בלבד: ליצור הזמנה חדשה — כשיש שם לקוח, טלפון, שם צימר, תאריכי כניסה/יציאה. החזר operation מסוג create_booking.
 5. להפנות לתצוגות (יומן, רשימת הזמנות, ביקורות...) דרך actions, כשזה עניין של צפייה ולא פעולה ישירה.
 
@@ -271,20 +274,23 @@ ${historyText}
 דוגמה מלאה ל-create_zimmer:
 {"type":"create_zimmer","name":"נוף הגליל","location":"צפת","price_per_night":700,"num_rooms":3,"max_guests":6,"description":"צימר מפנק בצפת"}
 
-דוגמה ל-update_zimmer:
+דוגמה ל-update_zimmer (מחיר כללי):
 {"type":"update_zimmer","zimmer_id":"abc","fields":{"price_per_night":650}}
+דוגמה ל-update_zimmer (מחירי אמצ"ש/סופ"ש):
+{"type":"update_zimmer","zimmer_id":"abc","fields":{"weekday_price":600,"weekend_price":850}}
 
 דוגמה ל-create_booking:
 {"type":"create_booking","guest_name":"יעקב כהן","guest_phone":"050-1234567","zimmer_name":"נוף כנרת","check_in":"2026-08-01","check_out":"2026-08-03","num_guests":4}
 
 פורמט operation (רק אחד בכל פעם, או null):
-- יצירת צימר: {"type":"create_zimmer","name":"...","location":"...","price_per_night":number|null,"num_rooms":number|null,"max_guests":number|null,"description":"..."}
-- עדכון צימר: {"type":"update_zimmer","zimmer_id":"<id מתוך הנתונים>","fields":{"price_per_night":500,"description":"..."}}
+- יצירת צימר: {"type":"create_zimmer","name":"...","location":"...","price_per_night":number|null,"weekday_price":number|null,"weekend_price":number|null,"num_rooms":number|null,"max_guests":number|null,"description":"..."}
+- עדכון צימר: {"type":"update_zimmer","zimmer_id":"<id מתוך הנתונים>","fields":{"price_per_night":500,"weekday_price":600,"weekend_price":850,"description":"..."}}
 - יצירת הזמנה: {"type":"create_booking","guest_name":"...","guest_phone":"...","zimmer_name":"<שם צימר קיים מהנתונים>","check_in":"YYYY-MM-DD","check_out":"YYYY-MM-DD","num_guests":number|null,"notes":"..."}
 
 כללים:
 - אם חסר מידע לפעולה — שאל שאלה אחת ספציפית, והחזר operation=null.
-- עדכון צימר: חובה לכלול zimmer_id של צימר קיים מתוך הנתונים. ב-fields רק שדות שהמשתמש ביקש לשנות. שדות אפשריים: name, location, price_per_night (מספר), num_rooms, max_guests, description, partial_pricing_enabled (boolean), min_guests, price_per_adult, price_per_child, seasonal_pricing (מערך), images (מערך), info_summary.
+- עדכון צימר: חובה לכלול zimmer_id של צימר קיים מתוך הנתונים. ב-fields רק שדות שהמשתמש ביקש לשנות. שדות אפשריים: name, location, price_per_night, weekday_price (אמצ"ש א'-ה'), weekend_price (סופ"ש ה'-ש'), num_rooms, max_guests, description, partial_pricing_enabled (boolean), min_guests, price_per_adult, price_per_child, seasonal_pricing (מערך), images (מערך), info_summary.
+- יצירת/עדכון מחירים: אם הבעלים מבקש "מחיר אמצ"ש" — weekday_price; "סופ"ש" — weekend_price. אם נתן מחיר אחד בלי חלוקה — price_per_night (ואפשר גם weekday/weekend באותו ערך).
 - יצירת הזמנה: חובה guest_name, guest_phone, zimmer_name (חייב להתאים לצימר קיים), check_in, check_out. num_guests אופציונלי.
 - אל תמציא נתונים, מחירים או תאריכים. אם לא ברור — שאל.
 - ענה תמיד בעברית.`;
@@ -303,6 +309,8 @@ ${historyText}
               location: { type: 'string' },
               description: { type: 'string' },
               price_per_night: { type: 'number' },
+              weekday_price: { type: 'number' },
+              weekend_price: { type: 'number' },
               num_rooms: { type: 'number' },
               max_guests: { type: 'number' },
               zimmer_id: { type: 'string' },

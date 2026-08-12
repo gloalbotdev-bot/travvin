@@ -87,6 +87,20 @@ async function main() {
   });
   assert(byName.kind === 'update_zimmer' && byName.zimmer.price_per_night === 720, 'update by zimmer_name + price alias');
 
+  const weekdayWeekend = await executeOwnerAssistantOp(store, {
+    operation: {
+      type: 'update_zimmer',
+      zimmer_id: created.zimmer.id,
+      fields: { weekday_price: 550, weekend_price: 780 },
+    },
+    ownerId: owner.id,
+    actor: owner,
+  });
+  assert(
+    weekdayWeekend.zimmer.weekday_price === 550 && weekdayWeekend.zimmer.weekend_price === 780,
+    'update weekday_price and weekend_price',
+  );
+
   try {
     await executeOwnerAssistantOp(store, {
       operation: {
