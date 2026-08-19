@@ -29,6 +29,18 @@
     "num_guests_usual": {
       "type": "number",
       "title": "\u05de\u05e1\u05e4\u05e8 \u05d0\u05d5\u05e8\u05d7\u05d9\u05dd \u05e8\u05d2\u05d9\u05dc"
+    },
+    "interests_tags": {
+      "type": "array",
+      "title": "\u05ea\u05d7\u05d5\u05de\u05d9 \u05e2\u05e0\u05d9\u05d9\u05df \u05e0\u05dc\u05de\u05d3\u05d9\u05dd (AI)",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "interests_updated_at": {
+      "type": "string",
+      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05e2\u05d3\u05db\u05d5\u05df \u05ea\u05d7\u05d5\u05de\u05d9 \u05e2\u05e0\u05d9\u05d9\u05df"
     }
   },
   "required": [

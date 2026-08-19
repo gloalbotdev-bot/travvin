@@ -106,12 +106,23 @@ export default function ContactsBook({ ownerId }) {
               <option value="לקוח">לקוח</option>
               <option value="ספק">ספק</option>
             </select>
-            <input
-              value={form.category}
-              onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-              placeholder="קטגוריה (ניקיון, אינסטלציה...)"
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#25D366]"
-            />
+            {form.type === 'ספק' ? (
+              <select
+                value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#25D366]"
+              >
+                <option value="">קטגוריה...</option>
+                {['מנקה', 'מכבסה', 'מפעיל צימר', 'גנן', 'טכנאי'].map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            ) : (
+              <input
+                value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                placeholder="קטגוריה (אופציונלי)"
+                className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#25D366]"
+              />
+            )}
             <div className="col-span-2">
               <textarea
                 value={form.notes}

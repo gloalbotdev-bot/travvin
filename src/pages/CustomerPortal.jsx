@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { User, ClipboardList, MessageSquare, LogOut, ChevronRight, Bell, Search, Star, HelpCircle } from 'lucide-react';
+import { User, ClipboardList, MessageSquare, LogOut, ChevronRight, Bell, Search, Star, HelpCircle, MessageCircle, CheckCircle2 } from 'lucide-react';
 import DesktopSearchTab from '@/components/customer/DesktopSearchTab';
 import CustomerProfileTab from '@/components/customer/CustomerProfileTab';
 import CustomerBookingsTab from '@/components/customer/CustomerBookingsTab';
@@ -8,11 +8,15 @@ import CustomerHistoryTab from '@/components/customer/CustomerHistoryTab';
 import CustomerUpdatesTab from '@/components/customer/CustomerUpdatesTab';
 import CustomerReviewsTab from '@/components/customer/CustomerReviewsTab';
 import CustomerQuestionsTab from '@/components/customer/CustomerQuestionsTab';
+import CustomerMessagesTab from '@/components/customer/CustomerMessagesTab';
+import CustomerCheckoutTab from '@/components/customer/CustomerCheckoutTab';
 import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 
 const navItems = [
   { id: 'profile', label: 'פרופיל אישי', icon: User },
   { id: 'bookings', label: 'ההזמנות שלי', icon: ClipboardList },
+  { id: 'checkout', label: "צ'ק-אאוט", icon: CheckCircle2 },
+  { id: 'messages', label: 'הודעות', icon: MessageCircle },
   { id: 'reviews', label: 'הביקורות שלי', icon: Star },
   { id: 'questions', label: 'השאלות שלי', icon: HelpCircle },
   { id: 'history', label: 'היסטוריית חיפושים', icon: MessageSquare },
@@ -159,6 +163,8 @@ export default function CustomerPortal() {
         {currentUser && tab === 'bookings' && <CustomerBookingsTab user={currentUser} />}
         {currentUser && tab === 'history' && <CustomerHistoryTab user={currentUser} />}
         {currentUser && tab === 'reviews' && <CustomerReviewsTab user={currentUser} focusReviewId={focusReviewId} />}
+        {currentUser && tab === 'messages' && <CustomerMessagesTab user={currentUser} focusBookingId={focusChatId} />}
+        {currentUser && tab === 'checkout' && <CustomerCheckoutTab user={currentUser} />}
         {currentUser && tab === 'questions' && <CustomerQuestionsTab user={currentUser} />}
         {currentUser && tab === 'updates' && <CustomerUpdatesTab user={currentUser} onAction={openNotificationAction} focusQuestionId={focusQuestionId} focusChatId={focusChatId} />}
       </main>

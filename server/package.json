@@ -25,7 +25,8 @@
     "test:booking": "node tests/contract/booking.smoke.js",
     "test:validation": "node tests/contract/validation.smoke.js",
     "test:assistant": "node tests/contract/owner-assistant-ops.smoke.js",
-    "test:all": "node tests/contract/validation.smoke.js && node tests/contract/entities.smoke.js && node tests/contract/auth.smoke.js && node tests/contract/authz.smoke.js && node tests/contract/booking.smoke.js && node tests/contract/calendar.smoke.js && node tests/contract/geocode.smoke.js && node tests/contract/functions.smoke.js && node tests/contract/workflows.smoke.js && node tests/contract/owner-assistant-ops.smoke.js && node tests/contract/upload.smoke.js",
+    "test:stay": "node tests/contract/stay-messages.smoke.js",
+    "test:all": "node tests/contract/validation.smoke.js && node tests/contract/entities.smoke.js && node tests/contract/auth.smoke.js && node tests/contract/authz.smoke.js && node tests/contract/booking.smoke.js && node tests/contract/calendar.smoke.js && node tests/contract/geocode.smoke.js && node tests/contract/functions.smoke.js && node tests/contract/workflows.smoke.js && node tests/contract/owner-assistant-ops.smoke.js && node tests/contract/stay-messages.smoke.js && node tests/contract/upload.smoke.js",
     "test:all:live": "npm run test:all && npm run test:llm",
     "test:llm": "node tests/contract/invoke-llm.smoke.js",
     "test:upload": "node tests/contract/upload.smoke.js"

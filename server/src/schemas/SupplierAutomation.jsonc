@@ -1,0 +1,149 @@
+{
+  "type": "object",
+  "title": "\u05d0\u05d5\u05d8\u05d5\u05de\u05e6\u05d9\u05d9\u05ea \u05d4\u05d5\u05d3\u05e2\u05d4 \u05dc\u05e1\u05e4\u05e7",
+  "properties": {
+    "owner_id": {
+      "type": "string",
+      "title": "\u05de\u05d6\u05d4\u05d4 \u05d1\u05e2\u05dc \u05de\u05ea\u05d7\u05dd"
+    },
+    "contact_id": {
+      "type": "string",
+      "title": "\u05de\u05d6\u05d4\u05d4 \u05e1\u05e4\u05e7"
+    },
+    "contact_name": {
+      "type": "string",
+      "title": "\u05e9\u05dd \u05e1\u05e4\u05e7"
+    },
+    "supplier_category": {
+      "type": "string",
+      "enum": [
+        "\u05de\u05e0\u05e7\u05d4",
+        "\u05de\u05db\u05d1\u05e1\u05d4",
+        "\u05de\u05e4\u05e2\u05d9\u05dc \u05e6\u05d9\u05de\u05e8",
+        "\u05d2\u05e0\u05df",
+        "\u05d8\u05db\u05e0\u05d0\u05d9"
+      ],
+      "title": "\u05e7\u05d8\u05d2\u05d5\u05e8\u05d9\u05d9\u05ea \u05e1\u05e4\u05e7"
+    },
+    "message_type": {
+      "type": "string",
+      "enum": [
+        "checkout_notify",
+        "weekly_cleaning",
+        "daily_laundry"
+      ],
+      "title": "\u05e1\u05d5\u05d2 \u05d4\u05d5\u05d3\u05e2\u05d4 \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05ea",
+      "default": "checkout_notify"
+    },
+    "frequency": {
+      "type": "string",
+      "enum": [
+        "weekly",
+        "biweekly",
+        "monthly"
+      ],
+      "title": "\u05ea\u05d3\u05d9\u05e8\u05d5\u05ea \u05e9\u05dc\u05d9\u05d7\u05d4",
+      "default": "weekly"
+    },
+    "day_of_week": {
+      "type": "number",
+      "title": "\u05d9\u05d5\u05dd \u05d1\u05e9\u05d1\u05d5\u05e2 (0=\u05e8\u05d0\u05e9\u05d5\u05df ... 6=\u05e9\u05d1\u05ea)"
+    },
+    "time": {
+      "type": "string",
+      "title": "\u05e9\u05e2\u05ea \u05e9\u05dc\u05d9\u05d7\u05d4 (HH:MM)",
+      "default": "09:00"
+    },
+    "month_day": {
+      "type": "number",
+      "title": "\u05d9\u05d5\u05dd \u05d1\u05d7\u05d5\u05d3\u05e9 (1-31, \u05dc\u05ea\u05d3\u05d9\u05e8\u05d5\u05ea \u05d7\u05d5\u05d3\u05e9\u05d9\u05ea)"
+    },
+    "zimmer_ids": {
+      "type": "array",
+      "title": "\u05e6\u05d9\u05de\u05e8\u05d9\u05dd \u05de\u05e9\u05d5\u05d9\u05db\u05d9\u05dd",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "enabled": {
+      "type": "boolean",
+      "title": "\u05e4\u05e2\u05d9\u05dc",
+      "default": true
+    },
+    "towels_per_guest": {
+      "type": "number",
+      "title": "\u05de\u05d2\u05d1\u05d5\u05ea \u05dc\u05d0\u05d5\u05e8\u05d7 (\u05dc\u05d9\u05d5\u05dd)",
+      "default": 2
+    },
+    "linens_per_guest": {
+      "type": "number",
+      "title": "\u05de\u05e6\u05e2\u05d9\u05dd \u05dc\u05d0\u05d5\u05e8\u05d7 (\u05dc\u05d9\u05d5\u05dd)",
+      "default": 1
+    },
+    "last_sent_at": {
+      "type": "string",
+      "title": "\u05e9\u05dc\u05d9\u05d7\u05d4 \u05d0\u05d7\u05e8\u05d5\u05e0\u05d4"
+    },
+    "note": {
+      "type": "string",
+      "title": "\u05d4\u05e2\u05e8\u05d4"
+    }
+  },
+  "required": [
+    "owner_id",
+    "contact_id",
+    "message_type"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "data.owner_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "data.owner_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.owner_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "data.owner_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  },
+  "name": "SupplierAutomation"
+}

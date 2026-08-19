@@ -4,6 +4,7 @@
  * Review push notifications moved here from browser (M15 #4 #24).
  */
 import { pushInAppNotification } from './push-in-app-notification.js';
+import { sendGuestMessage } from './send-guest-message.js';
 
 export function notificationsEnabled() {
   return process.env.NOTIFICATIONS_ENABLED !== 'false';
@@ -94,6 +95,21 @@ async function onBookingUpdate(store, data, old) {
       action_type: 'open_booking',
       action_entity_id: data.id,
     });
+    try {
+      await sendGuestMessage(store, {
+        customer_id: data.created_by_id,
+        booking_id: data.id,
+        zimmer_id: data.zimmer_id,
+        owner_id: data.owner_id,
+        category: 'booking_confirmation',
+        title: 'ההזמנה אושרה! 🎉',
+        body: 'ההזמנה שלך אושרה בהצלחה. פרטי החופשה יישלחו אליך אוטומטית 24 שעות לפני ההגעה. נתראה בקרוב!',
+        channels: ['app', 'whatsapp'],
+        skip_bell: true,
+      });
+    } catch (err) {
+      console.error('[entity-hooks] booking confirmation GuestMessage', err);
+    }
   }
 
   if (

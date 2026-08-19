@@ -30,7 +30,7 @@ function assert(cond, msg) {
 
 async function main() {
   const names = listEntityNames();
-  assert(names.length === 14, `14 entities loaded (got ${names.length})`);
+  assert(names.length === 18, `18 entities loaded (got ${names.length})`);
   assert(names.includes('Review') && names.includes('SyncState'), 'Review + SyncState present');
 
   const zimmerDefaults = applyDefaults('Zimmer', { name: 'Test' });

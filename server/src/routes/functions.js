@@ -4,7 +4,7 @@
  * (entity hooks / delayed jobs) — no public HTTP (M15 #4 #22 #24).
  */
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireOwnerOrAdmin } from '../middleware/auth.js';
 import { geocodeAddresses } from '../lib/geocode-addresses.js';
 import { addBookingToCalendar } from '../lib/add-booking-to-calendar.js';
 import {
@@ -13,6 +13,10 @@ import {
 } from '../lib/sync-google-calendar.js';
 import { createCalendarConnectionStore } from '../lib/calendar-connection-store.js';
 import { executeOwnerAssistantOp } from '../lib/owner-assistant-ops.js';
+import { sendGuestMessage } from '../lib/send-guest-message.js';
+import { sendSupplierMessage } from '../lib/send-supplier-message.js';
+import { performCheckout } from '../lib/perform-checkout.js';
+import { generateAIRecommendations } from '../lib/generate-ai-recommendations.js';
 
 /**
  * @param {ReturnType<import('../lib/entity-store.js').createEntityStore>} store
@@ -103,6 +107,64 @@ export function createFunctionsRouter(store, prisma) {
     } catch (err) {
       sendError(res, err);
     }
+  });
+
+  router.post('/performCheckout', requireAuth, async (req, res) => {
+    try {
+      const result = await performCheckout(store, req.body || {}, req.actor || req.user);
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/sendGuestMessage', requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const payload = { ...(req.body || {}) };
+      if (req.user.role !== 'admin') {
+        payload.owner_id = req.user.id;
+        if (payload.booking_id) {
+          const b = await store.get('BookingRequest', payload.booking_id, req.actor);
+          if (b.owner_id !== req.user.id) {
+            return res.status(403).json({ error: 'Forbidden' });
+          }
+        }
+      }
+      const result = await sendGuestMessage(store, payload);
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/sendSupplierMessage', requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const result = await sendSupplierMessage(store, req.body || {}, req.actor || req.user);
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/generateAIRecommendations', requireAuth, async (req, res) => {
+    try {
+      const result = await generateAIRecommendations(
+        store,
+        req.body || {},
+        req.actor || req.user,
+      );
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/sendStayMessages', (_req, res) => {
+    res.status(403).json({ error: 'Forbidden: internal only' });
+  });
+
+  router.post('/sendScheduledSupplierMessages', (_req, res) => {
+    res.status(403).json({ error: 'Forbidden: internal only' });
   });
 
   return router;

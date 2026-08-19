@@ -18,6 +18,7 @@ import { createGoogleCalendarConnectorRouter } from './routes/connectors/google-
 import { createAuthMiddleware } from './middleware/auth.js';
 import { startCalendarAutoSyncCron } from './jobs/calendar-auto-sync.js';
 import { startDelayedJobsCron } from './jobs/delayed-jobs-worker.js';
+import { startStayMessagesCron } from './jobs/stay-messages-cron.js';
 import { createAiRouter } from './routes/ai.js';
 import { createUploadRouter } from './routes/upload.js';
 import { createStorage } from './lib/storage/index.js';
@@ -101,5 +102,10 @@ app.listen(port, '0.0.0.0', () => {
     console.log('[delayed-jobs] disabled via DELAYED_JOBS_DISABLED');
   } else {
     startDelayedJobsCron({ store, jobs });
+  }
+  if (process.env.STAY_MESSAGES_CRON_DISABLED === '1') {
+    console.log('[stay-messages] disabled via STAY_MESSAGES_CRON_DISABLED');
+  } else {
+    startStayMessagesCron({ store });
   }
 });
