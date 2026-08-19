@@ -2,6 +2,7 @@
  * Generic JSONB entity store + User entity on `users` table (M5).
  */
 import {
+  AUTO_FIELDS,
   applyDefaults,
   getEntityMeta,
   listEntityNames,
@@ -22,6 +23,7 @@ import {
 } from './booking-guards.js';
 import { createUserStore } from './user-store.js';
 import { publishEntityChange } from './entity-events.js';
+import { SERVICE_ACTOR } from './service-role.js';
 
 const COLUMN_SORT = {
   created_date: 'createdDate',
@@ -82,7 +84,7 @@ export function createEntityStore(prisma, hooks = {}) {
       }
       const pub = toPublic(row);
       assertCan(entityType, 'read', user, pub);
-      return pub;
+      return redactRecord(entityType, pub, user);
     },
 
     async create(entityType, data, opts = {}) {
@@ -100,6 +102,15 @@ export function createEntityStore(prisma, hooks = {}) {
       const validated = validatePayload(entityType, data, { partial: false });
       const withDefaults = applyDefaults(entityType, validated);
       const payload = stripAutoFields(withDefaults);
+      if (
+        (entityType === 'SupplierAutomation' ||
+          entityType === 'SupplierMessage' ||
+          entityType === 'Contact') &&
+        user.role !== 'admin' &&
+        user.id
+      ) {
+        payload.owner_id = user.id;
+      }
       assertCan(entityType, 'create', user, payload);
       if (entityType === 'Review') {
         assertReviewCreateStatus(user, payload.status);
@@ -196,6 +207,9 @@ export function createEntityStore(prisma, hooks = {}) {
       if (entityType === 'Review') {
         assertReviewStatusTransition(user, current, patch);
         assertReviewSettlementOffer(current, patch);
+      }
+      if (entityType === 'GuestMessage') {
+        assertGuestMessageCustomerPatch(user, current, patch);
       }
       const merged = {
         ...(typeof existing.data === 'object' && existing.data !== null
@@ -310,7 +324,7 @@ async function findMany(prisma, entityType, query, sort, limit, actor) {
     orderBy,
     ...(take != null ? { take } : {}),
   });
-  return rows.map(toPublic);
+  return rows.map((row) => redactRecord(entityType, toPublic(row), actor));
 }
 
 function buildWhere(entityType, query) {
@@ -381,6 +395,38 @@ export function toPublic(row) {
     created_by_id: row.createdById ?? null,
     created_by: row.createdBy ?? null,
   };
+}
+
+function assertGuestMessageCustomerPatch(user, current, patch) {
+  const isAdmin = user.role === 'admin';
+  const isOwner = user.id && current.owner_id === user.id;
+  if (isAdmin || isOwner) return;
+  const keys = Object.keys(patch).filter((k) => !AUTO_FIELDS.has(k));
+  if (keys.length === 1 && keys[0] === 'read') return;
+  const err = new Error('Forbidden: customers may only mark GuestMessage as read');
+  err.status = 403;
+  throw err;
+}
+
+function redactRecord(entityType, record, actor) {
+  if (!record) return record;
+  const isService = actor?.id === SERVICE_ACTOR.id;
+
+  if (entityType === 'AppSetting' && !isService && record.key === 'whatsapp_api_token') {
+    return { ...record, value: record.value ? '********' : '' };
+  }
+
+  if (entityType === 'Zimmer' && record.stay_settings && typeof record.stay_settings === 'object') {
+    const isOwner = actor?.id && record.owner_id === actor.id;
+    const isAdmin = actor?.role === 'admin';
+    if (isService || isOwner || isAdmin) return record;
+    const stay = { ...record.stay_settings };
+    delete stay.entry_code;
+    delete stay.key_location;
+    return { ...record, stay_settings: stay };
+  }
+
+  return record;
 }
 
 function toIso(d) {

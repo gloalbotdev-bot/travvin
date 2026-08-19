@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { Plus, Home, ClipboardList, LogOut, MessageSquare, PenLine, LayoutDashboard, CalendarDays, Users, Settings, ChevronRight, Database, Star, Bot, Tag, Bell } from 'lucide-react';
+import { Plus, Home, ClipboardList, LogOut, MessageSquare, PenLine, LayoutDashboard, CalendarDays, Users, Settings, ChevronRight, Database, Star, Bot, Tag, Bell, Key } from 'lucide-react';
 import AccountSettings from '@/pages/AccountSettings';
 import BookingCreatorChat from '@/components/owner/BookingCreatorChat';
 import ZimmerEditor from '@/components/admin/ZimmerEditor';
@@ -17,6 +17,7 @@ import QuestionsPanel from '@/components/owner/QuestionsPanel';
 import PromotionsPanel from '@/components/owner/PromotionsPanel';
 import OwnerInfoAssistant from '@/components/owner/OwnerInfoAssistant';
 import OwnerUpdatesPanel from '@/components/owner/OwnerUpdatesPanel';
+import OwnerCheckinSettings from '@/components/owner/OwnerCheckinSettings';
 import { useOwnerSystemUnread } from '@/hooks/useOwnerSystemUnread';
 
 export default function OwnerPanel() {
@@ -96,6 +97,7 @@ export default function OwnerPanel() {
     { id: 'zimmers', label: 'הצימרים שלי', icon: Home },
     { id: 'bookings', label: 'הזמנות', icon: ClipboardList },
     { id: 'contacts', label: 'אנשי קשר', icon: Users },
+    { id: 'checkin', label: 'הודעות אוטומטיות', icon: Key },
     { id: 'database', label: 'דאטאבייס ידע', icon: Database },
     { id: 'reviews', label: 'ביקורות', icon: Star },
     { id: 'updates', label: 'עדכונים והודעות', icon: Bell },
@@ -241,6 +243,7 @@ export default function OwnerPanel() {
         )}
         {tab === 'calendar' && <OwnerCalendar ownerId={currentUser?.id} zimmers={zimmers} onAddBookingText={() => setShowBookingCreator(true)} />}
         {tab === 'contacts' && <ContactsBook ownerId={currentUser?.id} />}
+        {tab === 'checkin' && <OwnerCheckinSettings ownerId={currentUser?.id} />}
         {tab === 'database' && <ZimmerDatabase ownerId={currentUser?.id} />}
         {tab === 'reviews' && <ReviewsPanel ownerId={currentUser?.id} focusReviewId={focusReviewId} />}
         {tab === 'updates' && <OwnerUpdatesPanel user={currentUser} onAction={openNotificationAction} focusQuestionId={focusQuestionId} focusChatId={focusChatId} onMarkSystemRead={markSystemRead} />}

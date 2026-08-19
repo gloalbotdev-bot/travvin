@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { CheckCircle, XCircle, Clock, Eye, Trash2, PenLine, X, AlertTriangle, Plus } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, Trash2, PenLine, X, AlertTriangle, Plus, LogOut as LogOutIcon, Loader2 } from 'lucide-react';
 import { calcBookingTotal, getBookingTotal, formatILS } from '@/lib/bookingPrice';
 import { bookingErrorMessage } from '@/lib/bookingErrors';
 
@@ -10,12 +10,13 @@ const STATUS_CONFIG = {
   'נדחתה': { color: 'text-red-400 bg-red-400/10 border-red-400/20', icon: XCircle, label: 'נדחתה' },
 };
 
-function BookingModal({ booking, zimmers, onClose, onSave, onRequestDeletion, onConfirmCancel, onDismissCancel, onStatusChange, calendarLoading }) {
+function BookingModal({ booking, zimmers, onClose, onSave, onRequestDeletion, onConfirmCancel, onDismissCancel, onStatusChange, calendarLoading, onManualCheckout }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ ...booking });
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [delReason, setDelReason] = useState('');
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
 
   const handleSave = async () => {
     const z = zimmers?.find(zs => zs.id === form.zimmer_id);
@@ -165,6 +166,20 @@ function BookingModal({ booking, zimmers, onClose, onSave, onRequestDeletion, on
                     ✗ דחה
                   </button>
                 </div>
+              )}
+              {booking.status === 'אושרה' && booking.checked_out && (
+                <div className="mt-2 text-xs px-3 py-2 rounded-lg bg-green-500/10 text-green-400 flex items-center gap-1.5">
+                  <CheckCircle size={13} /> בוצע צ'ק-אאוט {booking.checked_out_at ? `· ${new Date(booking.checked_out_at).toLocaleDateString('he-IL')}` : ''}
+                </div>
+              )}
+              {booking.status === 'אושרה' && !booking.checked_out && onManualCheckout && (
+                <button
+                  onClick={async () => { setCheckoutBusy(true); await onManualCheckout(booking); setCheckoutBusy(false); }}
+                  disabled={checkoutBusy}
+                  className="mt-2 w-full py-2.5 bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {checkoutBusy ? <Loader2 size={14} className="animate-spin" /> : <LogOutIcon size={14} />} בצע צ'ק-אאוט ידני
+                </button>
               )}
             </>
           )}
@@ -351,6 +366,17 @@ export default function OwnerBookingsList({ ownerId, zimmers = [], onAddBooking,
     loadBookings();
   };
 
+  const handleManualCheckout = async (booking) => {
+    if (!confirm('לבצע צ\'ק-אאוט ידני להזמנה זו? פעולה זו תסגור את ההזמנה ותפעיל את האוטומציות שלאחר היציאה.')) return;
+    try {
+      await api.functions.invoke('performCheckout', { booking_id: booking.id });
+      setSelectedBooking(null);
+      loadBookings();
+    } catch (e) {
+      alert('צ\'ק-אאוט נכשל: ' + (e?.message || String(e)));
+    }
+  };
+
   if (loading) return (
     <div className="flex items-center justify-center py-20">
       <div className="w-8 h-8 border-4 border-gray-700 border-t-[#25D366] rounded-full animate-spin"></div>
@@ -440,6 +466,7 @@ export default function OwnerBookingsList({ ownerId, zimmers = [], onAddBooking,
           onDismissCancel={handleDismissCancel}
           onStatusChange={handleStatusChange}
           calendarLoading={calendarLoading}
+          onManualCheckout={handleManualCheckout}
         />
       )}
     </div>

@@ -10,6 +10,10 @@ const OWN_FUNCTIONS = {
   addBookingToCalendar: { path: '/api/functions/addBookingToCalendar', auth: true },
   executeOwnerAssistantOp: { path: '/api/functions/executeOwnerAssistantOp', auth: true },
   syncGoogleCalendar: { path: '/api/functions/syncGoogleCalendar', auth: true },
+  performCheckout: { path: '/api/functions/performCheckout', auth: true },
+  sendGuestMessage: { path: '/api/functions/sendGuestMessage', auth: true },
+  sendSupplierMessage: { path: '/api/functions/sendSupplierMessage', auth: true },
+  generateAIRecommendations: { path: '/api/functions/generateAIRecommendations', auth: true },
 };
 
 export const ownFunctions = {
