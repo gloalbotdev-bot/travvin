@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '@/api/client';
 import { motion } from 'framer-motion';
+import RoleMismatchModal from '@/components/auth/RoleMismatchModal';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -10,13 +11,40 @@ const fadeUp = {
   }),
 };
 
+function authErrorMessage(code) {
+  if (code === 'oauth_failed') return 'ההתחברות עם Google נכשלה. נסו שוב.';
+  if (code === 'user_not_registered') return 'המשתמש אינו רשום במערכת.';
+  return null;
+}
+
 export default function Welcome() {
-  const handleCustomer = () => api.auth.loginWithProvider('google', '/chat');
-  const handleOwner = () => api.auth.loginWithProvider('google', '/join');
+  const [mismatchAs, setMismatchAs] = useState(null);
+  const [banner, setBanner] = useState(null);
+
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const err = sp.get('auth_error');
+    if (!err) return;
+    if (err === 'role_mismatch') {
+      setMismatchAs(sp.get('as') || 'user');
+    } else {
+      setBanner(authErrorMessage(err) || 'אירעה שגיאה בהתחברות.');
+    }
+    window.history.replaceState({}, '', '/welcome');
+  }, []);
+
+  const handleCustomer = () => api.auth.loginWithProvider('google', '/chat', 'user');
+  const handleOwner = () => api.auth.loginWithProvider('google', '/owner', 'owner');
   const handleAdmin = () => { window.location.href = '/admin-login'; };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6" dir="rtl" style={{ background: 'linear-gradient(160deg, #EAD5FF 0%, #FFD4C2 45%, #C5DEFF 100%)', fontFamily: 'Heebo, sans-serif' }}>
+      {mismatchAs && (
+        <RoleMismatchModal
+          registeredAs={mismatchAs}
+          onDismiss={() => setMismatchAs(null)}
+        />
+      )}
 
       {/* Logo */}
       <motion.div custom={0} variants={fadeUp} initial="hidden" animate="visible" className="text-center mb-10">
@@ -26,6 +54,12 @@ export default function Welcome() {
         <h1 className="text-3xl font-black tracking-tight" style={{ color: '#1A1A1A' }}>Travvin</h1>
         <p className="mt-1.5 text-sm" style={{ color: '#9CA3AF' }}>בחר את סוג הכניסה שלך</p>
       </motion.div>
+
+      {banner && (
+        <div className="w-full max-w-sm mb-4 rounded-2xl p-4 text-center text-sm" style={{ background: 'rgba(239,68,68,0.08)', color: '#EF4444', border: '1.5px solid rgba(239,68,68,0.15)' }}>
+          {banner}
+        </div>
+      )}
 
       <div className="w-full max-w-sm space-y-3">
         {/* Customer */}

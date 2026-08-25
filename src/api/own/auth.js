@@ -13,12 +13,20 @@ export const ownAuth = {
     return ownFetch('/api/auth/me');
   },
 
-  loginWithProvider(provider, redirectUrl) {
+  /**
+   * @param {'google'} provider
+   * @param {string} [redirectUrl]
+   * @param {'user'|'owner'|'admin'} [intent] — permanent role for first signup; must match existing role on return
+   */
+  loginWithProvider(provider, redirectUrl, intent = 'user') {
     if (provider !== 'google') {
       throw new Error(`Unsupported provider: ${provider}`);
     }
-    const url = `${getApiBase()}/api/auth/google?redirect=${encodeURIComponent(redirectUrl || '/')}`;
-    window.location.href = url;
+    const params = new URLSearchParams({
+      redirect: redirectUrl || '/',
+      intent: intent === 'owner' || intent === 'admin' ? intent : 'user',
+    });
+    window.location.href = `${getApiBase()}/api/auth/google?${params.toString()}`;
   },
 
   redirectToLogin(returnUrl) {
