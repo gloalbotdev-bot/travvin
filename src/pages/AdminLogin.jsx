@@ -37,7 +37,7 @@ export default function AdminLogin() {
           </div>
         )}
 
-        <button onClick={() => api.auth.loginWithProvider('google', '/admin-login')}
+        <button onClick={() => api.auth.loginWithProvider('google', '/admin-login', 'admin')}
           className="w-full text-white rounded-xl p-3.5 font-bold text-sm transition-all hover:opacity-90 hover:shadow-lg"
           style={{ background: '#F97316' }}>
           כניסה עם Google

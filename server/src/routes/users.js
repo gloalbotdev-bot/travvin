@@ -1,5 +1,5 @@
 /**
- * users.inviteUser — faithful restore (no server admin gate; deferred-fix #1).
+ * users.inviteUser — admin-only (role changes / invites).
  */
 import { Router } from 'express';
 import { createUserStore } from '../lib/user-store.js';
@@ -12,9 +12,15 @@ export function createUsersRouter(prisma) {
 
   router.post('/invite', requireAuth, async (req, res) => {
     try {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
       const { email, role } = req.body || {};
       if (!email || !role) {
         return res.status(400).json({ error: 'email and role required' });
+      }
+      if (!['user', 'owner', 'admin'].includes(role)) {
+        return res.status(400).json({ error: 'Invalid role' });
       }
       const invited = await users.invite(email, role);
       res.json(invited);

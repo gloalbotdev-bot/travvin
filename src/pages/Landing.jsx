@@ -51,13 +51,13 @@ export default function Landing() {
         </motion.div>
         <div className="flex items-center gap-3">
           <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}
-            onClick={() => api.auth.loginWithProvider('google', '/join')}
+            onClick={() => api.auth.loginWithProvider('google', '/owner', 'owner')}
             className="px-4 py-2 rounded-full text-sm font-medium transition-all hover:bg-black/5"
             style={{ color: '#1A1A1A' }}>
             אני בעל מתחם
           </motion.button>
           <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}
-            onClick={() => api.auth.loginWithProvider('google', '/chat')}
+            onClick={() => api.auth.loginWithProvider('google', '/chat', 'user')}
             className="px-5 py-2 rounded-full text-sm font-semibold text-white transition-all hover:shadow-lg hover:scale-105"
             style={{ background: '#F97316' }}>
             התחילו בחינם
@@ -89,13 +89,13 @@ export default function Landing() {
         <motion.div custom={3} variants={fadeUp} initial="hidden" animate="visible"
           className="flex flex-col sm:flex-row gap-3 justify-center items-center">
           <button
-            onClick={() => api.auth.loginWithProvider('google', '/chat')}
+            onClick={() => api.auth.loginWithProvider('google', '/chat', 'user')}
             className="px-8 py-3.5 rounded-full text-base font-bold text-white transition-all hover:scale-105 hover:shadow-xl"
             style={{ background: '#F97316' }}>
             אני רוצה להתארח ←
           </button>
           <button
-            onClick={() => api.auth.loginWithProvider('google', '/join')}
+            onClick={() => api.auth.loginWithProvider('google', '/owner', 'owner')}
             className="px-8 py-3.5 rounded-full text-base font-semibold transition-all hover:scale-105 hover:shadow-md"
             style={{ background: '#fff', color: '#1A1A1A', border: '1.5px solid rgba(0,0,0,0.1)' }}>
             אני בעל מתחם
@@ -187,12 +187,12 @@ export default function Landing() {
             <h2 className="text-3xl md:text-5xl font-black tracking-tight mb-4" style={{ color: '#1A1A1A' }}>מוכנים לנהל אירוח<br />בצורה חכמה יותר?</h2>
             <p className="text-lg mb-10 max-w-xl mx-auto" style={{ color: '#6B7280' }}>הצטרפו לבעלי מתחמים שכבר חוסכים שעות בשבוע</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <button onClick={() => api.auth.loginWithProvider('google', '/chat')}
+              <button onClick={() => api.auth.loginWithProvider('google', '/chat', 'user')}
                 className="px-8 py-3.5 rounded-full text-base font-bold transition-all hover:scale-105 hover:shadow-xl"
                 style={{ background: '#1A1A1A', color: '#fff' }}>
                 אני מחפש צימר ←
               </button>
-              <button onClick={() => api.auth.loginWithProvider('google', '/join')}
+              <button onClick={() => api.auth.loginWithProvider('google', '/owner', 'owner')}
                 className="px-8 py-3.5 rounded-full text-base font-semibold transition-all hover:scale-105"
                 style={{ border: '1.5px solid rgba(0,0,0,0.15)', background: 'rgba(255,255,255,0.6)', color: '#1A1A1A' }}>
                 אני בעל מתחם

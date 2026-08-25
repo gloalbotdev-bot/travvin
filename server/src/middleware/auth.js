@@ -55,3 +55,14 @@ export function requireOwnerOrAdmin(req, res, next) {
   }
   next();
 }
+
+/** Authenticated customer only (`role === 'user'`). Owners/admins must use a separate Google account. */
+export function requireCustomer(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (req.user.role !== 'user') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+}

@@ -17,6 +17,7 @@ import AccountSettings from '@/pages/AccountSettings';
 import CustomerPortal from '@/pages/CustomerPortal';
 import AdminLogin from '@/pages/AdminLogin';
 import DesktopSearch from '@/pages/DesktopSearch';
+import RoleGate from '@/components/auth/RoleGate';
 
 const PUBLIC_PATHS = ['/', '/welcome', '/admin-login'];
 
@@ -61,14 +62,14 @@ const AuthenticatedApp = () => {
       <Route path="/" element={<Landing />} />
       <Route path="/welcome" element={<Welcome />} />
       <Route path="/admin-login" element={<AdminLogin />} />
-      <Route path="/chat" element={<CustomerChat />} />
-      <Route path="/promotions" element={<Promotions />} />
-      <Route path="/owner" element={<OwnerPanel />} />
+      <Route path="/chat" element={<RoleGate allow={['user']} allowGuest><CustomerChat /></RoleGate>} />
+      <Route path="/promotions" element={<RoleGate allow={['user']} allowGuest><Promotions /></RoleGate>} />
+      <Route path="/owner" element={<RoleGate allow={['owner']}><OwnerPanel /></RoleGate>} />
       <Route path="/superadmin" element={<SuperAdminPanel />} />
       <Route path="/join" element={<JoinAsOwner />} />
       <Route path="/account-settings" element={<AccountSettings />} />
-      <Route path="/customer-portal" element={<CustomerPortal />} />
-      <Route path="/desktop-search" element={<div className="h-screen"><DesktopSearch /></div>} />
+      <Route path="/customer-portal" element={<RoleGate allow={['user']}><CustomerPortal /></RoleGate>} />
+      <Route path="/desktop-search" element={<RoleGate allow={['user']} allowGuest><div className="h-screen"><DesktopSearch /></div></RoleGate>} />
       <Route path="/CustomerChat" element={<Navigate to="/chat" replace />} />
       <Route path="/customer-chat" element={<Navigate to="/chat" replace />} />
       <Route path="/CustomerPortal" element={<Navigate to="/customer-portal" replace />} />

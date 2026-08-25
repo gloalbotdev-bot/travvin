@@ -19,6 +19,11 @@ import {
   fetchGoogleProfile,
   isGoogleConfigured,
 } from '../lib/google-oauth.js';
+import {
+  normalizeAuthIntent,
+  roleForNewUser,
+  roleMatchesIntent,
+} from '../lib/auth-role-intent.js';
 import { createUserStore } from '../lib/user-store.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -202,8 +207,9 @@ export function createAuthRouter(prisma) {
       });
     }
     const redirect = req.query.redirect || '/';
+    const intent = normalizeAuthIntent(req.query.intent);
     const state = crypto.randomBytes(16).toString('hex');
-    oauthStates.set(state, { redirect, at: Date.now() });
+    oauthStates.set(state, { redirect, intent, at: Date.now() });
     // prune old states
     for (const [k, v] of oauthStates) {
       if (Date.now() - v.at > 10 * 60 * 1000) oauthStates.delete(k);
@@ -221,6 +227,7 @@ export function createAuthRouter(prisma) {
       const pending = oauthStates.get(String(state));
       oauthStates.delete(String(state));
       const after = pending?.redirect || '/';
+      const intent = normalizeAuthIntent(pending?.intent);
 
       const accessToken = await exchangeGoogleCode(String(code));
       const profile = await fetchGoogleProfile(accessToken);
@@ -230,6 +237,15 @@ export function createAuthRouter(prisma) {
         (profile.email && (await users.findByEmail(profile.email)));
 
       if (row) {
+        if (!roleMatchesIntent(row.role, intent)) {
+          const asRole =
+            row.role === 'owner' || row.role === 'admin' || row.role === 'user'
+              ? row.role
+              : 'user';
+          return res.redirect(
+            `${frontendUrl()}/welcome?auth_error=role_mismatch&as=${encodeURIComponent(asRole)}`,
+          );
+        }
         if (!row.googleId && profile.id) {
           row = await prisma.user.update({
             where: { id: row.id },
@@ -241,12 +257,18 @@ export function createAuthRouter(prisma) {
           });
         }
       } else {
+        const newRole = roleForNewUser(intent);
+        if (!newRole) {
+          return res.redirect(
+            `${frontendUrl()}/welcome?auth_error=role_mismatch&as=user`,
+          );
+        }
         row = await prisma.user.create({
           data: {
             email: (profile.email || '').toLowerCase(),
             fullName: profile.name || null,
             googleId: profile.id || null,
-            role: 'user',
+            role: newRole,
             emailVerified: true,
             registered: true,
           },

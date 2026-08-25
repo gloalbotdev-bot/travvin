@@ -1,30 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
 import GoogleIcon from '@/components/GoogleIcon';
+import RoleMismatchModal, { messageForRegisteredAs } from '@/components/auth/RoleMismatchModal';
 
 export default function JoinAsOwner() {
   const [step, setStep] = useState('landing');
+  const [mismatchAs, setMismatchAs] = useState(null);
 
   useEffect(() => {
     api.auth.me().then(u => {
       if (!u) return;
-      if (u.role === 'owner' || u.role === 'admin') { window.location.href = '/owner'; }
-      else { grantOwnerAccess(u); }
+      if (u.role === 'owner' || u.role === 'admin') {
+        window.location.href = '/owner';
+        return;
+      }
+      if (u.role === 'user') {
+        setMismatchAs('user');
+        setStep('blocked');
+      }
     }).catch(() => {});
   }, []);
 
-  const grantOwnerAccess = async (u) => {
-    setStep('loading');
-    try {
-      await api.auth.updateMe({ role: 'owner' });
-    } catch (_) {
-      try { await api.users.inviteUser(u.email, 'owner'); } catch (_2) {}
-    }
-    window.location.href = '/owner';
+  const dismissMismatch = () => {
+    setMismatchAs(null);
+    api.auth.logout('/welcome');
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(160deg, #EAD5FF 0%, #FFD4C2 45%, #C5DEFF 100%)', fontFamily: 'Heebo, sans-serif' }} dir="rtl">
+      {mismatchAs && (
+        <RoleMismatchModal registeredAs={mismatchAs} onDismiss={dismissMismatch} />
+      )}
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg" style={{ background: '#1A1A1A' }}>
@@ -37,7 +43,7 @@ export default function JoinAsOwner() {
         {step === 'landing' && (
           <div className="rounded-2xl p-6" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
             <p className="text-sm text-center mb-5" style={{ color: '#6B7280' }}>התחבר עם גוגל כדי להמשיך</p>
-            <button onClick={() => api.auth.loginWithProvider('google', window.location.href)}
+            <button onClick={() => api.auth.loginWithProvider('google', '/owner', 'owner')}
               className="w-full flex items-center justify-center gap-3 bg-white py-3 rounded-xl font-semibold text-sm transition-all hover:shadow-md"
               style={{ border: '1.5px solid #E8E5E0', color: '#1A1A1A' }}>
               <GoogleIcon />התחבר עם Google
@@ -45,10 +51,9 @@ export default function JoinAsOwner() {
           </div>
         )}
 
-        {step === 'loading' && (
-          <div className="rounded-2xl p-10 text-center" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
-            <div className="w-8 h-8 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-sm" style={{ color: '#6B7280' }}>מגדיר את החשבון שלך...</p>
+        {step === 'blocked' && (
+          <div className="rounded-2xl p-6 text-center" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
+            <p className="text-sm" style={{ color: '#6B7280' }}>{messageForRegisteredAs('user')}</p>
           </div>
         )}
       </div>
