@@ -92,13 +92,16 @@ export default function OwnerDashboard({ ownerId, zimmers, onNavigate, onAction 
 
   const getAiTips = async () => {
     setLoadingAi(true);
-    const zimmerNames = zimmers.map(z => z.name).join(', ');
-    const tip = await api.integrations.Core.InvokeLLM({
-      prompt: `אתה יועץ עסקי לבעל צימרים בישראל. בעל המתחם מנהל את הצימרים: ${zimmerNames || 'צימר'}.
-נתונים: ${checkinsToday.length} צ'קאין היום, ${checkoutsToday.length} צ'קאאוט היום, ${currentlyStaying.length} אורחים כרגע, ${monthBookings.length} הזמנות החודש, הכנסה חזויה ₪${monthRevenue.toLocaleString()}, ${pendingCount} בקשות ממתינות.
-תן 3-4 המלצות קצרות ומעשיות לשיפור העסק. כל המלצה בשורה נפרדת עם ✨ בהתחלה. בעברית בלבד.`
-    });
-    setAiTips(typeof tip === 'string' ? tip : tip?.content || '');
+    try {
+      const response = await api.assistant.chat({
+        profile: 'owner_tips',
+        message: 'המלצות לשיפור העסק',
+        clientState: { ownerId },
+      });
+      setAiTips(response?.message?.content || '');
+    } catch (e) {
+      setAiTips('');
+    }
     setLoadingAi(false);
   };
 

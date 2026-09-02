@@ -20,13 +20,17 @@ import { startCalendarAutoSyncCron } from './jobs/calendar-auto-sync.js';
 import { startDelayedJobsCron } from './jobs/delayed-jobs-worker.js';
 import { startStayMessagesCron } from './jobs/stay-messages-cron.js';
 import { createAiRouter } from './routes/ai.js';
+import { createAssistantRouter } from './routes/assistant.js';
 import { createUploadRouter } from './routes/upload.js';
 import { createStorage } from './lib/storage/index.js';
 import { createBookingsRouter } from './routes/bookings.js';
+import { assertProductionEnv, getFrontendUrl } from './lib/env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../.env'), override: true });
 dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
+
+assertProductionEnv();
 
 const app = express();
 const prisma = new PrismaClient();
@@ -46,8 +50,14 @@ hooksImpl = createEntityHooks({ store, jobs });
 const attachAuthUser = createAuthMiddleware(prisma);
 const port = Number(process.env.PORT || 3001);
 
-const frontendUrl = process.env.FRONTEND_URL?.replace(/\/$/, '');
-app.use(cors(frontendUrl ? { origin: frontendUrl, credentials: true } : {}));
+const corsOrigin = getFrontendUrl();
+app.use(
+  cors(
+    corsOrigin
+      ? { origin: corsOrigin, credentials: true }
+      : { origin: false },
+  ),
+);
 app.use(express.json({ limit: '2mb' }));
 app.use(attachAuthUser);
 
@@ -85,6 +95,7 @@ app.use('/api/bookings', createBookingsRouter(prisma));
 app.use('/api/events', createEventsRouter());
 app.use('/api/functions', createFunctionsRouter(store, prisma));
 app.use('/api/ai', createAiRouter());
+app.use('/api/assistant', createAssistantRouter({ prisma, store }));
 app.use('/api/upload', createUploadRouter(storage));
 app.use(
   '/api/connectors/google-calendar',

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '@/api/client';
 import { Send, Upload, X, ArrowRight, Check } from 'lucide-react';
+import { buildCreatorRecentTurns, getAssistantParsed } from '@/lib/assistantCreator';
 
 const formatTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
@@ -65,81 +66,26 @@ export default function ZimmerCreatorChat({ onSave, onCancel }) {
     addMsg('user', 'text', text);
     setIsTyping(true);
 
-    const historyText = messages.map(m =>
-      m.role === 'user' ? `בעל הצימר: ${typeof m.content === 'string' ? m.content : '[תמונות]'}` :
-        `מערכת: ${typeof m.content === 'string' ? m.content : ''}`
-    ).join('\n');
+    const recentTurns = buildCreatorRecentTurns(messages, 40);
 
-    const currentData = JSON.stringify(conversationData);
-
-    const prompt = `אתה עוזר לבעל צימר ליצור את פרופיל הצימר שלו במערכת.
-היסטוריית השיחה:
-${historyText}
-
-הודעה נוכחית: "${text}"
-
-נתונים שנאספו עד כה: ${currentData}
-
-המשימה שלך:
-1. עדכן/השלם את נתוני הצימר לפי ההודעה החדשה
-2. אם יש מספיק נתונים (לפחות שם), הצע לסכם ולבנות
-3. אם חסר מידע חשוב — שאל שאלה ספציפית אחת
-4. אם הבעל אומר "בנה", "סיים", "אוקיי", "תן לי לראות", "יצור" — עבור למצב BUILD
-
-ענה JSON בלבד:
-{
-  "action": "collect" | "build",
-  "message": "...",
-  "zimmer_data": {
-    "name": "...",
-    "location": "...",
-    "price_per_night": number or null,
-    "weekday_price": number or null,
-    "weekend_price": number or null,
-    "num_rooms": number or null,
-    "max_guests": number or null,
-    "description": "...",
-    "data_zones": []
-  }
-}
-
-אם action=build, מלא את zimmer_data בצורה מלאה ומפורטת לפי כל מה שנאמר בשיחה.
-חובה לבקש מהבעל מחיר נפרד לאמצע השבוע (א'-ה', weekday_price) ולסוף השבוע (ה'-ש', weekend_price). אם הבעל נתן רק מחיר אחד ולא ציין חלוקה — הגדר את אותו מחיר גם ל-weekday_price וגם ל-weekend_price (ול-price_per_night). אף פעם אל תשאיר את שניהם null כשיש מחיר כלשהו.
-ה-description צריך להיות תיאור מפנה ומושך.
-ה-data_zones צריכים לכלול מידע ייחודי שנאמר בשיחה (כגון: מדיניות ביטול, חיות מחמד, ציוד מיוחד וכו').`;
-
-    const response = await api.integrations.Core.InvokeLLM({
-      prompt,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          action: { type: 'string' },
-          message: { type: 'string' },
-          zimmer_data: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              location: { type: 'string' },
-              price_per_night: { type: 'number' },
-              weekday_price: { type: 'number' },
-              weekend_price: { type: 'number' },
-              num_rooms: { type: 'number' },
-              max_guests: { type: 'number' },
-              description: { type: 'string' },
-              data_zones: { type: 'array', items: { type: 'object' } }
-            }
-          }
-        }
-      }
+    const response = await api.assistant.chat({
+      profile: 'owner_zimmer_creator',
+      message: text,
+      clientState: {
+        conversationData,
+        recentTurns,
+        uploadedImageCount: uploadedImages.length,
+      },
     });
+    const parsed = getAssistantParsed(response);
 
     setIsTyping(false);
 
-    if (response.zimmer_data) {
-      setConversationData(prev => ({ ...prev, ...response.zimmer_data }));
+    if (parsed.zimmer_data) {
+      setConversationData(prev => ({ ...prev, ...parsed.zimmer_data }));
     }
 
-    if (response.action === 'build' && response.zimmer_data) {
+    if (parsed.action === 'build' && parsed.zimmer_data) {
       // Capture the exact raw text the owner entered and store it as info zone #1
       // Include the current message (text) since state hasn't flushed in this closure
       const userRawText = [
@@ -152,13 +98,13 @@ ${historyText}
         source_label: 'מידע בעלים',
         source_date: new Date().toISOString().split('T')[0],
       };
-      const aiZones = (response.zimmer_data.data_zones || conversationData.data_zones || []).filter(z => z && z.content);
-      const finalZimmer = { ...conversationData, ...response.zimmer_data, images: uploadedImages, data_zones: [ownerZone, ...aiZones] };
+      const aiZones = (parsed.zimmer_data.data_zones || conversationData.data_zones || []).filter(z => z && z.content);
+      const finalZimmer = { ...conversationData, ...parsed.zimmer_data, images: uploadedImages, data_zones: [ownerZone, ...aiZones] };
       setBuiltZimmer(finalZimmer);
-      addMsg('bot', 'text', response.message || 'מצוין! הנה הצימר שבניתי לך:');
+      addMsg('bot', 'text', parsed.message || 'מצוין! הנה הצימר שבניתי לך:');
       addMsg('bot', 'preview', finalZimmer);
     } else {
-      addMsg('bot', 'text', response.message || 'תודה! ספר לי עוד.');
+      addMsg('bot', 'text', parsed.message || 'תודה! ספר לי עוד.');
     }
   };
 

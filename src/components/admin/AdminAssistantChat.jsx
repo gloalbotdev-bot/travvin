@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '@/api/client';
 import { Send, ArrowRight, X } from 'lucide-react';
+import { buildCreatorRecentTurns, getAssistantParsed } from '@/lib/assistantCreator';
 
 const formatTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
@@ -58,91 +59,27 @@ export default function AdminAssistantChat({ onClose, onRefresh }) {
     setIsTyping(true);
 
     try {
-      const zimmerJson = JSON.stringify({
-        id: selectedZimmer.id,
-        name: selectedZimmer.name,
-        location: selectedZimmer.location,
-        price_per_night: selectedZimmer.price_per_night,
-        num_rooms: selectedZimmer.num_rooms,
-        max_guests: selectedZimmer.max_guests,
-        description: selectedZimmer.description,
-        data_zones: selectedZimmer.data_zones || [],
-        images: selectedZimmer.images || []
+      const recentTurns = buildCreatorRecentTurns(messages);
+      const response = await api.assistant.chat({
+        profile: 'admin_zimmer_editor',
+        message: text,
+        clientState: {
+          zimmerId: selectedZimmer.id,
+          recentTurns,
+        },
       });
-
-      const historyText = messages.slice(-12)
-        .filter(m => m.type === 'text')
-        .map(m => `${m.role === 'user' ? 'מנהל' : 'מערכת'}: ${m.content}`)
-        .join('\n');
-
-      const prompt = `אתה עוזר ניהול לבעל צימר.
-צימר נוכחי:
-${zimmerJson}
-
-היסטוריית השיחה:
-${historyText}
-
-בקשת המנהל: "${text}"
-
-המשימה שלך:
-- נתח מה המנהל רוצה לשנות
-- בנה עדכון מלא לצימר (שדות בסיסיים + data_zones)
-- data_zones הם מערך של אובייקטים עם: content (string), source_label (string), source_type (string - אחד מ: "טקסט חופשי", "שיחת טלפון", "שיחת וואטסאפ"), source_date (תאריך היום: ${new Date().toLocaleDateString('he-IL')})
-- אם המנהל רוצה להוסיף כמה אזורי מידע בבת אחת — צור אזור מידע לכל פריט
-- שמור data_zones קיימים ורק הוסף/שנה לפי הבקשה
-- אם הבקשה לא ברורה — שאל שאלת הבהרה ספציפית
-
-ענה JSON:
-{
-  "action": "update" | "clarify" | "confirm",
-  "message": "הודעה למנהל",
-  "changes": {
-    "name": "...",
-    "location": "...",
-    "price_per_night": number,
-    "num_rooms": number,
-    "max_guests": number,
-    "description": "...",
-    "data_zones": [{"content":"...","source_label":"עריכה ידנית","source_type":"טקסט חופשי","source_date":"${new Date().toLocaleDateString('he-IL')}"}]
-  }
-}
-
-אם action=clarify: אל תכניס changes.
-אם action=update או confirm: הכנס changes עם כל שדות הצימר (גם אלה שלא השתנו).`;
-
-      const response = await api.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            action: { type: 'string' },
-            message: { type: 'string' },
-            changes: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-                location: { type: 'string' },
-                price_per_night: { type: 'number' },
-                num_rooms: { type: 'number' },
-                max_guests: { type: 'number' },
-                description: { type: 'string' },
-                data_zones: { type: 'array', items: { type: 'object' } }
-              }
-            }
-          }
-        }
-      });
+      const parsed = getAssistantParsed(response);
 
       setIsTyping(false);
 
-      if (response.action === 'clarify') {
-        addMsg('bot', 'text', response.message);
-      } else if (response.action === 'update' && response.changes) {
-        setPendingChanges(response.changes);
-        addMsg('bot', 'text', response.message || 'הנה השינויים שאני מתכנן לבצע:');
-        addMsg('bot', 'changes_preview', response.changes);
+      if (parsed.action === 'clarify') {
+        addMsg('bot', 'text', parsed.message);
+      } else if (parsed.action === 'update' && parsed.changes) {
+        setPendingChanges(parsed.changes);
+        addMsg('bot', 'text', parsed.message || 'הנה השינויים שאני מתכנן לבצע:');
+        addMsg('bot', 'changes_preview', parsed.changes);
       } else {
-        addMsg('bot', 'text', response.message || 'לא הצלחתי לעבד את הבקשה.');
+        addMsg('bot', 'text', parsed.message || 'לא הצלחתי לעבד את הבקשה.');
       }
     } catch (e) {
       setIsTyping(false);

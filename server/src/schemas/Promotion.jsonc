@@ -47,5 +47,26 @@
     "check_out",
     "discount_percent"
   ],
-  "name": "Promotion"
+  "name": "Promotion",
+  "rls": {
+    "read": {},
+    "create": {
+      "$or": [
+        { "user_condition": { "role": "admin" } },
+        { "data.owner_id": "{{user.id}}" }
+      ]
+    },
+    "update": {
+      "$or": [
+        { "user_condition": { "role": "admin" } },
+        { "data.owner_id": "{{user.id}}" }
+      ]
+    },
+    "delete": {
+      "$or": [
+        { "user_condition": { "role": "admin" } },
+        { "data.owner_id": "{{user.id}}" }
+      ]
+    }
+  }
 }

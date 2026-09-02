@@ -18,12 +18,15 @@ export default function ChatHistoryPanel() {
 
   const generateSummary = async (session) => {
     setSummarizing(p => ({ ...p, [session.id]: true }));
-    const msgText = (session.messages || []).map(m => `${m.role === 'user' ? 'לקוח' : 'בוט'}: ${m.content}`).join('\n');
-    const result = await api.integrations.Core.InvokeLLM({
-      prompt: `סכם בעברית בקצרה (3-5 שורות) את השיחה הבאה עם לקוח בצ'אט של מערכת הזמנות צימרים. ציין: מה הלקוח חיפש, אילו צימרים הוצגו, ואם נוצרה הזמנה.\n\nשיחה:\n${msgText || 'אין הודעות'}`,
-    });
-    await api.entities.ChatSession.update(session.id, { summary: result });
-    setSessions(prev => prev.map(s => s.id === session.id ? { ...s, summary: result } : s));
+    try {
+      const response = await api.assistant.chat({
+        profile: 'admin_session_summary',
+        message: 'סכם את השיחה',
+        clientState: { sessionId: session.id },
+      });
+      const summary = response?.message?.content || response?.executedActions?.[0]?.summary || '';
+      setSessions(prev => prev.map(s => s.id === session.id ? { ...s, summary } : s));
+    } catch (e) { /* ignore */ }
     setSummarizing(p => ({ ...p, [session.id]: false }));
   };
 

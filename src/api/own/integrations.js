@@ -1,23 +1,19 @@
 /**
- * Own-backend integrations.Core — M10 InvokeLLM + M11 UploadFile.
+ * Own-backend integrations.Core — M11 UploadFile (InvokeLLM deprecated → api.assistant.chat).
  */
-import { getApiBase, getStoredToken, ownFetch } from './http.js';
+import { getApiBase, getStoredToken } from './http.js';
 
 export const ownIntegrationsCore = {
   /**
-   * Same return shape as Base44: string | object (not { data }).
-   * @param {{ prompt: string, response_json_schema?: object, add_context_from_internet?: boolean, model?: string }} payload
+   * @deprecated Use api.assistant.chat with a profile instead.
    */
-  async InvokeLLM(payload) {
-    const data = await ownFetch('/api/ai/invoke-llm', {
-      method: 'POST',
-      body: payload || {},
-      auth: false,
-    });
-    if (data && Object.prototype.hasOwnProperty.call(data, 'result')) {
-      return data.result;
-    }
-    return data;
+  async InvokeLLM() {
+    const err = new Error(
+      'InvokeLLM is deprecated. Use api.assistant.chat with a profile instead.',
+    );
+    err.status = 410;
+    err.code = 'DEPRECATED';
+    throw err;
   },
 
   /**

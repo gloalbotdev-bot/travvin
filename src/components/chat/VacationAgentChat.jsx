@@ -72,25 +72,6 @@ export default function VacationAgentChat({ user, onSwitchToSearch }) {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, isTyping]);
 
-  const buildContext = () => {
-    let c = `פרטי הלקוח: ${user?.full_name || ''} (${user?.email || ''}).`;
-    if (profile) {
-      if (profile.vacation_preferences) c += `\nהעדפות נופש: ${profile.vacation_preferences}`;
-      if (profile.preferred_regions) c += `\nאזורים מועדפים: ${profile.preferred_regions}`;
-      if (profile.num_guests_usual) c += `\nמספר אורחים רגיל: ${profile.num_guests_usual}`;
-    }
-    if (bookings.length > 0) {
-      c += `\n\nהזמנות קרובות:`;
-      bookings.slice(0, 3).forEach(b => {
-        const parts = [b.num_adults ? `${b.num_adults} מבוגרים` : null, b.num_children ? `${b.num_children} ילדים` : null].filter(Boolean).join(' + ');
-        c += `\n- ${b.zimmer_name} | כניסה ${b.check_in} עד ${b.check_out} | ${parts || 'הרכב לא צוין'} | סטטוס: ${b.status}`;
-      });
-    } else {
-      c += `\nאין הזמנות קרובות כרגע.`;
-    }
-    return c;
-  };
-
   const send = async (overrideText) => {
     const text = (overrideText || input).trim();
     if (!text || isTyping) return;
@@ -99,22 +80,17 @@ export default function VacationAgentChat({ user, onSwitchToSearch }) {
     setMessages(prev => [...prev, { id: Date.now() + Math.random(), role: 'user', content: text, time: fmtTime() }]);
     setIsTyping(true);
     try {
-      const ctx = buildContext();
-      const prompt = `אתה סוכן נופש אישי. ענה בעברית חמה ומועילה.
-${ctx}
+      const recentTurns = messages
+        .filter((m) => m.role === 'user' || m.role === 'bot')
+        .slice(-11)
+        .map((m) => ({ role: m.role, content: m.content }));
 
-בקשת הלקוח: "${text}"
-
-המלץ בצורה מפורטת: מסעדות, אטרקציות, נקודות עניין ופעילויות באזור החופשה ובדרך אליו.
-- התאם את ההמלצות להרכב הנוסעים (מבוגרים/ילדים) שמופיע למעלה. אם יש ילדים, תעדף מקומות מתאימים למשפחות.
-- השתמש במידע עדכני מהרשת (כתובות, שעות פתיחה, דירוגים).
-- פרק את התשובה לפסקאות עם כותרות ורשימות להבהרה.`;
-      const res = await api.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        model: 'gemini_3_flash',
+      const response = await api.assistant.chat({
+        profile: 'vacation_agent',
+        message: text,
+        clientState: { recentTurns },
       });
-      const answer = typeof res === 'string' ? res : (res?.message || 'מצטער, לא הצלחתי להפיק תשובה.');
+      const answer = response?.message?.content || 'מצטער, לא הצלחתי להפיק תשובה.';
       setMessages(prev => [...prev, { id: Date.now() + Math.random(), role: 'bot', content: answer, time: fmtTime() }]);
       setQuickOpts(buildQuick(bookings));
     } catch (e) {

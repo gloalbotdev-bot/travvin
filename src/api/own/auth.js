@@ -102,6 +102,16 @@ export const ownAuth = {
     });
   },
 
+  async exchangeAuthCode(code) {
+    const data = await ownFetch('/api/auth/exchange-code', {
+      method: 'POST',
+      body: { code },
+      auth: false,
+    });
+    if (data?.access_token) setStoredToken(data.access_token);
+    return data;
+  },
+
   async updateMe(data) {
     return ownFetch('/api/auth/me', { method: 'PATCH', body: data });
   },

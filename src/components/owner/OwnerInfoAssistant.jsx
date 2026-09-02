@@ -2,14 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { api } from '@/api/client';
 import { Send, ExternalLink, Sparkles, Check, X, Eye, Pencil, AlertTriangle } from 'lucide-react';
 import { bookingErrorMessage } from '@/lib/bookingErrors';
-import { sanitizeUntrustedText } from '@/lib/sanitizePromptData';
+import { buildOwnerRecentTurns, applyOwnerAssistantResponse } from '@/lib/assistantOwner';
 
 const formatTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-
-const MODE_PREFIX = {
-  info: '[מצב: מידע]',
-  edit: '[מצב: עריכה]',
-};
 
 const TypingIndicator = () => (
   <div className="flex items-end gap-2 mb-3">
@@ -51,40 +46,7 @@ const ZIMMER_FIELDS = [
   'num_rooms', 'max_guests', 'description',
   'partial_pricing_enabled', 'min_guests', 'price_per_adult', 'price_per_child',
   'seasonal_pricing', 'images', 'info_summary'
-]; // kept for LLM prompt docs; server whitelists the same set (M15 #8ב)
-
-/** Gemini-compatible schema for update_zimmer.fields (matches server ZIMMER_MUTABLE_FIELDS). */
-const ZIMMER_FIELDS_SCHEMA = {
-  type: 'object',
-  properties: {
-    name: { type: 'string' },
-    location: { type: 'string' },
-    price_per_night: { type: 'number' },
-    weekday_price: { type: 'number' },
-    weekend_price: { type: 'number' },
-    num_rooms: { type: 'number' },
-    max_guests: { type: 'number' },
-    description: { type: 'string' },
-    partial_pricing_enabled: { type: 'boolean' },
-    min_guests: { type: 'number' },
-    price_per_adult: { type: 'number' },
-    price_per_child: { type: 'number' },
-    seasonal_pricing: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          start_date: { type: 'string' },
-          end_date: { type: 'string' },
-          price_per_night: { type: 'number' },
-        },
-      },
-    },
-    images: { type: 'array', items: { type: 'string' } },
-    info_summary: { type: 'string' },
-  },
-  required: [],
-};
+]; // server whitelists the same set (M15 #8ב)
 
 export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated }) {
   const [mode, setMode] = useState('info'); // 'info' | 'edit' — matches Base44 OwnerAgentChat
@@ -211,127 +173,6 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated }) {
     }
   };
 
-  const runPrompt = async (text, historyMessages, activeMode) => {
-    const today = new Date().toISOString().split('T')[0];
-    const { zimmers, bookings, questions, reviews } = context;
-
-    const contextStr = `
-היום: ${today}
-
-צימרים (${zimmers.length}):
-${zimmers.map(z => `id:${z.id} | ${z.name} | מיקום: ${z.location || '—'} | מחיר/לילה: ${z.price_per_night ?? '—'} | אמצ"ש: ${z.weekday_price ?? '—'} | סופ"ש: ${z.weekend_price ?? '—'} | חדרים: ${z.num_rooms ?? '—'} | אורחים מקס: ${z.max_guests ?? '—'} | סטטוס: ${z.approval_status} | תיאור: ${z.description || 'אין'}`).join('\n')}
-
-הזמנות (${bookings.length}):
-${bookings.map(b => `• ${b.guest_name} | צימר: ${b.zimmer_name} | כניסה: ${b.check_in} | יציאה: ${b.check_out} | אורחים: ${b.num_guests || 1} | סטטוס: ${b.status} | טלפון: ${b.guest_phone}`).join('\n')}
-
-שאלות לקוחות פתוחות (${questions.filter(q => q.status === 'ממתינה').length}):
-${questions.map(q => `• "${q.question}" על ${q.zimmer_name} | סטטוס: ${q.status}`).join('\n')}
-
-ביקורות (${reviews.length}):
-${reviews.map(r => `• ${r.guest_name || 'אנונימי'} | ${r.zimmer_name} | דירוג: ${r.rating}/5 | "${r.text || ''}"`).join('\n')}
-`;
-
-    const historyText = historyMessages.slice(-8)
-      .filter(m => m.type === 'text')
-      .map(m => `${m.role === 'user' ? 'בעל מתחם' : 'עוזר'}: ${m.content}`)
-      .join('\n');
-
-    const modeBlock = activeMode === 'edit'
-      ? `מצב נוכחי: עריכה. מותר להחזיר operation לביצוע שינויים (יצירה/עדכון). פעולות יבוצעו מיד אחרי התשובה.`
-      : `מצב נוכחי: מידע (קריאה בלבד). אסור להחזיר operation. אם המשתמש מבקש שינוי — הסבר שעליו לעבור למצב עריכה עם המתג בכותרת. החזר תמיד operation=null.`;
-
-    const prompt = `אתה העוזר האישי המרכזי של בעל מתחם צימרים.
-
-${modeBlock}
-
-יכולותיך:
-1. לספק מידע מהנתונים (הזמנות, צימרים, ביקורות, שאלות, הכנסות, תאריכים).
-2. במצב עריכה בלבד: ליצור צימר חדש — כשיש לפחות שם, החזר operation מסוג create_zimmer.
-3. במצב עריכה בלבד: לעדכן צימר קיים — שינוי מחיר (כללי, אמצ"ש א'-ה', סופ"ש ה'-ש'), תיאור, מיקום, חדרים, אורחים. החזר operation מסוג update_zimmer עם zimmer_id ו-fields.
-4. במצב עריכה בלבד: ליצור הזמנה חדשה — כשיש שם לקוח, טלפון, שם צימר, תאריכי כניסה/יציאה. החזר operation מסוג create_booking.
-5. להפנות לתצוגות (יומן, רשימת הזמנות, ביקורות...) דרך actions, כשזה עניין של צפייה ולא פעולה ישירה.
-
-נתונים:
-${contextStr}
-
-היסטוריה:
-${historyText}
-
-בקשת בעל המתחם: "${MODE_PREFIX[activeMode]} ${sanitizeUntrustedText(text)}"
-
-ענה JSON בלבד בדיוק במבנה הזה:
-{
-  "message": "תשובה בעברית תמציתית.${activeMode === 'edit' ? " כשאתה מבצע פעולה — נסח בקצרה מה תבוצע." : ' במצב מידע אל תבטיח ביצוע שינויים.'}",
-  "operation": ${activeMode === 'edit' ? '{ "type": "create_zimmer", "name": "...", "location": "...", "price_per_night": 0, "num_rooms": 0, "max_guests": 0, "description": "..." }' : 'null'},
-  "actions": []
-}
-
-חוקי חובה:
-- במצב מידע: operation חייב להיות null תמיד.
-- במצב עריכה: operation הוא הביצוע בפועל. אם החלטת על פעולה — חובה למלא את operation עם type וכל השדות הדרושים. אסור להחזיר {} כשאתה מתכוון לפעול.
-- actions הוא רק לקישורי ניווט/תצוגה (calendar, bookings, new_zimmer, edit_zimmer, questions, reviews). לעולם אל תשים שם פעולת ביצוע — פעולות ביצוע הולכות ל-operation בלבד.
-- שדות לא ידועים ב-operation — פשוט אל תכלול אותם, אל תכתוב null.
-
-דוגמה מלאה ל-create_zimmer:
-{"type":"create_zimmer","name":"נוף הגליל","location":"צפת","price_per_night":700,"num_rooms":3,"max_guests":6,"description":"צימר מפנק בצפת"}
-
-דוגמה ל-update_zimmer (מחיר כללי):
-{"type":"update_zimmer","zimmer_id":"abc","fields":{"price_per_night":650}}
-דוגמה ל-update_zimmer (מחירי אמצ"ש/סופ"ש):
-{"type":"update_zimmer","zimmer_id":"abc","fields":{"weekday_price":600,"weekend_price":850}}
-
-דוגמה ל-create_booking:
-{"type":"create_booking","guest_name":"יעקב כהן","guest_phone":"050-1234567","zimmer_name":"נוף כנרת","check_in":"2026-08-01","check_out":"2026-08-03","num_guests":4}
-
-פורמט operation (רק אחד בכל פעם, או null):
-- יצירת צימר: {"type":"create_zimmer","name":"...","location":"...","price_per_night":number|null,"weekday_price":number|null,"weekend_price":number|null,"num_rooms":number|null,"max_guests":number|null,"description":"..."}
-- עדכון צימר: {"type":"update_zimmer","zimmer_id":"<id מתוך הנתונים>","fields":{"price_per_night":500,"weekday_price":600,"weekend_price":850,"description":"..."}}
-- יצירת הזמנה: {"type":"create_booking","guest_name":"...","guest_phone":"...","zimmer_name":"<שם צימר קיים מהנתונים>","check_in":"YYYY-MM-DD","check_out":"YYYY-MM-DD","num_guests":number|null,"notes":"..."}
-
-כללים:
-- אם חסר מידע לפעולה — שאל שאלה אחת ספציפית, והחזר operation=null.
-- עדכון צימר: חובה לכלול zimmer_id של צימר קיים מתוך הנתונים. ב-fields רק שדות שהמשתמש ביקש לשנות. שדות אפשריים: name, location, price_per_night, weekday_price (אמצ"ש א'-ה'), weekend_price (סופ"ש ה'-ש'), num_rooms, max_guests, description, partial_pricing_enabled (boolean), min_guests, price_per_adult, price_per_child, seasonal_pricing (מערך), images (מערך), info_summary.
-- יצירת/עדכון מחירים: אם הבעלים מבקש "מחיר אמצ"ש" — weekday_price בלבד; "סופ"ש" — weekend_price בלבד. אל תכלול price_per_night אלא אם ביקשו במפורש לשנות את מחיר הבסיס. אם נתן מחיר אחד בלי חלוקה — price_per_night בלבד.
-- יצירת הזמנה: חובה guest_name, guest_phone, zimmer_name (חייב להתאים לצימר קיים), check_in, check_out. num_guests אופציונלי.
-- אל תמציא נתונים, מחירים או תאריכים. אם לא ברור — שאל.
-- ענה תמיד בעברית.`;
-
-    return await api.integrations.Core.InvokeLLM({
-      prompt,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          message: { type: 'string' },
-          operation: {
-            type: 'object',
-            properties: {
-              type: { type: 'string', enum: ['create_zimmer', 'update_zimmer', 'create_booking'] },
-              name: { type: 'string' },
-              location: { type: 'string' },
-              description: { type: 'string' },
-              price_per_night: { type: 'number' },
-              weekday_price: { type: 'number' },
-              weekend_price: { type: 'number' },
-              num_rooms: { type: 'number' },
-              max_guests: { type: 'number' },
-              zimmer_id: { type: 'string' },
-              fields: ZIMMER_FIELDS_SCHEMA,
-              guest_name: { type: 'string' },
-              guest_phone: { type: 'string' },
-              zimmer_name: { type: 'string' },
-              check_in: { type: 'string' },
-              check_out: { type: 'string' },
-              num_guests: { type: 'number' },
-              notes: { type: 'string' }
-            },
-            required: ['type'],
-          },
-          actions: { type: 'array', items: { type: 'string' } }
-        }
-      }
-    });
-  };
-
   const handleSend = async (rawText) => {
     const text = (rawText ?? input).trim();
     if (!text || !context || sendingRef.current) return;
@@ -344,19 +185,33 @@ ${historyText}
     setPendingOp(null);
     try {
       const history = messagesRef.current;
-      const response = await runPrompt(text, history, activeMode);
+      const response = await api.assistant.chat({
+        profile: 'owner_assistant',
+        message: text,
+        clientState: {
+          mode: activeMode,
+          ownerId,
+          recentTurns: buildOwnerRecentTurns(history),
+        },
+      });
       setIsTyping(false);
 
-      const op = response.operation && response.operation.type ? response.operation : null;
-      if (op && activeMode === 'edit') {
-        // In edit mode show only the server result — LLM text can claim success without operation
-        await applyOperation(op);
-      } else {
-        addMsg('bot', 'text', response.message || '…', { actions: response.actions || [] });
-        if (op && activeMode === 'info') {
-          addMsg('bot', 'text', 'אתה במצב מידע. כדי לבצע את הפעולה — עבור למצב עריכה עם המתג בכותרת.');
-        }
-      }
+      await applyOwnerAssistantResponse({
+        response,
+        actions: {
+          onExecutedMessage: async (content, exec) => {
+            addMsg('bot', 'text', content);
+            if (exec?.kind && onMutated) onMutated(exec);
+            await reloadContext();
+          },
+          onBotText: (content, actionKeys) => {
+            addMsg('bot', 'text', content || '…', { actions: actionKeys || [] });
+          },
+          onEditModeRequired: () => {
+            addMsg('bot', 'text', 'אתה במצב מידע. כדי לבצע את הפעולה — עבור למצב עריכה עם המתג בכותרת.');
+          },
+        },
+      });
     } catch (e) {
       setIsTyping(false);
       addMsg('bot', 'text', `מצטער, אירעה שגיאה. ${e?.message || 'נסה שוב.'}`);

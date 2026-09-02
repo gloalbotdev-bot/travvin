@@ -30,19 +30,14 @@ export default function ZimmerDatabase({ ownerId }) {
 
   const generateSummary = async (zimmer) => {
     setSummarizing(prev => ({ ...prev, [zimmer.id]: true }));
-    const zones = (zimmer.data_zones || []).map(z => z.content).join('\n---\n');
-    const prompt = `
-סכם את כל המידע הידוע על הצימר הבא בצורה קצרה וברורה לבעל המתחם.
-כלול: מה ייחודי בנכס, מה שאלות האורחים הנפוצות, ומה כדאי לשפר.
-
-שם צימר: ${zimmer.name}
-מיקום: ${zimmer.location || 'לא צוין'}
-מחיר ללילה: ${zimmer.price_per_night ? '₪' + zimmer.price_per_night : 'לא צוין'}
-תיאור: ${zimmer.description || 'אין'}
-אזורי מידע שנאספו:\n${zones || 'אין'}
-    `;
-    const result = await api.integrations.Core.InvokeLLM({ prompt });
-    setSummaries(prev => ({ ...prev, [zimmer.id]: result }));
+    try {
+      const response = await api.assistant.chat({
+        profile: 'owner_zimmer_knowledge_summary',
+        message: 'סכם את מאגר הידע של הצימר',
+        clientState: { zimmerId: zimmer.id },
+      });
+      setSummaries(prev => ({ ...prev, [zimmer.id]: response?.message?.content || '' }));
+    } catch (e) { /* ignore */ }
     setSummarizing(prev => ({ ...prev, [zimmer.id]: false }));
   };
 

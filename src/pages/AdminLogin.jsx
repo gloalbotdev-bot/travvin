@@ -1,23 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
-  const [status, setStatus] = useState('idle');
+  const [status, setStatus] = useState('checking');
+  const { user, isAuthenticated, isLoadingAuth, authChecked } = useAuth();
 
   useEffect(() => {
-    api.auth.me().then(u => {
-      if (u.role === 'admin') navigate('/superadmin');
-      else { setStatus('denied'); api.auth.logout('/admin-login'); }
-    }).catch(() => setStatus('idle'));
-  }, []);
+    if (!authChecked || isLoadingAuth) {
+      setStatus('checking');
+      return;
+    }
 
-  if (status === 'checking') return (
-    <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#F8F7F4' }}>
-      <div className="w-7 h-7 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
-    </div>
-  );
+    if (isAuthenticated && user?.role === 'admin') {
+      navigate('/superadmin', { replace: true });
+      return;
+    }
+
+    if (isAuthenticated && user?.role !== 'admin') {
+      setStatus('denied');
+      api.auth.logout('/admin-login');
+      return;
+    }
+
+    setStatus('idle');
+  }, [authChecked, isLoadingAuth, isAuthenticated, user, navigate]);
+
+  if (status === 'checking') {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#F8F7F4' }}>
+        <div className="w-7 h-7 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ background: 'linear-gradient(160deg, #EAD5FF 0%, #FFD4C2 45%, #C5DEFF 100%)', fontFamily: 'Heebo, sans-serif' }} dir="rtl">

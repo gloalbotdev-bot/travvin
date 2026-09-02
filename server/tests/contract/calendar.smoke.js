@@ -108,6 +108,18 @@ async function main() {
   const ci = '2099-07-01';
   const co = '2099-07-03';
 
+  await prisma.record.upsert({
+    where: { id: zimmerId },
+    create: {
+      id: zimmerId,
+      entityType: 'Zimmer',
+      data: { name: 'cal-smoke-z', owner_id: ownerId },
+    },
+    update: {
+      data: { name: 'cal-smoke-z', owner_id: ownerId },
+    },
+  });
+
   const booking = await store.create(
     'BookingRequest',
     {
