@@ -16,9 +16,16 @@ import {
   assertReviewStatusTransition,
 } from './review-status.js';
 import {
+  assertBookingCustomerPatch,
+  assertBookingStatusTransition,
+} from './booking-status.js';
+import {
   assertNoApprovedOverlap,
   assertCheckOutAfterCheckIn,
+  captureOverlappingPromotions,
   computeBookingTotalPrice,
+  resolveOwnerFromZimmer,
+  stripImmutableOwnershipFields,
   withZimmerBookingLock,
 } from './booking-guards.js';
 import { createUserStore } from './user-store.js';
@@ -95,9 +102,9 @@ export function createEntityStore(prisma, hooks = {}) {
       });
       if (entityType === 'User') {
         assertCan('User', 'create', user, data);
-        const created = await users.create(data);
-        publishEntityChange('User', { type: 'create', id: created.id, data: created });
-        return created;
+        const err = new Error('Forbidden: User creation is not allowed via entity API');
+        err.status = 403;
+        throw err;
       }
       const validated = validatePayload(entityType, data, { partial: false });
       const withDefaults = applyDefaults(entityType, validated);
@@ -105,11 +112,23 @@ export function createEntityStore(prisma, hooks = {}) {
       if (
         (entityType === 'SupplierAutomation' ||
           entityType === 'SupplierMessage' ||
-          entityType === 'Contact') &&
+          entityType === 'Contact' ||
+          entityType === 'Promotion') &&
         user.role !== 'admin' &&
         user.id
       ) {
         payload.owner_id = user.id;
+      }
+      if (entityType === 'Promotion' && user.role !== 'admin' && user.id) {
+        const zimmer = await loadZimmerForOwnerCheck(prisma, payload.zimmer_id, user.id);
+        if (zimmer && zimmer.owner_id !== user.id) {
+          const err = new Error('Forbidden: zimmer does not belong to owner');
+          err.status = 403;
+          throw err;
+        }
+      }
+      if (entityType === 'BookingRequest' || entityType === 'UnansweredQuestion') {
+        await resolveOwnerFromZimmer(prisma, payload, user);
       }
       assertCan(entityType, 'create', user, payload);
       if (entityType === 'Review') {
@@ -127,7 +146,7 @@ export function createEntityStore(prisma, hooks = {}) {
             checkOut: payload.check_out,
           });
           payload.total_price = await computeBookingTotalPrice(tx, payload);
-          return tx.record.create({
+          const row = await tx.record.create({
             data: {
               entityType,
               data: payload,
@@ -135,6 +154,8 @@ export function createEntityStore(prisma, hooks = {}) {
               createdBy: opts.createdBy ?? user.email ?? null,
             },
           });
+          await captureOverlappingPromotions(tx, payload);
+          return row;
         });
         const pub = toPublic(row);
         publishEntityChange(entityType, { type: 'create', id: pub.id, data: pub });
@@ -175,6 +196,17 @@ export function createEntityStore(prisma, hooks = {}) {
         const current = await users.get(id);
         assertCan('User', 'update', user, current);
         const patch = { ...(data || {}) };
+        for (const key of [
+          'passwordHash',
+          'email',
+          'googleId',
+          'emailVerified',
+          'registered',
+          'fullName',
+          'businessName',
+        ]) {
+          delete patch[key];
+        }
         // M15 #11 — only admins may change roles; never on self
         // M15 #19 — never assign admin via User.update (use AdminPermission / seed)
         if (patch.role !== undefined) {
@@ -203,7 +235,12 @@ export function createEntityStore(prisma, hooks = {}) {
       assertCan(entityType, 'update', user, current);
 
       const validated = validatePayload(entityType, data, { partial: true });
-      const patch = stripAutoFields(validated);
+      let patch = stripAutoFields(validated);
+      patch = stripImmutableOwnershipFields(entityType, patch, user);
+      if (entityType === 'BookingRequest') {
+        assertBookingCustomerPatch(user, current, patch);
+        assertBookingStatusTransition(user, current, patch);
+      }
       if (entityType === 'Review') {
         assertReviewStatusTransition(user, current, patch);
         assertReviewSettlementOffer(current, patch);
@@ -303,6 +340,23 @@ export function createEntityStore(prisma, hooks = {}) {
 
 function assertEntity(entityType) {
   getEntityMeta(entityType);
+}
+
+async function loadZimmerForOwnerCheck(prisma, zimmerId, ownerId) {
+  if (!zimmerId || !ownerId) return null;
+  try {
+    const row = await prisma.record.findFirst({
+      where: { id: zimmerId, entityType: 'Zimmer' },
+    });
+    if (!row) return null;
+    const data =
+      typeof row.data === 'object' && row.data !== null && !Array.isArray(row.data)
+        ? row.data
+        : {};
+    return { owner_id: data.owner_id, name: data.name };
+  } catch {
+    return null;
+  }
 }
 
 async function findMany(prisma, entityType, query, sort, limit, actor) {
@@ -423,7 +477,19 @@ function redactRecord(entityType, record, actor) {
     const stay = { ...record.stay_settings };
     delete stay.entry_code;
     delete stay.key_location;
-    return { ...record, stay_settings: stay };
+    const next = { ...record, stay_settings: stay };
+    if (Array.isArray(next.data_zones) && next.data_zones.length) {
+      next.data_zones = [];
+    }
+    return next;
+  }
+
+  if (entityType === 'Zimmer') {
+    const isOwner = actor?.id && record.owner_id === actor.id;
+    const isAdmin = actor?.role === 'admin';
+    if (!isService && !isOwner && !isAdmin && Array.isArray(record.data_zones)) {
+      return { ...record, data_zones: [] };
+    }
   }
 
   return record;

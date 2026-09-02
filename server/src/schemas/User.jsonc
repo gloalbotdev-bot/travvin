@@ -11,5 +11,10 @@
       "title": "\u05ea\u05e4\u05e7\u05d9\u05d3"
     }
   },
-  "name": "User"
+  "name": "User",
+  "rls": {
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
 }

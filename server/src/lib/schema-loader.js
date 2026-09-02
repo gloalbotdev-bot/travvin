@@ -26,6 +26,7 @@ function parseJsonc(raw) {
 const ENTITY_NAMES = [
   'AdminPermission',
   'AppSetting',
+  'AssistantActionLog',
   'BookingRequest',
   'ChatSession',
   'Contact',

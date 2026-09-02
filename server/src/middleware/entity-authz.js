@@ -1,6 +1,6 @@
 /**
  * Express helpers for entity authz (milestone 4.5).
- * M5: JWT user from attachAuthUser takes precedence over headers.
+ * M5+: JWT user from attachAuthUser sets req.actor; no header-based identity (SEC-001).
  */
 import { normalizeActor } from '../lib/authz.js';
 
@@ -10,16 +10,6 @@ export function attachActor(req, _res, next) {
     next();
     return;
   }
-  req.actor = normalizeActor({
-    id: header(req, 'x-user-id'),
-    email: header(req, 'x-user-email'),
-    role: header(req, 'x-user-role'),
-  });
+  req.actor = normalizeActor(null);
   next();
-}
-
-function header(req, name) {
-  const v = req.headers[name];
-  if (Array.isArray(v)) return v[0] || null;
-  return v || null;
 }

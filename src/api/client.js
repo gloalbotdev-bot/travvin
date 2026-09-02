@@ -6,6 +6,7 @@ import { ownAuth } from './own/auth';
 import { ownUsers } from './own/users';
 import { ownFunctions } from './own/functions';
 import { ownIntegrationsCore } from './own/integrations';
+import { ownAssistant } from './own/assistant';
 import { setStoredToken } from './own/http';
 
 export const ownApiBase =
@@ -23,6 +24,7 @@ export const api = {
     },
   },
   functions: ownFunctions,
+  assistant: ownAssistant,
   setToken(newToken) {
     setStoredToken(newToken);
   },

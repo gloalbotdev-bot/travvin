@@ -112,3 +112,38 @@ export function datesOverlap(aIn, aOut, bIn, bOut) {
   if (!aIn || !aOut || !bIn || !bOut) return false;
   return aIn < bOut && aOut > bIn;
 }
+
+export function isPartialPricing(zimmer, numAdults = 0, numChildren = 0) {
+  const total = (Number(numAdults) || 0) + (Number(numChildren) || 0);
+  const max = Number(zimmer?.max_guests) || 0;
+  const min = Number(zimmer?.min_guests) || 0;
+  return !!(
+    total > 0 &&
+    zimmer?.partial_pricing_enabled &&
+    zimmer.price_per_adult != null &&
+    total < max &&
+    total >= min
+  );
+}
+
+export function rankZimmersByFit(zimmers, numAdults = 0, numChildren = 0) {
+  const total = (Number(numAdults) || 0) + (Number(numChildren) || 0);
+  return [...zimmers].sort((a, b) => {
+    const da = Math.max(0, (Number(a.max_guests) || 0) - total);
+    const db = Math.max(0, (Number(b.max_guests) || 0) - total);
+    if (da !== db) return da - db;
+    return (Number(a.price_per_night) || 0) - (Number(b.price_per_night) || 0);
+  });
+}
+
+export function zimmerPriceSummary(zimmer, checkIn, checkOut, numAdults = 0, numChildren = 0) {
+  const total = calcBookingTotalForZimmer(zimmer, checkIn, checkOut, numAdults, numChildren);
+  const nights = calcNights(checkIn, checkOut);
+  const avg = nights > 0 ? Math.round(total / nights) : 0;
+  return { total, avg, nights, isPartial: isPartialPricing(zimmer, numAdults, numChildren) };
+}
+
+export function formatILS(n) {
+  const num = Math.round(Number(n) || 0);
+  return `₪${num.toLocaleString('he-IL')}`;
+}

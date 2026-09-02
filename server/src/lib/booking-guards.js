@@ -137,6 +137,90 @@ export async function computeBookingTotalPrice(prisma, booking) {
   return total;
 }
 
+/**
+ * Mark overlapping active promos as captured after a booking (SEC-003).
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} prisma
+ */
+export async function captureOverlappingPromotions(prisma, booking) {
+  if (!booking?.zimmer_id || !booking.check_in || !booking.check_out) return;
+
+  const promos = await prisma.record.findMany({
+    where: {
+      entityType: 'Promotion',
+      AND: [
+        { data: { path: ['zimmer_id'], equals: booking.zimmer_id } },
+        { data: { path: ['status'], equals: 'פעיל' } },
+      ],
+    },
+    take: 50,
+  });
+
+  for (const row of promos) {
+    const p = rowToPublic(row);
+    if (!datesOverlap(booking.check_in, booking.check_out, p.check_in, p.check_out)) {
+      continue;
+    }
+    const data =
+      typeof row.data === 'object' && row.data !== null && !Array.isArray(row.data)
+        ? { ...row.data, status: 'נתפס' }
+        : { status: 'נתפס' };
+    await prisma.record.update({
+      where: { id: row.id },
+      data: { data },
+    });
+  }
+}
+
+/**
+ * Derive owner_id from Zimmer; reject client mismatch (SEC-007/008).
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} prisma
+ */
+export async function resolveOwnerFromZimmer(prisma, payload, user) {
+  const zimmerId = payload?.zimmer_id;
+  if (!zimmerId) {
+    const err = new Error('zimmer_id required');
+    err.status = 400;
+    throw err;
+  }
+  const zimmer = await loadZimmerData(prisma, zimmerId);
+  if (!zimmer?.owner_id) {
+    const err = new Error('Zimmer not found');
+    err.status = 404;
+    throw err;
+  }
+  if (
+    user.role !== 'admin' &&
+    payload.owner_id &&
+    payload.owner_id !== zimmer.owner_id
+  ) {
+    const err = new Error('Forbidden: owner_id does not match zimmer');
+    err.status = 403;
+    throw err;
+  }
+  payload.owner_id = zimmer.owner_id;
+  if (!payload.zimmer_name && zimmer.name) {
+    payload.zimmer_name = zimmer.name;
+  }
+  return payload;
+}
+
+/** Strip ownership fields non-admins must not patch. */
+export function stripImmutableOwnershipFields(entityType, patch, user) {
+  if (user.role === 'admin') return patch;
+  const next = { ...patch };
+  if (
+    entityType === 'BookingRequest' ||
+    entityType === 'UnansweredQuestion' ||
+    entityType === 'Zimmer'
+  ) {
+    delete next.owner_id;
+  }
+  if (entityType === 'Zimmer') {
+    delete next.approval_status;
+  }
+  return next;
+}
+
 /** M15 #13 — check_out must be strictly after check_in when both set. */
 export function assertCheckOutAfterCheckIn(payload) {
   const { check_in: checkIn, check_out: checkOut } = payload || {};

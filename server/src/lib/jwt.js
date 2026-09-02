@@ -1,7 +1,15 @@
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from './env.js';
 
-const SECRET = process.env.JWT_SECRET || 'dev-only-change-me';
 const EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+function secret() {
+  const s = getJwtSecret();
+  if (!s) {
+    throw new Error('JWT_SECRET is not configured');
+  }
+  return s;
+}
 
 /**
  * @param {{ id: string, email: string, role: string }} user
@@ -9,7 +17,7 @@ const EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 export function signToken(user) {
   return jwt.sign(
     { sub: user.id, email: user.email, role: user.role },
-    SECRET,
+    secret(),
     { expiresIn: EXPIRES_IN },
   );
 }
@@ -25,7 +33,7 @@ export function signCalendarOAuthState(payload) {
       ownerId: payload.ownerId,
       redirect: payload.redirect || '/owner',
     },
-    SECRET,
+    secret(),
     { expiresIn: '15m' },
   );
 }
@@ -35,7 +43,7 @@ export function signCalendarOAuthState(payload) {
  */
 export function verifyCalendarOAuthState(token) {
   try {
-    const payload = jwt.verify(token, SECRET);
+    const payload = jwt.verify(token, secret());
     if (payload.purpose !== 'calendar_oauth' || !payload.ownerId) return null;
     return {
       purpose: payload.purpose,
@@ -52,7 +60,7 @@ export function verifyCalendarOAuthState(token) {
  */
 export function verifyToken(token) {
   try {
-    const payload = jwt.verify(token, SECRET);
+    const payload = jwt.verify(token, secret());
     return {
       id: payload.sub,
       email: payload.email,

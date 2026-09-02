@@ -82,26 +82,17 @@ export function createFunctionsRouter(store, prisma) {
       const ack = handleSyncWebhookAck(body);
       if (ack) return res.json(ack);
 
-      const fromWorkflow = body._from_workflow === true;
-      let ownerId = body.owner_id;
-
-      if (!fromWorkflow) {
-        if (!req.user) {
-          return res.status(401).json({ error: 'Authentication required' });
-        }
-        ownerId = ownerId || req.user.id;
-        if (req.user.role !== 'admin' && ownerId !== req.user.id) {
-          return res.status(403).json({ error: 'Forbidden' });
-        }
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
       }
-
-      if (!ownerId) {
-        return res.status(400).json({ error: 'owner_id required' });
+      let ownerId = body.owner_id || req.user.id;
+      if (req.user.role !== 'admin' && ownerId !== req.user.id) {
+        return res.status(403).json({ error: 'Forbidden' });
       }
 
       const result = await syncGoogleCalendar(
         { store, connections },
-        { ownerId, fromWorkflow },
+        { ownerId, fromWorkflow: false },
       );
       res.json(result);
     } catch (err) {

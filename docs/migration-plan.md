@@ -10,13 +10,13 @@ todos:
     content: "מילסטון 0 [P0]: jsconfig/eslint, צ'קליסט 11 מסלולים, golden fixtures ל-14 ישויות + agents/webhook + Review"
     status: pending
   - id: m1-facade
-    content: "מילסטון 1 [P0 quick-win]: src/api/client.js facade שקוף כולל agents"
-    status: pending
+    content: "מילסטון 1 [P0 quick-win]: src/api/client.js facade שקוף כולל agents — DONE 2026-08-03"
+    status: completed
   - id: m2-consumers
-    content: "מילסטון 2 [P0]: העברת 62 מייבאים + DateSearchWidget (63 צרכנים) ל-facade"
-    status: pending
+    content: "מילסטון 2 [P0]: העברת 62 מייבאים + DateSearchWidget (63 צרכנים) ל-facade — DONE 2026-08-04"
+    status: completed
   - id: m3-server-skeleton
-    content: "מילסטון 3 [P0]: Express + Prisma + Postgres + docker-compose + /api/health"
+    content: "מילסטון 3 [P0]: Express + Prisma + Postgres + docker-compose + /api/health — CODE DONE 2026-08-04; await Docker for live verify"
     status: pending
   - id: m4-entities
     content: "מילסטון 4 [P0]: JSONB ×14 כולל SyncState + Review מורחב"
@@ -46,7 +46,7 @@ todos:
     content: "מילסטון 10 [P1]: 13 InvokeLLM — OpenAI SO + Gemini לאינטרנט"
     status: pending
   - id: m16-agent
-    content: "מילסטון 16 [P3 אופציונלי]: runtime סוכן — או זניחה מאושרת (מומלץ להכריע לפני M5)"
+    content: "מילסטון 16 [P3 זניחה מאושרת]: הסרת UI של zimmer_manager / OwnerAgentChat (~0.5 יום) — ראה docs/migration/decisions.md"
     status: pending
   - id: m11-upload
     content: "מילסטון 11 [P1]: UploadFile×3 + אחסון מופשט"

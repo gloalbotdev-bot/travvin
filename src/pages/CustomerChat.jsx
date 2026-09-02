@@ -7,9 +7,8 @@ import BookingForm from '@/components/chat/BookingForm';
 import QuickOptions from '@/components/chat/QuickOptions';
 import DateSearchWidget, { getBookedZimmerIds, datesOverlap } from '@/components/chat/DateSearchWidget';
 import { bookingErrorMessage } from '@/lib/bookingErrors';
-import { rankZimmersByFit, zimmerPriceSummary, formatILS } from '@/lib/bookingPrice';
-import { formatDataZonesForPrompt } from '@/lib/sanitizePromptData';
-import { REGION_KEYWORDS } from '@/lib/regions';
+import { formatILS } from '@/lib/bookingPrice';
+import { buildRecentTurns, applyCustomerUiEffects } from '@/lib/assistantCustomer';
 import VacationAgentChat from '@/components/chat/VacationAgentChat';
 import DirectChat, { getOrCreateDirectThread } from '@/components/chat/DirectChat';
 import QuestionForm from '@/components/chat/QuestionForm';
@@ -308,124 +307,53 @@ export default function CustomerChat() {
     else if (searchParams.freeText) searchLabel += `, ${searchParams.freeText}`;
     if (searchParams.max_budget) searchLabel += `, עד ${formatILS(searchParams.max_budget)} ללילה`;
     if (searchParams.amenities?.length) searchLabel += `, ${searchParams.amenities.length} מתקנים`;
-    addMessage('user', 'text', `🔍 מחפש: ${searchLabel}`);
+    const userMsg = `🔍 מחפש: ${searchLabel}`;
+    addMessage('user', 'text', userMsg);
     setIsTyping(true);
 
     try {
+      const response = await api.assistant.chat({
+        profile: 'customer_date_search',
+        message: userMsg,
+        conversationId: currentSessionId,
+        clientState: { searchParams, surface: 'customer' },
+      });
       const freshZimmers = await api.entities.Zimmer.filter({ approval_status: 'אושר' });
       setZimmers(freshZimmers);
 
-      // Get booked zimmer IDs for the date range
-      const bookedIds = await getAvailableZimmerIds(checkIn, checkOut);
-
-      // Filter: not booked + enough capacity
-      let availableZimmers = freshZimmers.filter(z =>
-        !bookedIds.includes(z.id) &&
-        (!z.max_guests || z.max_guests >= searchParams.numGuests)
-      );
-
-      // Budget filter (per-night avg, partial-aware)
-      if (searchParams.max_budget) {
-        availableZimmers = availableZimmers.filter(z => {
-          const price = zimmerPriceSummary(z, priceCheckIn, priceCheckOut, numAdults, numChildren);
-          return price.avg <= searchParams.max_budget;
-        });
+      if (response.conversationId) {
+        currentSessionId = response.conversationId;
       }
 
-      // Region filter (macro-region keywords + free text)
-      if (searchParams.regions?.length || searchParams.freeText) {
-        availableZimmers = availableZimmers.filter(z => {
-          const loc = (z.location || '').trim();
-          if (!loc) return false;
-          const regionMatch = (searchParams.regions || []).some(region =>
-            (REGION_KEYWORDS[region] || []).some(kw => loc.includes(kw))
-          );
-          const freeMatch = searchParams.freeText && (loc.includes(searchParams.freeText) || searchParams.freeText.includes(loc));
-          return regionMatch || freeMatch;
-        });
-      }
-
-      // Rank: closest fill to the group first, then bigger places
-      availableZimmers = rankZimmersByFit(availableZimmers, numAdults, numChildren);
-
-      setIsTyping(false);
-
-      if (availableZimmers.length === 0) {
-        addMessage('bot', 'text', `😔 לא מצאתי צימרים פנויים לתאריכים האלו עבור ${searchParams.numGuests} אורחים. נסה תאריכים אחרים!`);
-        setMessages(prev => [...prev, {
-          id: Date.now() + Math.random(),
-          role: 'bot',
-          type: 'date_search',
-          content: null,
-          time: formatTime()
-        }]);
-        return;
-      }
-
-      let contextText = searchParams.mode === 'flexible'
-        ? `מחפש ${searchParams.numNights} לילות בין ${searchParams.rangeStart} ל-${searchParams.rangeEnd}, ${numAdults} מבוגרים ו-${numChildren} ילדים`
-        : `מחפש מ-${checkIn} עד ${checkOut}, ${numAdults} מבוגרים ו-${numChildren} ילדים`;
-      let amensText = '';
-      if (searchParams.max_budget) contextText += `, תקציב עד ${formatILS(searchParams.max_budget)} ללילה`;
-      if (searchParams.regions?.length) contextText += `, אזור: ${searchParams.regions.join(' / ')}`;
-      if (searchParams.freeText) contextText += `, חיפוש חופשי: "${searchParams.freeText}"`;
-      if (searchParams.amenities?.length) {
-        amensText = `\nמתקנים מבוקשים: ${searchParams.amenities.join(', ')}`;
-        contextText += amensText;
-      }
-
-      const zimmerContext = availableZimmers.map(z => {
-        const zones = formatDataZonesForPrompt(z.data_zones);
-        const price = zimmerPriceSummary(z, priceCheckIn, priceCheckOut, numAdults, numChildren);
-        const priceLine = price.isPartial
-          ? `מחיר ללילה: ${formatILS(price.avg)} (תמחור חלקי לפי אדם, סה"כ ${formatILS(price.total)} ל-${price.nights} לילות)`
-          : `מחיר ללילה: ${formatILS(price.avg)} (מחיר מלא, סה"כ ${formatILS(price.total)} ל-${price.nights} לילות)`;
-        return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || 'לא צוין'} | ${priceLine} | חדרים: ${z.num_rooms || '?'} | אורחים מקס: ${z.max_guests || '?'} | תפוסה לקבוצה: ${Math.max(0, (z.max_guests||0) - searchParams.numGuests)} מקומות עודפים | ${zones}`;
-      }).join('\n');
-
-      const prompt = `אתה בוט צימרים. ענה בעברית בלבד.
-${contextText}, ${searchParams.numGuests} אורחים.
-הצימרים הפנויים הזמינים:
-${zimmerContext}
-
-דרג ובחר עד 5 הצימרים המתאימים ביותר. החזר JSON: {"action":"search","zimmer_ids":[...],"message":"..."}
-חשוב מאוד: הצימרים להלן מסודרים מראש לפי התאמת קיבולת לכמות האורחים — מקומות שמתאימים בדיוק לכמות (לזוג: מקומות זוגיים, max_guests קרוב למספר האורחים) מופיעים ראשונים. החזר קודם את המתאימים בדיוק לכמות, בסדר הנתון. רק אם פחות מ-5 כאלה — השלם מהסוף עם צימרים גדולים יותר, גם בסדר הנתון. אל תעדיף צימר גדול על פני מתאים-בדיוק גם אם יש לו מתקנים.
-${searchParams.amenities?.length ? 'אם יש מתקנים מבוקשים ועדיין נותרו מקומות פנויים באותה קיבולת מדויקת, העדף מביניהם את אלה שכוללים את המתקנים.' : ''}
-message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
-
-      const response = await api.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            action: { type: 'string' },
-            message: { type: 'string' },
-            zimmer_ids: { type: 'array', items: { type: 'string' } },
-          }
-        }
+      await applyCustomerUiEffects({
+        response,
+        zimmers: freshZimmers,
+        searchDates: searchParams,
+        actions: {
+          onBotText: (content) => addMessage('bot', 'text', content),
+          onShowZimmers: (found, ids) => {
+            if (found.length > 0) {
+              sessionZimmerIds.push(...ids);
+              addMessage('bot', 'zimmers', found);
+            }
+          },
+          onQuickOptions: (options) => setQuickOptions(options),
+          onDateSearchWidget: () => {
+            setMessages(prev => [...prev, {
+              id: Date.now() + Math.random(),
+              role: 'bot',
+              type: 'date_search',
+              content: null,
+              time: formatTime()
+            }]);
+          },
+        },
       });
 
-      if (response.zimmer_ids?.length > 0) {
-        if (response.message) addMessage('bot', 'text', response.message);
-        const found = response.zimmer_ids.map(id => availableZimmers.find(z => z.id === id)).filter(Boolean);
-        if (found.length > 0) {
-          sessionZimmerIds.push(...response.zimmer_ids);
-          addMessage('bot', 'zimmers', found);
-          setQuickOptions([
-            { label: '🔍 בחר צימר ושאל שאלות', text: 'אני רוצה לשאול שאלות על אחד מהצימרים' },
-            { label: '📅 הזמן אונליין', text: 'אני רוצה להזמין אחד מהצימרים' },
-            { label: '🔄 שנה תאריכים', text: 'אני רוצה לשנות תאריכים' },
-          ]);
-        }
-      } else {
-        addMessage('bot', 'text', response.message || `😔 לא מצאתי צימרים פנויים לתאריכים אלו. נסה תאריכים אחרים.`);
-        setMessages(prev => [...prev, { id: Date.now() + Math.random(), role: 'bot', type: 'date_search', content: null, time: formatTime() }]);
-      }
-
-      setMessages(prev => { saveSession(prev, sessionZimmerIds); return prev; });
     } catch (e) {
-      setIsTyping(false);
       addMessage('bot', 'text', 'מצטער, אירעה שגיאה. נסה שוב.');
+    } finally {
+      setIsTyping(false);
     }
   };
 
@@ -473,202 +401,79 @@ message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
     setIsTyping(true);
 
     try {
+      const recentTurns = buildRecentTurns(messages);
+      const response = await api.assistant.chat({
+        profile: 'customer_chat',
+        message: text,
+        conversationId: currentSessionId,
+        clientState: { searchDates, recentTurns, surface: 'customer' },
+      });
       const freshZimmers = await api.entities.Zimmer.filter({ approval_status: 'אושר' });
       setZimmers(freshZimmers);
 
-      // Filter by availability if we have dates
-      let availableZimmers = freshZimmers;
-      let datesInfo = '';
-      let numAdults = 0, numChildren = 0, priceCheckIn = null, priceCheckOut = null;
-      if (searchDates) {
-        const checkIn = searchDates.checkIn || searchDates.rangeStart;
-        const checkOut = searchDates.checkOut || searchDates.rangeEnd;
-        const bookedIds = await getBookedZimmerIds(api, checkIn, checkOut);
-        availableZimmers = freshZimmers.filter(z =>
-          !bookedIds.includes(z.id) &&
-          (!z.max_guests || z.max_guests >= (searchDates.numGuests || 1))
-        );
-        numAdults = searchDates.num_adults || 0;
-        numChildren = searchDates.num_children || 0;
-        if (searchDates.checkIn) {
-          priceCheckIn = searchDates.checkIn;
-          priceCheckOut = searchDates.checkOut;
-          datesInfo = `תאריכי חיפוש: ${searchDates.checkIn} עד ${searchDates.checkOut}, ${numAdults} מבוגרים ו-${numChildren} ילדים.`;
-        } else {
-          priceCheckIn = searchDates.rangeStart;
-          priceCheckOut = new Date(new Date(searchDates.rangeStart).getTime() + ((searchDates.numNights || 2) * 86400000)).toISOString().split('T')[0];
-          datesInfo = `חיפוש גמיש: ${searchDates.numNights} לילות בין ${searchDates.rangeStart} ל-${searchDates.rangeEnd}, ${numAdults} מבוגרים ו-${numChildren} ילדים.`;
-        }
-        availableZimmers = rankZimmersByFit(availableZimmers, numAdults, numChildren);
+      if (response.conversationId) {
+        currentSessionId = response.conversationId;
       }
 
-      const zimmerContext = availableZimmers.map(z => {
-        const zones = formatDataZonesForPrompt(z.data_zones);
-        let priceStr = `מחיר: ${z.price_per_night ? z.price_per_night + '₪/לילה' : 'לא צוין'}`;
-        if (priceCheckIn && priceCheckOut) {
-          const price = zimmerPriceSummary(z, priceCheckIn, priceCheckOut, numAdults, numChildren);
-          priceStr = price.isPartial
-            ? `מחיר ללילה: ${formatILS(price.avg)} (תמחור חלקי, סה"כ ${formatILS(price.total)})`
-            : `מחיר ללילה: ${formatILS(price.avg)} (מחיר מלא, סה"כ ${formatILS(price.total)})`;
-        }
-        return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || 'לא צוין'} | ${priceStr} | חדרים: ${z.num_rooms || '?'} | אורחים מקס: ${z.max_guests || '?'}\n${zones}`;
-      }).join('\n\n');
-
-      const historyText = messages.slice(-20).map(m =>
-        m.role === 'user' ? `לקוח: ${m.content}` : `בוט: ${typeof m.content === 'string' ? m.content : '[תוצאות]'}`
-      ).join('\n');
-
-      // Build customer context only on the first user turn, or when the user explicitly
-      // asks about their bookings/profile — re-injecting it every turn makes the bot
-      // "forget" the conversation and re-announce upcoming bookings unprompted.
-      let customerContext = '';
-      const priorUserTurns = messages.filter(m => m.role === 'user' && m.type === 'text').length;
-      const asksAboutProfile = /הזמנ|היסטור|פרופיל|הבאה|קרובה|הבא שלי|ההזמנות שלי/.test(text);
-      if (currentUser && (priorUserTurns === 0 || asksAboutProfile)) {
-        try {
-          // Fetch all bookings and match by email OR name (since guest submits name in form)
-          const [bookings, sessions] = await Promise.all([
-            api.entities.BookingRequest.filter({ created_by_id: currentUser.id }, '-created_date', 50),
-            api.entities.ChatSession.filter({ user_id: currentUser.id }, '-created_date', 3),
-          ]);
-          const now = new Date();
-          const upcoming = bookings
-            .filter(b => new Date(b.check_in) >= now)
-            .sort((a, b) => new Date(a.check_in) - new Date(b.check_in));
-          const past = bookings
-            .filter(b => new Date(b.check_out) < now)
-            .sort((a, b) => new Date(b.check_out) - new Date(a.check_out));
-          const lastSearch = sessions[0];
-
-          customerContext = `\nמידע על הלקוח המחובר (${currentUser.full_name}, ${currentUser.email}):`;
-          if (upcoming.length > 0) {
-            customerContext += `\n- הזמנות קרובות (${upcoming.length}):`;
-            upcoming.slice(0, 3).forEach(u => {
-              customerContext += `\n  • ${u.zimmer_name} מ-${u.check_in} עד ${u.check_out} (סטטוס: ${u.status})`;
-            });
-          } else {
-            customerContext += `\n- אין הזמנות קרובות`;
-          }
-          if (past.length > 0) {
-            const p = past[0];
-            customerContext += `\n- הזמנה אחרונה שהסתיימה: ${p.zimmer_name} מ-${p.check_in} עד ${p.check_out} (${p.status})`;
-          }
-          if (bookings.length > 0) {
-            customerContext += `\n- סה"כ ${bookings.length} הזמנות בהיסטוריה`;
-          }
-          if (lastSearch) {
-            customerContext += `\n- חיפוש אחרון: ${new Date(lastSearch.created_date).toLocaleDateString('he-IL')}`;
-          }
-        } catch (e) { /* silent */ }
-      }
-
-      const prompt = `אתה בוט צימרים. ענה בעברית בלבד. ${datesInfo}${customerContext}
-נתוני צימרים פנויים:
-${zimmerContext}
-
-היסטוריה: ${historyText}
-הודעה: "${text}"
-
-הנחיות חובה:
-- חובה מוחלטת: אתה בוט צימרים בלבד. אם בקשת הלקוח אינה קשורה לחיפוש צימר, חופשה, לינה, נופש, אזורי טיול או הזמנת הזמנה — לרבות אוכל, מתכונים, מוצרי מזון (כגון "חזה עוף"), מוצרים, חדשות, חידות או כל נושא זר — החזר action="answer" בלבד, עם zimmer_ids=[], zimmer_id=null, ו-message=הסבר קצר ונעים שאתה בוט צימרים ויכול לעזור רק בחיפוש והזמנת צימרים. אסור בשום אופן להחזיר zimmer_ids או להציע צימר כלשהו לבקשה שאינה רלוונטית למציאת צימר.
-- רצף שיחה (חובה): כל עוד לא התבצע חיפוש חדש או צ'אט חדש, המשך את השיחה הנוכחית לפי ההיסטוריה למעלה. אל תתחיל מחדש, אל תציג שוב את אותם צימרים שכבר הוצגו, ואל תתנדב מידע על הזמנות/היסטוריה של הלקוח אלא אם הוא שואל עליהן ישירות. זרום עם השיחה הקיימת באופן חלק.
-- סדר הצימרים הפנויים להלן מסודר מראש לפי התאמת קיבולת לכמות האורחים (כשיש תאריכים). העדף קודם צימרים שמתאימים בדיוק לכמות המבוקשת (לזוג — מקומות זוגיים); רק אם פחות מ-5 כאלה, השלם עם צימרים גדולים יותר מהסוף.
-- ברירת מחדל: כשהלקוח שואל שאלת המשך על צימר שכבר מוזכר בשיחה (למשל "יש מקלחת פרטית?", "יש ארוחת בוקר?", "יש 4 חדרים?", "כמה מיטות?") — ענה טקסטואלית ב-action="answer" בלבד. אל תחזיר action="search" ואל תחזיר zimmer_ids כל עוד הלקוח נשאר על אותו צימר. המשך את אותה שיחה.
-- החזר action="search" עם zimmer_ids רק כשהלקוח מבקש מפורשות: לראות תוצאות/אפשרויות חיפוש, לחפש מחדש, לעבור לצימר אחר, או לראות לראשונה את הדף של צימר חדש שטרם הוזכר. לעולם אל תחזיר שוב את אותו צימר שכבר מוזכר דרך action="search" אלא אם הלקוח מבקש מפורשות לראות את הדף שוב.
-- לעולם אל תתחיל מידע לא קשור, פרופיל אישי או חיפוש מחדש כשהלקוח שואל שאלת המשך — הישאר בנושא של הצימר הנוכחי.
-- בקשה לראות צימר ספציפי / "אני רוצה את צימר X" / "תראה לי את צימר X" / ראיית דף צימר / תמונות / פרטים מלאים / "תן לי לראות את הצימר" / "תראה לי את הדף" / "פרטים מלאים" / "פתח דף צימר" → action="search" עם zimmer_ids=[<id של הצימר>], message="...". לעולם אל תחזיר action="view". הצגת הצימר תיעשה תמיד ככרטיס תוצאה בתוך הצאט, והלקוח יוכל ללחוץ עליו כדי לפתוח את הדף.
-      - בקשה להזמין צימר שמוזכר בשיחה → action="booking", zimmer_id="...", message="...".
-${customerContext ? '- שאלה על הפרופיל/הזמנות/היסטוריה של הלקוח (ללא צימרים ספציפיים כלל) → action="answer" וענה לפי "מידע על הלקוח" למעלה.' : ''}
-- שאלה ספציפית על צימר שאין לך מידע עליה → action="answer", unanswered_question=true, zimmer_id="<id>", message="אין לי מידע על כך כרגע, אעביר את שאלתך לבעל הצימר".
-- רק תשובות שאינן כוללות שום צימר ספציפי (שאלות כלליות, פרופיל, היסטוריה) → action="answer", message="...".
-JSON בלבד.`;
-
-      const response = await api.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            action: { type: 'string' },
-            message: { type: 'string' },
-            zimmer_ids: { type: 'array', items: { type: 'string' } },
-            zimmer_id: { type: 'string' },
-            unanswered_question: { type: 'boolean' }
-          }
-        }
-      });
-
-      setIsTyping(false);
-
-      if (response.action === 'search' && response.zimmer_ids?.length > 0) {
-        if (response.message) addMessage('bot', 'text', response.message);
-        const found = response.zimmer_ids.map(id => availableZimmers.find(z => z.id === id)).filter(Boolean);
-        if (found.length > 0) {
-          sessionZimmerIds.push(...response.zimmer_ids);
-          addMessage('bot', 'zimmers', found);
-          setQuickOptions([
-            { label: '🔍 בחר צימר ושאל שאלות', text: 'אני רוצה לשאול שאלות על אחד מהצימרים' },
-            { label: '📅 הזמן אונליין', text: 'אני רוצה להזמין אחד מהצימרים' },
-            { label: '🔄 שנה תאריכים', text: 'אני רוצה לשנות תאריכים' },
-          ]);
-        }
-      } else if (response.action === 'view') {
-        // Show the requested zimmer as a search-result card in the chat (not auto-opened).
-        if (response.message) addMessage('bot', 'text', response.message);
-        let targetZimmer = availableZimmers.find(z => z.id === response.zimmer_id);
-        if (!targetZimmer && response.zimmer_id) {
-          try { targetZimmer = await api.entities.Zimmer.get(response.zimmer_id); } catch {}
-        }
-        if (targetZimmer) {
-          sessionZimmerIds.push(targetZimmer.id);
-          addMessage('bot', 'zimmers', [targetZimmer]);
-          setQuickOptions([
-            { label: '💬 שאל שאלה', text: `בנוגע לצימר "${targetZimmer.name}": ` },
-            { label: '📅 הזמן', text: `אני רוצה להזמין את ${targetZimmer.name}` },
-          ]);
-        }
-      } else if (response.action === 'booking') {
-        if (response.message) addMessage('bot', 'text', response.message);
-        const targetZimmer = availableZimmers.find(z => z.id === response.zimmer_id) || availableZimmers[0];
-        if (targetZimmer) {
-          addMessage('bot', 'zimmers', [targetZimmer]);
-          setPendingBooking(targetZimmer);
-          addMessage('bot', 'booking_form', targetZimmer, { searchDates });
-          setQuickOptions([]);
-        }
-      } else {
-        // Check if this was an unanswered question about a specific zimmer
-        if (response.unanswered_question && response.zimmer_id) {
-          const targetZimmer = availableZimmers.find(z => z.id === response.zimmer_id);
-          if (targetZimmer) {
+      let gotQuickOptions = false;
+      await applyCustomerUiEffects({
+        response,
+        zimmers: freshZimmers,
+        searchDates,
+        userMessage: text,
+        actions: {
+          onBotText: (content) => addMessage('bot', 'text', content),
+          onShowZimmers: (found, ids) => {
+            if (found.length > 0) {
+              sessionZimmerIds.push(...ids);
+              addMessage('bot', 'zimmers', found);
+            }
+          },
+          onShowZimmer: (z) => {
+            sessionZimmerIds.push(z.id);
+            addMessage('bot', 'zimmers', [z]);
+            setQuickOptions([
+              { label: '💬 שאל שאלה', text: `בנוגע לצימר "${z.name}": ` },
+              { label: '📅 הזמן', text: `אני רוצה להזמין את ${z.name}` },
+            ]);
+            gotQuickOptions = true;
+          },
+          onQuickOptions: (options) => {
+            gotQuickOptions = true;
+            setQuickOptions(options);
+          },
+          onBookingForm: (z, dates) => {
+            addMessage('bot', 'zimmers', [z]);
+            setPendingBooking(z);
+            addMessage('bot', 'booking_form', z, { searchDates: dates || searchDates });
+            setQuickOptions([]);
+            gotQuickOptions = true;
+          },
+          onUnansweredQuestion: async (z) => {
             const searchSummary = searchDates
               ? (searchDates.checkIn
                   ? `${searchDates.checkIn} עד ${searchDates.checkOut}, ${searchDates.numGuests} אורחים`
                   : `${searchDates.numNights} לילות בין ${searchDates.rangeStart} ל-${searchDates.rangeEnd}, ${searchDates.numGuests} אורחים`)
               : null;
-            addMessage('bot', 'text', response.message || 'אין לי מידע על כך כרגע. מלא את הטופס ואעביר את שאלתך לבעל הצימר 🙏');
-            addMessage('bot', 'question_form', targetZimmer, { question: text, searchSummary });
-          } else {
-            addMessage('bot', 'text', response.message || 'מצטער, לא הצלחתי לעבד את הבקשה.');
-          }
-        } else if (response.zimmer_ids?.length > 0) {
-          // Defensive: model attached zimmer_ids even under a non-search action — render the cards.
-          const found = response.zimmer_ids.map(id => availableZimmers.find(z => z.id === id)).filter(Boolean);
-          if (found.length > 0) addMessage('bot', 'zimmers', found);
-          addMessage('bot', 'text', response.message || 'מצטער, לא הצלחתי לעבד את הבקשה.');
-        } else {
-          addMessage('bot', 'text', response.message || 'מצטער, לא הצלחתי לעבד את הבקשה.');
-        }
+            addMessage('bot', 'question_form', z, { question: text, searchSummary });
+          },
+        },
+      });
+
+      if (!gotQuickOptions) {
         setQuickOptions([
           { label: '💬 שאלה נוספת', text: 'יש לי שאלה נוספת' },
           { label: '🔄 שנה תאריכים', text: 'אני רוצה לשנות תאריכים' },
         ]);
       }
-      setMessages(prev => { saveSession(prev, sessionZimmerIds); return prev; });
+
     } catch (e) {
-      setIsTyping(false);
       addMessage('bot', 'text', 'מצטער, אירעה שגיאה. נסה שוב.');
+    } finally {
+      setIsTyping(false);
     }
   };
+
 
   const handleBookingSubmit = async (data, zimmer) => {
     // Final availability check before saving
@@ -688,15 +493,6 @@ JSON בלבד.`;
         ...data,
         status: 'ממתינה'
       });
-      // Mark matching active promotions as captured so they disappear from the deals page
-      try {
-        const promos = await api.entities.Promotion.filter({ zimmer_id: zimmer.id, status: 'פעיל' });
-        for (const p of promos) {
-          if (datesOverlap(data.check_in, data.check_out, p.check_in, p.check_out)) {
-            await api.entities.Promotion.update(p.id, { status: 'נתפס' });
-          }
-        }
-      } catch (e) { /* silent */ }
       setPendingBooking(null);
       const newMsg = { id: Date.now() + Math.random(), role: 'bot', type: 'text', content: `✅ בקשת ההזמנה שלך לצימר *${zimmer.name}* התקבלה! בעל הצימר יצור איתך קשר בקרוב. תודה, ${data.guest_name}! 🎉`, time: formatTime() };
       setMessages(prev => {

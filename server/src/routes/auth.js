@@ -26,6 +26,8 @@ import {
 } from '../lib/auth-role-intent.js';
 import { createUserStore } from '../lib/user-store.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getFrontendUrl } from '../lib/env.js';
+import { consumeAuthCode, issueAuthCode, pruneAuthCodes } from '../lib/auth-codes.js';
 
 /** @param {import('@prisma/client').PrismaClient} prisma */
 export function createAuthRouter(prisma) {
@@ -200,6 +202,24 @@ export function createAuthRouter(prisma) {
     }
   });
 
+  router.post('/exchange-code', async (req, res) => {
+    try {
+      const code = String(req.body?.code || '').trim();
+      if (!code) return res.status(400).json({ error: 'code required' });
+      pruneAuthCodes();
+      const entry = consumeAuthCode(code);
+      if (!entry) return res.status(400).json({ error: 'Invalid or expired code' });
+      const row = await users.findById(entry.userId);
+      if (!row || !row.registered) {
+        return res.status(401).json({ error: 'User not found' });
+      }
+      const access_token = signToken(users.toAuth(row));
+      res.json({ access_token, user: users.toAuth(row) });
+    } catch (err) {
+      sendErr(res, err);
+    }
+  });
+
   router.get('/google', (req, res) => {
     if (!isGoogleConfigured()) {
       return res.status(503).json({
@@ -280,8 +300,7 @@ export function createAuthRouter(prisma) {
         return res.redirect(`${front}/welcome?auth_error=user_not_registered`);
       }
 
-      const jwt = signToken(users.toAuth(row));
-      const target = resolveRedirect(after, jwt);
+      const target = resolveRedirect(after, row.id);
       res.redirect(target);
     } catch (err) {
       console.error('[google callback]', err);
@@ -293,16 +312,19 @@ export function createAuthRouter(prisma) {
 }
 
 function frontendUrl() {
-  return process.env.FRONTEND_URL || 'http://localhost:5173';
+  return getFrontendUrl() || process.env.FRONTEND_URL || 'http://localhost:5173';
 }
 
-function resolveRedirect(after, accessToken) {
+/** SEC-012 — redirect with one-time auth_code instead of JWT in URL. */
+function resolveRedirect(after, userId) {
   let url = after;
   if (!url.startsWith('http')) {
     url = `${frontendUrl()}${url.startsWith('/') ? url : `/${url}`}`;
   }
   const u = new URL(url);
-  u.searchParams.set('access_token', accessToken);
+  const code = issueAuthCode(userId);
+  u.searchParams.set('auth_code', code);
+  u.searchParams.delete('access_token');
   return u.toString();
 }
 

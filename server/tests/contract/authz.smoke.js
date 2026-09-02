@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 import { can, readScopeWhere } from '../../src/lib/authz.js';
 import { createEntityStore } from '../../src/lib/entity-store.js';
+import { hashPassword } from '../../src/lib/password.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
@@ -216,6 +217,47 @@ async function main() {
   assert(published.status === 'published', 'owner can publish pending_owner');
   await store.delete('Review', reviewRow.id, admin);
 
+  // SEC-002 — User entity admin-only RLS
+  assert(can('User', 'read', anon, null) === false, 'User deny anon read');
+  assert(can('User', 'read', owner, null) === false, 'User deny owner read');
+  assert(can('User', 'read', admin, null) === true, 'User admin read');
+
+  let userListDenied = false;
+  try {
+    await store.list('User', '-created_date', 10, anon);
+  } catch (e) {
+    userListDenied = e.status === 403;
+  }
+  assert(userListDenied, 'User anon list → 403');
+
+  let userCreateDenied = false;
+  try {
+    await store.create(
+      'User',
+      { email: `sec2-create-${Date.now()}@test.com`, role: 'user' },
+      { actor: admin },
+    );
+  } catch (e) {
+    userCreateDenied = e.status === 403;
+  }
+  assert(userCreateDenied, 'User entity create → 403');
+
+  const sec2Target = await prisma.user.create({
+    data: {
+      email: `sec2-hash-${Date.now()}@test.com`,
+      role: 'user',
+      registered: true,
+      passwordHash: await hashPassword('KeepMe123!'),
+    },
+  });
+  const hashBefore = (await prisma.user.findUnique({ where: { id: sec2Target.id } }))
+    ?.passwordHash;
+  await store.update('User', sec2Target.id, { passwordHash: 'evil-hash' }, admin);
+  const hashAfter = (await prisma.user.findUnique({ where: { id: sec2Target.id } }))
+    ?.passwordHash;
+  assert(hashBefore === hashAfter, 'User.update strips passwordHash from entity PATCH');
+  await prisma.user.delete({ where: { id: sec2Target.id } });
+
   // M15 #19 — cannot promote to admin via User.update
   let adminRoleDenied = false;
   try {
@@ -253,6 +295,78 @@ async function main() {
   }
   assert(adminRoleDenied, 'User.update role=admin → 403 (#19)');
 
+  // SEC-003 — Promotion RLS
+  assert(can('Promotion', 'read', anon, { owner_id: owner.id }) === true, 'Promotion anon read');
+  assert(can('Promotion', 'create', anon, { owner_id: owner.id }) === false, 'Promotion anon create deny');
+  assert(can('Promotion', 'create', owner, { owner_id: owner.id }) === true, 'Promotion owner create');
+  assert(can('Promotion', 'create', owner, { owner_id: 'other-owner' }) === false, 'Promotion owner create wrong owner_id');
+  assert(can('Promotion', 'delete', stranger, { owner_id: owner.id }) === false, 'Promotion stranger delete deny');
+
+  // SEC-004 — OwnerRequest admin-only
+  assert(can('OwnerRequest', 'read', anon, { user_email: 'x@t.com' }) === false, 'OwnerRequest anon read deny');
+  assert(can('OwnerRequest', 'create', owner, { user_email: 'x@t.com' }) === false, 'OwnerRequest owner create deny');
+  assert(can('OwnerRequest', 'create', admin, { user_email: 'x@t.com' }) === true, 'OwnerRequest admin create');
+  assert(readScopeWhere('OwnerRequest', anon) === false, 'OwnerRequest anon empty scope');
+
+  // SEC-007/008 — forged owner_id rejected at store
+  const zForged = await store.create(
+    'Zimmer',
+    { name: 'z-forged', owner_id: 'owner-1' },
+    { actor: SERVICE_ACTOR },
+  );
+  let forgedBookingDenied = false;
+  try {
+    await store.create(
+      'BookingRequest',
+      {
+        zimmer_id: zForged.id,
+        owner_id: 'other-owner',
+        guest_name: 'Spam',
+        guest_phone: '050',
+        check_in: '2026-11-01',
+        check_out: '2026-11-03',
+        status: 'ממתינה',
+      },
+      { actor: customer },
+    );
+  } catch (e) {
+    forgedBookingDenied = e.status === 403;
+  }
+  assert(forgedBookingDenied, 'SEC-007 forged owner_id on BookingRequest → 403');
+
+  let forgedQuestionDenied = false;
+  try {
+    await store.create(
+      'UnansweredQuestion',
+      {
+        zimmer_id: zForged.id,
+        zimmer_name: 'z-forged',
+        owner_id: 'other-owner',
+        question: 'spam?',
+      },
+      { actor: customer },
+    );
+  } catch (e) {
+    forgedQuestionDenied = e.status === 403;
+  }
+  assert(forgedQuestionDenied, 'SEC-008 forged owner_id on UnansweredQuestion → 403');
+
+  const legitBooking = await store.create(
+    'BookingRequest',
+    {
+      zimmer_id: zForged.id,
+      owner_id: 'owner-1',
+      guest_name: 'Ok',
+      guest_phone: '050',
+      check_in: '2026-12-01',
+      check_out: '2026-12-03',
+      status: 'ממתינה',
+    },
+    { actor: customer },
+  );
+  assert(legitBooking.owner_id === 'owner-1', 'SEC-007 server sets owner_id from zimmer');
+  await store.delete('BookingRequest', legitBooking.id, admin);
+  await store.delete('Zimmer', zForged.id, admin);
 
   // Scope
   assert(readScopeWhere('SystemMessage', anon) === false, 'SystemMessage anon → empty scope');
@@ -385,6 +499,42 @@ async function main() {
     zStrangerDenied = e.status === 403;
   }
   assert(zStrangerDenied, 'stranger Zimmer update → 403');
+
+  // SEC-010 — owner cannot self-approve zimmer via approval_status patch
+  const pendingZ = await store.create(
+    'Zimmer',
+    { name: 'pending-z', owner_id: owner.id, approval_status: 'ממתין לאישור' },
+    { actor: owner },
+  );
+  const zSelfApprove = await store.update(
+    'Zimmer',
+    pendingZ.id,
+    { approval_status: 'אושר' },
+    owner,
+  );
+  assert(zSelfApprove.approval_status === 'ממתין לאישור', 'SEC-010 owner approval_status patch stripped');
+
+  // SEC-017 — data_zones redacted for non-owner reads
+  const secretZ = await store.create(
+    'Zimmer',
+    {
+      name: 'secret-z',
+      owner_id: owner.id,
+      data_zones: [{ content: 'secret owner notes', source_type: 'טקסט חופשי' }],
+      info_summary: 'public summary',
+    },
+    { actor: owner },
+  );
+  const anonView = await store.get('Zimmer', secretZ.id, anon);
+  assert(
+    !anonView.data_zones?.length && anonView.info_summary === 'public summary',
+    'SEC-017 anon Zimmer read strips data_zones, keeps info_summary',
+  );
+  const ownerView = await store.get('Zimmer', secretZ.id, owner);
+  assert(ownerView.data_zones?.length === 1, 'SEC-017 owner sees data_zones');
+
+  await store.delete('Zimmer', pendingZ.id, owner);
+  await store.delete('Zimmer', secretZ.id, owner);
   await store.delete('Zimmer', z.id, owner);
 
   if (failed) {

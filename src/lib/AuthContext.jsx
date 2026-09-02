@@ -1,6 +1,8 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { api, ownApiBase } from '@/api/client';
 import { appParams } from '@/lib/app-params';
+import { getStoredToken } from '@/api/own/http.js';
+import { exchangeAuthCodeFromUrlOnce } from '@/lib/authCodeExchange.js';
 
 const AuthContext = createContext();
 
@@ -41,10 +43,13 @@ export const AuthProvider = ({ children }) => {
       setIsLoadingPublicSettings(true);
       setAuthError(null);
 
+      await exchangeAuthCodeFromUrlOnce();
+      const token = getStoredToken() || appParams.token;
+
       try {
-        const publicSettings = await fetchOwnPublicSettings(appParams.token);
+        const publicSettings = await fetchOwnPublicSettings(token);
         setAppPublicSettings(publicSettings);
-        if (appParams.token) {
+        if (token) {
           await checkUserAuth();
         } else {
           setIsLoadingAuth(false);

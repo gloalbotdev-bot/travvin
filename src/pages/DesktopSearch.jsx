@@ -103,10 +103,6 @@ export default function DesktopSearch() {
     }
     try {
       await api.entities.BookingRequest.create({ zimmer_id: zimmer.id, zimmer_name: zimmer.name, owner_id: zimmer.owner_id, ...data, status: 'ממתינה' });
-      try {
-        const promos = await api.entities.Promotion.filter({ zimmer_id: zimmer.id, status: 'פעיל' });
-        for (const p of promos) if (datesOverlap(data.check_in, data.check_out, p.check_in, p.check_out)) await api.entities.Promotion.update(p.id, { status: 'נתפס' });
-      } catch {}
       setBookingZimmer(null);
       setSelectedZimmer(null);
       setBookingMessage(`✅ בקשת ההזמנה ל-${zimmer.name} התקבלה! בעל הצימר ייצור איתך קשר בקרוב. 🎉`);

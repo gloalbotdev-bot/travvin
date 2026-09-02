@@ -3,6 +3,7 @@ import { api } from '@/api/client';
 import { Send, X, Check } from 'lucide-react';
 import { calcBookingTotalForZimmer, formatILS } from '@/lib/bookingPrice';
 import { bookingErrorMessage } from '@/lib/bookingErrors';
+import { buildCreatorRecentTurns, getAssistantParsed } from '@/lib/assistantCreator';
 
 const formatTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
@@ -52,120 +53,55 @@ export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId 
     addMsg('user', text);
     setIsTyping(true);
 
-    const zimmerNames = zimmers.map(z => z.name).join(', ');
-    const today = new Date().toISOString().split('T')[0];
+    const recentTurns = buildCreatorRecentTurns(messages, 30);
 
-    // The whole thread so far — for conversational continuity.
-    const history = messages
-      .filter(m => m.content)
-      .map(m => (m.role === 'user' ? 'בעל המתחם' : 'עוזר') + ': ' + m.content)
-      .join('\n');
-
-    const prevDataStr = JSON.stringify(collectedData);
-
-    const response = await api.integrations.Core.InvokeLLM({
-      prompt: `אתה עוזר לבעל צימר להוסיף הזמנה אחת למערכת.
-הצימרים הזמינים (חובה לבחור אחד מהם לפי השם): ${zimmerNames}
-תאריך היום: ${today}
-
-כללים חשובים:
-1. כל צ'אט מיועד להזמנה אחת בלבד.
-2. חובה לקרוא את ההודעה הנוכחית של הבעלים בעיון ולחלץ ממנה את כל הפרטים שנמסרו בה — גם אם נמסרו מספר פרטים בהודעה אחת (שם + טלפון + תאריכים + צימר...). אסור לקחת רק פרט אחד ולהתעלם מהשאר.
-3. שמור בזיכרון את הפרטים שכבר נאספו בסבבים קודמים (מסופקים לך למטה כ- accumulated). מזג (merge) אותם עם החדשים מההודעה הנוכחית.
-4. אל תבקש פרט שכבר יש לך (גם אם מ-accumulated וגם מההודעה הנוכחית). בקש רק את החסר.
-5. ב-booking החזר את התמונה המלאה והמעודכנת אחרי המיזוג (גם הפרטים שכבר היו + החדשים). אם נתון לא ידוע — רשום null/מחרוזת ריקה.
-
-שדות חובה: guest_name, guest_phone, check_in (YYYY-MM-DD), check_out (YYYY-MM-DD), zimmer_name (אחד מהרשימה למעלה).
-שדות רשות: num_guests, notes, status ("ממתינה" או "אושרה").
-- אם הבעלים מבקש הזמנה "בהמתנה"/"ממתינה"/"לא מאושרת" → status חייב להיות "ממתינה". אל תכתוב את זה ב-notes.
-- אם לא צוין אחרת → status "אושרה".
-- notes רק להערות אמיתיות (לא סטטוס).
-
-פרטים שכבר נאספו עד כה:
-${prevDataStr}
-
-שיחה עד כה:
-${history}
-
-ההודעה הנוכחית של הבעלים: "${text}"
-
-ממן את מה שחסר:
-- אם יש את כל שדות החובה (אחרי מיזוג כל מקורות המידע) → החזר action=create עם booking מלא, ו-message קצר.
-- אם חסר משהו → החזר action=ask, booking מלא עם מה שיש (כך נשמור את ההתקדמות), ו-message ששואל רק על החסר (שאלה אחת ממוקדת, לא רשימה שלמה). לעולם אל תבקש מחדש פרט שכבר נמסר.
-
-ענה JSON בלבד:
-{
-  "action": "create" | "ask",
-  "message": "...",
-  "booking": {
-    "guest_name": "...",
-    "guest_phone": "...",
-    "check_in": "YYYY-MM-DD",
-    "check_out": "YYYY-MM-DD",
-    "zimmer_name": "...",
-    "num_guests": number or null,
-    "notes": "..."
-  }
-}`,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          action: { type: 'string' },
-          message: { type: 'string' },
-          booking: {
-            type: 'object',
-            properties: {
-              guest_name: { type: 'string' },
-              guest_phone: { type: 'string' },
-              check_in: { type: 'string' },
-              check_out: { type: 'string' },
-              zimmer_name: { type: 'string' },
-              num_guests: { type: 'number' },
-              notes: { type: 'string' },
-              status: { type: 'string', enum: ['ממתינה', 'אושרה'] }
-            }
-          }
-        }
-      }
+    const response = await api.assistant.chat({
+      profile: 'owner_booking_creator',
+      message: text,
+      clientState: {
+        ownerId,
+        collectedData,
+        recentTurns,
+      },
     });
+    const parsed = getAssistantParsed(response);
 
     setIsTyping(false);
 
-    // Merge any booking fields the LLM returned into our accumulated state (handles partial data across turns).
-    const merged = { ...collectedData, ...(response.booking || {}) };
+    const merged = { ...collectedData, ...(parsed.booking || {}) };
     const cleanedMerged = Object.fromEntries(
       Object.entries(merged).filter(([_, v]) => v !== null && v !== undefined && v !== '')
     );
     setCollectedData(cleanedMerged);
 
-    if (response.action === 'create' && response.booking) {
+    if (parsed.action === 'create' && parsed.booking) {
       const matchedZimmer = zimmers.find(z =>
-        z.name.includes(response.booking.zimmer_name) ||
-        response.booking.zimmer_name?.includes(z.name)
+        z.name.includes(parsed.booking.zimmer_name) ||
+        parsed.booking.zimmer_name?.includes(z.name)
       ) || zimmers[0];
 
-      const status = inferBookingStatus(response.booking, text);
-      const notes = cleanBookingNotes(response.booking.notes);
+      const status = inferBookingStatus(parsed.booking, text);
+      const notes = cleanBookingNotes(parsed.booking.notes);
 
       const booking = {
-        ...response.booking,
+        ...parsed.booking,
         notes,
         zimmer_id: matchedZimmer?.id || '',
-        zimmer_name: matchedZimmer?.name || response.booking.zimmer_name,
+        zimmer_name: matchedZimmer?.name || parsed.booking.zimmer_name,
         owner_id: ownerId || matchedZimmer?.owner_id || '',
         status,
         total_price: calcBookingTotalForZimmer(
           matchedZimmer,
-          response.booking.check_in,
-          response.booking.check_out,
+          parsed.booking.check_in,
+          parsed.booking.check_out,
           0,
           0,
         ),
       };
       setPendingBooking(booking);
-      addMsg('bot', response.message || 'מצוין! הנה ההזמנה שאני מתכוון להוסיף:');
+      addMsg('bot', parsed.message || 'מצוין! הנה ההזמנה שאני מתכוון להוסיף:');
     } else {
-      addMsg('bot', response.message || 'ספר לי עוד פרטים.');
+      addMsg('bot', parsed.message || 'ספר לי עוד פרטים.');
     }
   };
 

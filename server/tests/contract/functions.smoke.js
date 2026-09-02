@@ -72,7 +72,7 @@ async function main() {
   const pub = await finalizeReviewAutoPublish(store, { review_id: review.id });
   assert(pub.ok && pub.action === 'published', 'finalize pending_publish → published');
 
-  const after = await store.get('Review', review.id, null);
+  const after = await store.get('Review', review.id, SERVICE_ACTOR);
   assert(after.status === 'published' && after.published_at, 'Review published_at set');
 
   const skip = await finalizeReviewAutoPublish(store, { review_id: review.id });

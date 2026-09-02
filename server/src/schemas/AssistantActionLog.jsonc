@@ -1,0 +1,66 @@
+{
+  "type": "object",
+  "properties": {
+    "owner_id": {
+      "type": "string",
+      "title": "מזהה בעלים"
+    },
+    "owner_email": {
+      "type": "string",
+      "format": "email",
+      "title": "אימייל בעלים"
+    },
+    "profile": {
+      "type": "string",
+      "title": "פרופיל assistant"
+    },
+    "action_type": {
+      "type": "string",
+      "title": "סוג פעולה"
+    },
+    "summary": {
+      "type": "string",
+      "title": "תקציר"
+    },
+    "entity_type": {
+      "type": "string",
+      "title": "ישות (אופציונלי)"
+    },
+    "entity_id": {
+      "type": "string",
+      "title": "מזהה ישות (אופציונלי)"
+    }
+  },
+  "required": [
+    "owner_id",
+    "profile",
+    "action_type",
+    "summary"
+  ],
+  "name": "AssistantActionLog",
+  "rls": {
+    "read": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "$and": [
+            { "data.owner_id": "{{user.id}}" },
+            { "user_condition": { "role": "owner" } }
+          ]
+        },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "update": {
+      "user_condition": { "role": "admin" }
+    },
+    "delete": {
+      "user_condition": { "role": "admin" }
+    }
+  }
+}

@@ -63,10 +63,35 @@ async function findRecentSystemMessage({ titleIncludes, targetUserId }) {
 async function main() {
   const cleanup = [];
 
+  const zimmerWorkflowId = '00000000-0000-4000-8000-0000000000f9';
+
+  await prisma.record.upsert({
+    where: { id: zimmerWorkflowId },
+    create: {
+      id: zimmerWorkflowId,
+      entityType: 'Zimmer',
+      data: { name: 'Smoke Cab', owner_id: 'owner-m9' },
+    },
+    update: {
+      data: { name: 'Smoke Cab', owner_id: 'owner-m9' },
+    },
+  });
+
+  const staleBookings = await store.filter(
+    'BookingRequest',
+    { zimmer_id: zimmerWorkflowId },
+    '-created_date',
+    50,
+    SERVICE_ACTOR,
+  );
+  for (const b of staleBookings) {
+    await store.delete('BookingRequest', b.id, SERVICE_ACTOR);
+  }
+
   const booking = await store.create(
     'BookingRequest',
     {
-      zimmer_id: 'z-m9',
+      zimmer_id: zimmerWorkflowId,
       zimmer_name: 'Smoke Cab',
       owner_id: 'owner-m9',
       guest_name: 'Smoke Guest',
@@ -153,7 +178,7 @@ async function main() {
     'processDue finalizeReviewAutoPublish → done',
   );
 
-  const after = await store.get('Review', review.id, null);
+  const after = await store.get('Review', review.id, SERVICE_ACTOR);
   assert(after.status === 'published' && after.published_at, 'Review finalized to published');
 
   for (const [entity, id] of cleanup.reverse()) {

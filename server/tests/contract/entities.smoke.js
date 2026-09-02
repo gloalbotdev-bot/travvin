@@ -32,6 +32,9 @@ async function main() {
   const names = listEntityNames();
   assert(names.length === 18, `18 entities loaded (got ${names.length})`);
   assert(names.includes('Review') && names.includes('SyncState'), 'Review + SyncState present');
+  for (const e of ['AppSetting', 'GuestMessage', 'SupplierAutomation', 'SupplierMessage']) {
+    assert(names.includes(e), `SEC-025 backend entity ${e} present`);
+  }
 
   const zimmerDefaults = applyDefaults('Zimmer', { name: 'Test' });
   assert(zimmerDefaults.approval_status === 'אושר', 'Zimmer default approval_status');

@@ -26,22 +26,16 @@ export default function InfoSummaryEditor({ zimmer, onSave, onClose }) {
     if (picked.length === 0) return;
     setGenerating(true);
     try {
-      const raw = picked.map((z, i) => {
-        const label = z.source_label || z.source_type || `מקור ${i + 1}`;
-        return `[${label}] ${z.content || ''}`;
-      }).join('\n');
-      const prompt = `אתה עוזר של בעל צימר. להלן מידע שנאסף על הצימר ממספר מקורות (שיחות, שאלות, טקסט חופשי). כתוב סיכום מידע אחד בעברית שיוצג ללקוחות בדף הצימר.
-
-כללים:
-- פסקה אחת או רשימה קצרה, ברורה ומזמינה.
-- הדגש פרטים שימושיים: מתקנים, מדיניות, שעות כניסה/יציאה, אבזור, אזורים מיוחדים.
-- אל תמציא מידע שלא מופיע למטה. אם חסר, פשוט דלג.
-- טקסט רציף, בלי כותרות ובלי מרכאות.
-
-המידע:
-${raw}`;
-      const res = await api.integrations.Core.InvokeLLM({ prompt });
-      setText(typeof res === 'string' ? res.trim() : (res?.text || res?.message || ''));
+      const zoneIndices = [...selected];
+      const response = await api.assistant.chat({
+        profile: 'generate_info_summary',
+        message: 'צור סיכום מידע ללקוחות',
+        clientState: {
+          zimmerId: zimmer.id,
+          zoneIndices: zoneIndices.length > 0 ? zoneIndices : zones.map((_, i) => i),
+        },
+      });
+      setText((response?.message?.content || '').trim());
     } catch (e) { /* ignore */ }
     setGenerating(false);
   };
