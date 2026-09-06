@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { Users, Home, ClipboardList, LogOut, UserPlus, MessageSquare, Search, X, Menu, UserCheck, ChevronRight, Trash2, Plus, PenLine, ShieldCheck, Megaphone, LayoutDashboard, Bot, Star } from 'lucide-react';
+import { Users, Home, ClipboardList, LogOut, UserPlus, MessageSquare, Search, X, Menu, UserCheck, ChevronRight, Trash2, Plus, PenLine, ShieldCheck, Megaphone, LayoutDashboard, Bot, Star, Video } from 'lucide-react';
 import ChatHistoryPanel from '@/components/superadmin/ChatHistoryPanel';
 import CustomersPanel from '@/components/superadmin/CustomersPanel';
 import AddOwnerPanel from '@/components/superadmin/AddOwnerPanel';
@@ -14,6 +14,7 @@ import BookingsList from '@/components/admin/BookingsList';
 import SuperAdminReviewsPanel from '@/components/superadmin/SuperAdminReviewsPanel';
 import SuperAdminDashboard from '@/components/superadmin/SuperAdminDashboard';
 import BookingCreatorChat from '@/components/owner/BookingCreatorChat';
+import SuperAdminVideos from '@/components/superadmin/SuperAdminVideos';
 
 export default function SuperAdminPanel() {
   const [tab, setTab] = useState('dashboard');
@@ -43,21 +44,16 @@ export default function SuperAdminPanel() {
   useEffect(() => {
     api.auth.me().then(async (u) => {
       setCurrentUser(u);
-      try {
-        // Check if user email is in AdminPermission whitelist
-        const admins = await api.entities.AdminPermission.filter({ email: u.email.toLowerCase() });
-        const match = admins.find(a => a.is_active !== false);
-        if (match) {
-          setAdminPermission(match);
-        } else if (u.role !== 'admin') {
-          setAccessDenied(true);
-        } else {
-          // Existing admins (by role) get full access
-          setAdminPermission({ allowed_pages: null }); // null = all pages
-        }
-      } catch {
-        if (u.role !== 'admin') setAccessDenied(true);
-        else setAdminPermission({ allowed_pages: null });
+      // Check if user email is in AdminPermission whitelist
+      const admins = await api.entities.AdminPermission.filter({ email: u.email.toLowerCase() });
+      const match = admins.find(a => a.is_active !== false);
+      if (match) {
+        setAdminPermission(match);
+      } else if (u.role !== 'admin') {
+        setAccessDenied(true);
+      } else {
+        // Existing admins (by role) get full access
+        setAdminPermission({ allowed_pages: null }); // null = all pages
       }
     });
   }, []);
@@ -134,6 +130,7 @@ export default function SuperAdminPanel() {
     { id: 'owners', label: 'בעלי מתחמים', icon: Users },
     { id: 'zimmers', label: 'כל הצימרים', icon: Home },
     { id: 'bookings', label: 'כל ההזמנות', icon: ClipboardList },
+    { id: 'videos', label: 'וידאו', icon: Video },
     { id: 'customers', label: 'לקוחות', icon: UserCheck },
     { id: 'add_owner', label: 'הוסף בעל מתחם', icon: UserPlus },
     { id: 'chat_history', label: 'היסטוריית התכתבויות', icon: MessageSquare },
@@ -150,6 +147,7 @@ export default function SuperAdminPanel() {
     if (item.id === 'messages') return true; // הודעות ועדכונים — זמין לכל מנהל
     if (item.id === 'reviews') return true; // ניהול ביקורות — זמין לכל מנהל
     if (item.id === 'ai_bookings') return true; // עוזר AI להזמנות — זמין לכל מנהל
+    if (item.id === 'videos') return true; // וידאו — זמין לכל מנהל
     return allowedPages.includes(item.id);
   });
 
@@ -350,6 +348,7 @@ export default function SuperAdminPanel() {
             {tab === 'chat_history' && <ChatHistoryPanel />}
             {tab === 'messages' && <MessagesPanel />}
             {tab === 'reviews' && <SuperAdminReviewsPanel />}
+            {tab === 'videos' && <SuperAdminVideos />}
             {tab === 'admins' && <AdminsPanel />}
 
             {tab === 'zimmers' && (

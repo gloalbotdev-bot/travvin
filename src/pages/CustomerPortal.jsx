@@ -1,24 +1,26 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '@/api/client';
-import { User, ClipboardList, MessageSquare, LogOut, ChevronRight, Bell, Search, Star, HelpCircle, MessageCircle, CheckCircle2 } from 'lucide-react';
+import { User, ClipboardList, MessageSquare, LogOut, ChevronRight, Bell, Search, Star, MessageCircle, CheckCircle2, Compass } from 'lucide-react';
 import DesktopSearchTab from '@/components/customer/DesktopSearchTab';
+import Discover from '@/pages/Discover';
 import CustomerProfileTab from '@/components/customer/CustomerProfileTab';
 import CustomerBookingsTab from '@/components/customer/CustomerBookingsTab';
 import CustomerHistoryTab from '@/components/customer/CustomerHistoryTab';
 import CustomerUpdatesTab from '@/components/customer/CustomerUpdatesTab';
 import CustomerReviewsTab from '@/components/customer/CustomerReviewsTab';
-import CustomerQuestionsTab from '@/components/customer/CustomerQuestionsTab';
 import CustomerMessagesTab from '@/components/customer/CustomerMessagesTab';
 import CustomerCheckoutTab from '@/components/customer/CustomerCheckoutTab';
 import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
+import CustomerBottomNav from '@/components/customer/CustomerBottomNav';
 
 const navItems = [
+  { id: 'discover', label: 'גלו', icon: Compass },
   { id: 'profile', label: 'פרופיל אישי', icon: User },
   { id: 'bookings', label: 'ההזמנות שלי', icon: ClipboardList },
   { id: 'checkout', label: "צ'ק-אאוט", icon: CheckCircle2 },
   { id: 'messages', label: 'הודעות', icon: MessageCircle },
   { id: 'reviews', label: 'הביקורות שלי', icon: Star },
-  { id: 'questions', label: 'השאלות שלי', icon: HelpCircle },
   { id: 'history', label: 'היסטוריית חיפושים', icon: MessageSquare },
   { id: 'updates', label: 'עדכונים', icon: Bell },
   { id: 'desktop-search', label: 'חיפוש Desktop', icon: Search },
@@ -27,13 +29,17 @@ const navItems = [
 export default function CustomerPortal() {
   const [tab, setTab] = useState('profile');
   const [currentUser, setCurrentUser] = useState(null);
+  const location = useLocation();
 
   useEffect(() => { api.auth.me().then(setCurrentUser); }, []);
 
+  // React to ?updates=1 changes from the bottom nav — re-runs on every search
+  // change so switching between "פורטל" and "התראות" (same path, different query)
+  // actually flips the tab instead of doing nothing.
   useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    if (sp.get('updates') === '1') setTab('updates');
-  }, []);
+    const sp = new URLSearchParams(location.search);
+    setTab(sp.get('updates') === '1' ? 'updates' : 'profile');
+  }, [location.search]);
 
   const { count: notifCount, markRead: markNotifRead } = useUnreadNotifications('customer', currentUser?.id);
   useEffect(() => { if (tab === 'updates') markNotifRead(); }, [tab, markNotifRead]);
@@ -44,7 +50,7 @@ export default function CustomerPortal() {
   const openNotificationAction = (actionType, entityId) => {
     if (!actionType) return;
     if (actionType === 'open_booking') setTab('bookings');
-    else if (actionType === 'open_answer') { setFocusQuestionId(entityId); setTab('questions'); setTimeout(() => setFocusQuestionId(null), 200); }
+    else if (actionType === 'open_answer') { setFocusQuestionId(entityId); setTab('updates'); setTimeout(() => setFocusQuestionId(null), 200); }
     else if (actionType === 'open_chat') { setFocusChatId(entityId); setTab('updates'); setTimeout(() => setFocusChatId(null), 200); }
     else if (actionType === 'open_review') { setFocusReviewId(entityId); setTab('reviews'); setTimeout(() => setFocusReviewId(null), 500); }
   };
@@ -52,6 +58,10 @@ export default function CustomerPortal() {
   const initials = currentUser?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2) || '??';
 
   const activeTab = navItems.find(n => n.id === tab);
+
+  if (tab === 'discover') {
+    return <Discover />;
+  }
 
   if (currentUser && tab === 'desktop-search') {
     return <DesktopSearchTab onExit={() => setTab('profile')} />;
@@ -139,7 +149,7 @@ export default function CustomerPortal() {
       </aside>
 
       {/* === Main content === */}
-      <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+      <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8">
         {/* Mobile: show user chip + back-to-chat link */}
         <div className="lg:hidden mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -165,9 +175,9 @@ export default function CustomerPortal() {
         {currentUser && tab === 'reviews' && <CustomerReviewsTab user={currentUser} focusReviewId={focusReviewId} />}
         {currentUser && tab === 'messages' && <CustomerMessagesTab user={currentUser} focusBookingId={focusChatId} />}
         {currentUser && tab === 'checkout' && <CustomerCheckoutTab user={currentUser} />}
-        {currentUser && tab === 'questions' && <CustomerQuestionsTab user={currentUser} />}
         {currentUser && tab === 'updates' && <CustomerUpdatesTab user={currentUser} onAction={openNotificationAction} focusQuestionId={focusQuestionId} focusChatId={focusChatId} />}
       </main>
+      <CustomerBottomNav />
     </div>
   );
 }

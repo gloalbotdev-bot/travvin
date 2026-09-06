@@ -30,7 +30,17 @@ export default function ReviewsSection({ zimmerId }) {
   }, [zimmerId]);
 
   if (loading) return null;
-  if (!reviews.length) return null;
+  if (!reviews.length) {
+    return (
+      <div dir="rtl" className="rounded-2xl p-5" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Star size={18} style={{ color: '#F0EEE8' }} />
+          <h3 className="font-black text-sm" style={{ color: '#1A1A1A' }}>ביקורות אורחים</h3>
+        </div>
+        <p className="text-xs" style={{ color: '#9CA3AF' }}>אין עדיין חוות דעת — היה הראשון לארח ולכתוב ביקורת לאחר החופשה.</p>
+      </div>
+    );
+  }
 
   const avg = (reviews.reduce((a, r) => a + (r.rating || 0), 0) / reviews.length) || 0;
   const catAvg = (key) => {

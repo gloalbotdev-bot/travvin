@@ -13,6 +13,17 @@ export const ownAuth = {
     return ownFetch('/api/auth/me');
   },
 
+  /** Base44 SDK compatibility — used by Discover / VideoFeed */
+  async isAuthenticated() {
+    if (!getStoredToken()) return false;
+    try {
+      await ownFetch('/api/auth/me');
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   /**
    * @param {'google'} provider
    * @param {string} [redirectUrl]

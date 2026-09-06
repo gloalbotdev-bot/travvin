@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
 import { Plus, Phone, Mail, Trash2, Users, Wrench } from 'lucide-react';
+import OwnerGuests from './OwnerGuests';
 
-const EMPTY_FORM = { name: '', phone: '', email: '', type: 'לקוח', category: '', notes: '' };
+const EMPTY_FORM = { name: '', phone: '', email: '', type: 'ספק', category: '', notes: '' };
 
 export default function ContactsBook({ ownerId }) {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('הכל');
+  const [filter, setFilter] = useState('ספק');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -47,15 +48,20 @@ export default function ContactsBook({ ownerId }) {
     <div dir="rtl">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">אנשי קשר</h1>
-          <p className="text-gray-400 text-sm mt-1">{supplierCount} ספקים · {customerCount} לקוחות</p>
+          <h1 className="text-xl font-black" style={{ color: '#1A1A1A' }}>אנשי קשר</h1>
+          <p className="text-sm mt-1" style={{ color: '#9CA3AF' }}>
+            {filter === 'לקוח' ? 'אורחים שסיימו צ׳ק-אאוט אצלך — פרופיל, היסטוריה וסיכום AI' : `${supplierCount} ספקים · ${customerCount} אנשי קשר`}
+          </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-[#25D366] hover:bg-[#128C7E] text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
-        >
-          <Plus size={16} /> הוסף
-        </button>
+        {filter !== 'לקוח' && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-all hover:opacity-90"
+            style={{ background: '#F97316' }}
+          >
+            <Plus size={16} /> הוסף ספק
+          </button>
+        )}
       </div>
 
       {/* Filter tabs */}
@@ -64,18 +70,21 @@ export default function ContactsBook({ ownerId }) {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${filter === f ? 'bg-[#25D366]/20 text-[#25D366]' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+            className="px-4 py-2 rounded-xl text-sm font-medium transition-all"
+            style={filter === f
+              ? { background: '#F97316', color: '#fff' }
+              : { background: '#fff', color: '#6B7280', border: '1.5px solid #F0EEE8' }}
           >
             {f === 'ספק' ? <><Wrench size={12} className="inline ml-1" />ספקים ({supplierCount})</> :
-             f === 'לקוח' ? <><Users size={12} className="inline ml-1" />לקוחות ({customerCount})</> : 'הכל'}
+             f === 'לקוח' ? <><Users size={12} className="inline ml-1" />לקוחות</> : 'הכל'}
           </button>
         ))}
       </div>
 
-      {/* Add form */}
-      {showForm && (
-        <form onSubmit={handleSave} className="bg-gray-900 border border-[#25D366]/40 rounded-2xl p-5 mb-6">
-          <h3 className="text-white font-semibold mb-4">הוספת איש קשר</h3>
+      {/* Add form (suppliers) */}
+      {showForm && filter !== 'לקוח' && (
+        <form onSubmit={handleSave} className="rounded-2xl p-5 mb-6" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
+          <h3 className="font-bold mb-4" style={{ color: '#1A1A1A' }}>הוספת ספק</h3>
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div className="col-span-2">
               <input
@@ -83,98 +92,101 @@ export default function ContactsBook({ ownerId }) {
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="שם *"
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#25D366]"
+                className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+                style={{ background: '#F8F7F4', border: '1.5px solid #F0EEE8', color: '#1A1A1A' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#F97316'; e.currentTarget.style.background = '#fff'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = '#F0EEE8'; e.currentTarget.style.background = '#F8F7F4'; }}
               />
             </div>
             <input
               value={form.phone}
               onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
               placeholder="טלפון"
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#25D366]"
+              className="rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+              style={{ background: '#F8F7F4', border: '1.5px solid #F0EEE8', color: '#1A1A1A' }}
+              onFocus={e => { e.currentTarget.style.borderColor = '#F97316'; e.currentTarget.style.background = '#fff'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#F0EEE8'; e.currentTarget.style.background = '#F8F7F4'; }}
             />
             <input
               value={form.email}
               onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
               placeholder="אימייל"
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#25D366]"
+              className="rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+              style={{ background: '#F8F7F4', border: '1.5px solid #F0EEE8', color: '#1A1A1A' }}
+              onFocus={e => { e.currentTarget.style.borderColor = '#F97316'; e.currentTarget.style.background = '#fff'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#F0EEE8'; e.currentTarget.style.background = '#F8F7F4'; }}
             />
-            <select
-              value={form.type}
-              onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#25D366]"
-            >
-              <option value="לקוח">לקוח</option>
-              <option value="ספק">ספק</option>
-            </select>
-            {form.type === 'ספק' ? (
+            <div className="col-span-2">
               <select
                 value={form.category}
                 onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#25D366]"
+                className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+                style={{ background: '#F8F7F4', border: '1.5px solid #F0EEE8', color: '#1A1A1A' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#F97316'; e.currentTarget.style.background = '#fff'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = '#F0EEE8'; e.currentTarget.style.background = '#F8F7F4'; }}
               >
                 <option value="">קטגוריה...</option>
                 {['מנקה', 'מכבסה', 'מפעיל צימר', 'גנן', 'טכנאי'].map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-            ) : (
-              <input
-                value={form.category}
-                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                placeholder="קטגוריה (אופציונלי)"
-                className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#25D366]"
-              />
-            )}
+            </div>
             <div className="col-span-2">
               <textarea
                 value={form.notes}
                 onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 placeholder="הערות"
                 rows={2}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#25D366] resize-none"
+                className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-all resize-none"
+                style={{ background: '#F8F7F4', border: '1.5px solid #F0EEE8', color: '#1A1A1A' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#F97316'; e.currentTarget.style.background = '#fff'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = '#F0EEE8'; e.currentTarget.style.background = '#F8F7F4'; }}
               />
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="submit" disabled={saving} className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50">
+            <button type="submit" disabled={saving} className="flex-1 text-white py-2.5 rounded-xl text-sm font-medium transition-all hover:opacity-90 disabled:opacity-50" style={{ background: '#F97316' }}>
               {saving ? 'שומר...' : 'שמור'}
             </button>
-            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2.5 bg-gray-700 text-gray-300 rounded-xl text-sm hover:bg-gray-600 transition-colors">
+            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2.5 rounded-xl text-sm transition-colors" style={{ background: '#F8F7F4', color: '#6B7280', border: '1.5px solid #F0EEE8' }}>
               ביטול
             </button>
           </div>
         </form>
       )}
 
-      {loading ? (
+      {/* Customers sub-tab → guest profiles (from bookings) */}
+      {filter === 'לקוח' ? (
+        <OwnerGuests ownerId={ownerId} embedded />
+      ) : loading ? (
         <div className="flex justify-center py-10">
-          <div className="w-6 h-6 border-4 border-gray-700 border-t-[#25D366] rounded-full animate-spin"></div>
+          <div className="w-6 h-6 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 rounded-2xl" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
           <div className="text-4xl mb-3">👥</div>
-          <p>אין אנשי קשר עדיין</p>
+          <p className="text-sm" style={{ color: '#9CA3AF' }}>אין אנשי קשר עדיין</p>
         </div>
       ) : (
         <div className="space-y-3">
           {filtered.map(c => (
-            <div key={c.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex items-center justify-between">
+            <div key={c.id} className="rounded-2xl p-4 flex items-center justify-between transition-all hover:shadow-sm" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
               <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${c.type === 'ספק' ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0" style={{ background: 'rgba(249,115,22,0.12)', color: '#EA580C' }}>
                   {c.name[0]}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-white">{c.name}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${c.type === 'ספק' ? 'bg-orange-400/10 text-orange-400' : 'bg-blue-400/10 text-blue-400'}`}>{c.type}</span>
-                    {c.category && <span className="text-xs text-gray-500">{c.category}</span>}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold" style={{ color: '#1A1A1A' }}>{c.name}</p>
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(249,115,22,0.1)', color: '#EA580C' }}>{c.type}</span>
+                    {c.category && <span className="text-xs" style={{ color: '#9CA3AF' }}>{c.category}</span>}
                   </div>
                   <div className="flex items-center gap-3 mt-1">
-                    {c.phone && <a href={`tel:${c.phone}`} className="text-xs text-gray-400 hover:text-[#25D366] flex items-center gap-1"><Phone size={10} />{c.phone}</a>}
-                    {c.email && <a href={`mailto:${c.email}`} className="text-xs text-gray-400 hover:text-[#25D366] flex items-center gap-1"><Mail size={10} />{c.email}</a>}
+                    {c.phone && <a href={`tel:${c.phone}`} className="text-xs flex items-center gap-1 transition-colors" style={{ color: '#6B7280' }}><Phone size={10} />{c.phone}</a>}
+                    {c.email && <a href={`mailto:${c.email}`} className="text-xs flex items-center gap-1 transition-colors" style={{ color: '#6B7280' }}><Mail size={10} />{c.email}</a>}
                   </div>
-                  {c.notes && <p className="text-xs text-gray-500 mt-1">{c.notes}</p>}
+                  {c.notes && <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>{c.notes}</p>}
                 </div>
               </div>
-              <button onClick={() => handleDelete(c.id)} className="text-gray-600 hover:text-red-400 transition-colors">
+              <button onClick={() => handleDelete(c.id)} className="transition-colors flex-shrink-0" style={{ color: '#9CA3AF' }}>
                 <Trash2 size={16} />
               </button>
             </div>

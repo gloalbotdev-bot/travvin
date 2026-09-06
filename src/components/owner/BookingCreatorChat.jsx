@@ -1,29 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '@/api/client';
 import { Send, X, Check } from 'lucide-react';
-import { calcBookingTotalForZimmer, formatILS } from '@/lib/bookingPrice';
-import { bookingErrorMessage } from '@/lib/bookingErrors';
-import { buildCreatorRecentTurns, getAssistantParsed } from '@/lib/assistantCreator';
+import { useAutoResize } from '@/hooks/useAutoResize';
+import MicButton from '@/components/chat/MicButton';
+import { calcBookingTotal, formatILS } from '@/lib/bookingPrice';
 
 const formatTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-
-function inferBookingStatus(booking, userText) {
-  const s = booking?.status;
-  if (s === 'ממתינה' || s === 'אושרה') return s;
-  const blob = `${userText || ''} ${booking?.notes || ''}`;
-  if (/ממתינ|המתנ|לא\s*מאושר|pending/i.test(blob)) return 'ממתינה';
-  if (/אושר|מאושר|approved/i.test(blob)) return 'אושרה';
-  return 'אושרה';
-}
-
-function cleanBookingNotes(notes) {
-  if (!notes) return '';
-  return String(notes)
-    .replace(/הזמנה\s*בהמתנה/gi, '')
-    .replace(/ממתינה\s*לאישור/gi, '')
-    .replace(/סטטוס\s*ממתינה/gi, '')
-    .trim();
-}
 
 export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId }) {
   const [messages, setMessages] = useState([{
@@ -37,10 +19,16 @@ export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId 
   const [saving, setSaving] = useState(false);
   const [collectedData, setCollectedData] = useState({}); // accumulated booking fields across turns
   const messagesEndRef = useRef(null);
+  const { ref: inputRef, resize: resizeInput } = useAutoResize(input, 200);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  // Focus the input as soon as it's visible (on enter and after editing a pending booking)
+  useEffect(() => {
+    if (!pendingBooking) inputRef.current?.focus();
+  }, [pendingBooking]);
 
   const addMsg = (role, content) => {
     setMessages(prev => [...prev, { id: Date.now() + Math.random(), role, content, time: formatTime() }]);
@@ -53,70 +41,116 @@ export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId 
     addMsg('user', text);
     setIsTyping(true);
 
-    const recentTurns = buildCreatorRecentTurns(messages, 30);
+    const zimmerNames = zimmers.map(z => z.name).join(', ');
+    const today = new Date().toISOString().split('T')[0];
 
-    const response = await api.assistant.chat({
-      profile: 'owner_booking_creator',
-      message: text,
-      clientState: {
-        ownerId,
-        collectedData,
-        recentTurns,
-      },
+    // The whole thread so far — for conversational continuity.
+    const history = messages
+      .filter(m => m.content)
+      .map(m => (m.role === 'user' ? 'בעל המתחם' : 'עוזר') + ': ' + m.content)
+      .join('\n');
+
+    const prevDataStr = JSON.stringify(collectedData);
+
+    const response = await api.integrations.Core.InvokeLLM({
+      prompt: `אתה עוזר לבעל צימר להוסיף הזמנה אחת למערכת.
+הצימרים הזמינים (חובה לבחור אחד מהם לפי השם): ${zimmerNames}
+תאריך היום: ${today}
+
+כללים חשובים:
+1. כל צ'אט מיועד להזמנה אחת בלבד.
+2. חובה לקרוא את ההודעה הנוכחית של הבעלים בעיון ולחלץ ממנה את כל הפרטים שנמסרו בה — גם אם נמסרו מספר פרטים בהודעה אחת (שם + טלפון + תאריכים + צימר...). אסור לקחת רק פרט אחד ולהתעלם מהשאר.
+3. שמור בזיכרון את הפרטים שכבר נאספו בסבבים קודמים (מסופקים לך למטה כ- accumulated). מזג (merge) אותם עם החדשים מההודעה הנוכחית.
+4. אל תבקש פרט שכבר יש לך (גם אם מ-accumulated וגם מההודעה הנוכחית). בקש רק את החסר.
+5. ב-booking החזר את התמונה המלאה והמעודכנת אחרי המיזוג (גם הפרטים שכבר היו + החדשים). אם נתון לא ידוע — רשום null/מחרוזת ריקה.
+
+שדות חובה: guest_name, guest_phone, check_in (YYYY-MM-DD), check_out (YYYY-MM-DD), zimmer_name (אחד מהרשימה למעלה).
+שדות רשות: num_guests, notes.
+
+פרטים שכבר נאספו עד כה:
+${prevDataStr}
+
+שיחה עד כה:
+${history}
+
+ההודעה הנוכחית של הבעלים: "${text}"
+
+ממן את מה שחסר:
+- אם יש את כל שדות החובה (אחרי מיזוג כל מקורות המידע) → החזר action=create עם booking מלא, ו-message קצר.
+- אם חסר משהו → החזר action=ask, booking מלא עם מה שיש (כך נשמור את ההתקדמות), ו-message ששואל רק על החסר (שאלה אחת ממוקדת, לא רשימה שלמה). לעולם אל תבקש מחדש פרט שכבר נמסר.
+
+ענה JSON בלבד:
+{
+  "action": "create" | "ask",
+  "message": "...",
+  "booking": {
+    "guest_name": "...",
+    "guest_phone": "...",
+    "check_in": "YYYY-MM-DD",
+    "check_out": "YYYY-MM-DD",
+    "zimmer_name": "...",
+    "num_guests": number or null,
+    "notes": "..."
+  }
+}`,
+      response_json_schema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string' },
+          message: { type: 'string' },
+          booking: {
+            type: 'object',
+            properties: {
+              guest_name: { type: 'string' },
+              guest_phone: { type: 'string' },
+              check_in: { type: 'string' },
+              check_out: { type: 'string' },
+              zimmer_name: { type: 'string' },
+              num_guests: { type: 'number' },
+              notes: { type: 'string' }
+            }
+          }
+        }
+      }
     });
-    const parsed = getAssistantParsed(response);
 
     setIsTyping(false);
 
-    const merged = { ...collectedData, ...(parsed.booking || {}) };
+    // Merge any booking fields the LLM returned into our accumulated state (handles partial data across turns).
+    const merged = { ...collectedData, ...(response.booking || {}) };
     const cleanedMerged = Object.fromEntries(
       Object.entries(merged).filter(([_, v]) => v !== null && v !== undefined && v !== '')
     );
     setCollectedData(cleanedMerged);
 
-    if (parsed.action === 'create' && parsed.booking) {
+    if (response.action === 'create' && response.booking) {
       const matchedZimmer = zimmers.find(z =>
-        z.name.includes(parsed.booking.zimmer_name) ||
-        parsed.booking.zimmer_name?.includes(z.name)
+        z.name.includes(response.booking.zimmer_name) ||
+        response.booking.zimmer_name?.includes(z.name)
       ) || zimmers[0];
 
-      const status = inferBookingStatus(parsed.booking, text);
-      const notes = cleanBookingNotes(parsed.booking.notes);
-
       const booking = {
-        ...parsed.booking,
-        notes,
+        ...response.booking,
         zimmer_id: matchedZimmer?.id || '',
-        zimmer_name: matchedZimmer?.name || parsed.booking.zimmer_name,
+        zimmer_name: matchedZimmer?.name || response.booking.zimmer_name,
         owner_id: ownerId || matchedZimmer?.owner_id || '',
-        status,
-        total_price: calcBookingTotalForZimmer(
-          matchedZimmer,
-          parsed.booking.check_in,
-          parsed.booking.check_out,
-          0,
-          0,
-        ),
+        status: 'אושרה',
+        total_price: calcBookingTotal(response.booking.check_in, response.booking.check_out, matchedZimmer?.price_per_night),
       };
       setPendingBooking(booking);
-      addMsg('bot', parsed.message || 'מצוין! הנה ההזמנה שאני מתכוון להוסיף:');
+      addMsg('bot', response.message || 'מצוין! הנה ההזמנה שאני מתכוון להוסיף:');
     } else {
-      addMsg('bot', parsed.message || 'ספר לי עוד פרטים.');
+      addMsg('bot', response.message || 'ספר לי עוד פרטים.');
     }
   };
 
   const handleSave = async () => {
     if (!pendingBooking) return;
     setSaving(true);
-    try {
-      await api.entities.BookingRequest.create(pendingBooking);
-      onSaved();
-      onClose();
-    } catch (e) {
-      addMsg('bot', `⚠️ ${bookingErrorMessage(e)}`);
-    } finally {
-      setSaving(false);
-    }
+    await api.entities.BookingRequest.create(pendingBooking);
+    setSaving(false);
+    onSaved();
+    onClose();
   };
 
   return (
@@ -160,7 +194,6 @@ export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId 
                 <p>👤 {pendingBooking.guest_name} · 📞 {pendingBooking.guest_phone}</p>
                 <p>🏠 {pendingBooking.zimmer_name}</p>
                 <p>📅 {pendingBooking.check_in} → {pendingBooking.check_out}</p>
-                <p>סטטוס: <span className={pendingBooking.status === 'ממתינה' ? 'text-yellow-400' : 'text-green-400'}>{pendingBooking.status}</span></p>
                 {pendingBooking.num_guests && <p>👥 {pendingBooking.num_guests} אורחים</p>}
                 {pendingBooking.total_price ? <p className="font-semibold text-green-400">💳 תשלום: {formatILS(pendingBooking.total_price)}</p> : null}
                 {pendingBooking.notes && <p className="text-gray-400 text-xs">{pendingBooking.notes}</p>}
@@ -198,14 +231,20 @@ export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId 
 
         {/* Input */}
         {!pendingBooking && (
-          <div className="px-4 py-3 flex gap-2">
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSend()}
-              placeholder="לדוגמה: יעקב כהן, 050-1234567, נוף כנרת, 25-27 ביולי..."
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[#25D366] placeholder-gray-500"
-            />
+          <div className="px-4 py-3 flex items-end gap-2">
+            <div className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 min-h-[44px] focus-within:border-[#25D366]">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={e => { setInput(e.target.value); resizeInput(); }}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                placeholder="לדוגמה: יעקב כהן, 050-1234567, נוף כנרת, 25-27 ביולי..."
+                className="w-full bg-transparent outline-none resize-none overflow-y-auto text-sm text-white leading-5 placeholder-gray-500"
+                rows={1}
+                style={{ direction: 'rtl' }}
+              />
+            </div>
+            <MicButton tone="dark" disabled={isTyping} onText={t => setInput(p => (p ? p.replace(/\s+$/, '') + ' ' + t : t))} />
             <button
               onClick={handleSend}
               disabled={!input.trim() || isTyping}

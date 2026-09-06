@@ -19,6 +19,7 @@ import { createAuthMiddleware } from './middleware/auth.js';
 import { startCalendarAutoSyncCron } from './jobs/calendar-auto-sync.js';
 import { startDelayedJobsCron } from './jobs/delayed-jobs-worker.js';
 import { startStayMessagesCron } from './jobs/stay-messages-cron.js';
+import { startGuestAutomationCron } from './jobs/guest-automation-cron.js';
 import { createAiRouter } from './routes/ai.js';
 import { createAssistantRouter } from './routes/assistant.js';
 import { createUploadRouter } from './routes/upload.js';
@@ -118,5 +119,10 @@ app.listen(port, '0.0.0.0', () => {
     console.log('[stay-messages] disabled via STAY_MESSAGES_CRON_DISABLED');
   } else {
     startStayMessagesCron({ store });
+  }
+  if (process.env.GUEST_AUTOMATION_CRON_DISABLED === '1') {
+    console.log('[guest-automation] disabled via GUEST_AUTOMATION_CRON_DISABLED');
+  } else {
+    startGuestAutomationCron({ store });
   }
 });

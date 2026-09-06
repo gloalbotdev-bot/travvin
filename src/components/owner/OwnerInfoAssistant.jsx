@@ -3,6 +3,8 @@ import { api } from '@/api/client';
 import { Send, ExternalLink, Sparkles, Check, X, Eye, Pencil, AlertTriangle } from 'lucide-react';
 import { bookingErrorMessage } from '@/lib/bookingErrors';
 import { buildOwnerRecentTurns, applyOwnerAssistantResponse } from '@/lib/assistantOwner';
+import { useAutoResize } from '@/hooks/useAutoResize';
+import MicButton from '@/components/chat/MicButton';
 
 const formatTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
@@ -48,7 +50,7 @@ const ZIMMER_FIELDS = [
   'seasonal_pricing', 'images', 'info_summary'
 ]; // server whitelists the same set (M15 #8ב)
 
-export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated }) {
+export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated, initialPrompt, onPromptConsumed }) {
   const [mode, setMode] = useState('info'); // 'info' | 'edit' — matches Base44 OwnerAgentChat
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -57,11 +59,13 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated }) {
   const [pendingOp, setPendingOp] = useState(null);
   const [applying, setApplying] = useState(false);
   const messagesEndRef = useRef(null);
+  const sentInitialRef = useRef(false);
   const greetedRef = useRef(false);
   const sendingRef = useRef(false);
   const messagesRef = useRef([]);
   const modeRef = useRef(mode);
   const [chatStarted, setChatStarted] = useState(false);
+  const { ref: textareaRef, resize: resizeInput } = useAutoResize(input, 240);
 
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
@@ -79,6 +83,18 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    if (context && !isTyping) textareaRef.current?.focus();
+  }, [context, isTyping]);
+
+  useEffect(() => {
+    if (!context || !initialPrompt?.trim() || sentInitialRef.current) return;
+    sentInitialRef.current = true;
+    handleSend(initialPrompt.trim());
+    onPromptConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when context ready
+  }, [context, initialPrompt]);
 
   const fetchContext = async () => {
     const [zimmers, bookings, questions, reviews] = await Promise.all([
@@ -384,8 +400,9 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated }) {
       <div className="px-4 py-3 flex items-end gap-2" style={{ background: '#fff', borderTop: '1.5px solid #F0EEE8' }}>
         <div className="flex-1 rounded-2xl px-4 py-3 flex items-center min-h-[48px]" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0' }}>
           <textarea
+            ref={textareaRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => { setInput(e.target.value); resizeInput(); }}
             onKeyDown={handleKeyDown}
             placeholder={mode === 'edit' ? 'כתוב פקודה — אעשה אותה מיד...' : 'שאל שאלה — אציג לך את הנתונים...'}
             className="w-full bg-transparent outline-none resize-none text-sm leading-5 max-h-28"
@@ -394,6 +411,7 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated }) {
             disabled={isTyping}
           />
         </div>
+        <MicButton tone="light" disabled={isTyping} onText={t => setInput(p => (p ? p.replace(/\s+$/, '') + ' ' + t : t))} />
         <button
           type="button"
           onClick={() => handleSend()}

@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
+import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
@@ -17,21 +18,25 @@ import AccountSettings from '@/pages/AccountSettings';
 import CustomerPortal from '@/pages/CustomerPortal';
 import AdminLogin from '@/pages/AdminLogin';
 import DesktopSearch from '@/pages/DesktopSearch';
+import Discover from '@/pages/Discover';
+import OwnerProfile from '@/pages/OwnerProfile';
 import RoleGate from '@/components/auth/RoleGate';
 
-const PUBLIC_PATHS = ['/', '/welcome', '/admin-login'];
+const PUBLIC_PATHS = ['/', '/welcome', '/admin-login', '/discover'];
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
   const location = useLocation();
 
-  // Public pages — render immediately without auth checks
-  if (PUBLIC_PATHS.includes(location.pathname)) {
+  // Public pages — render immediately without auth checks (including the whole /discover area)
+  if (PUBLIC_PATHS.includes(location.pathname) || location.pathname.startsWith('/discover')) {
     return (
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/admin-login" element={<AdminLogin />} />
+        <Route path="/discover" element={<Discover />} />
+        <Route path="/discover/owner/:ownerId" element={<OwnerProfile />} />
         <Route path="/CustomerChat" element={<Navigate to="/chat" replace />} />
         <Route path="/customer-chat" element={<Navigate to="/chat" replace />} />
         <Route path="/CustomerPortal" element={<Navigate to="/customer-portal" replace />} />
@@ -62,6 +67,8 @@ const AuthenticatedApp = () => {
       <Route path="/" element={<Landing />} />
       <Route path="/welcome" element={<Welcome />} />
       <Route path="/admin-login" element={<AdminLogin />} />
+      <Route path="/discover" element={<Discover />} />
+      <Route path="/discover/owner/:ownerId" element={<OwnerProfile />} />
       <Route path="/chat" element={<RoleGate allow={['user']} allowGuest><CustomerChat /></RoleGate>} />
       <Route path="/promotions" element={<RoleGate allow={['user']} allowGuest><Promotions /></RoleGate>} />
       <Route path="/owner" element={<RoleGate allow={['owner']}><OwnerPanel /></RoleGate>} />
@@ -81,15 +88,17 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <ScrollToTop />
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
-      </QueryClientProvider>
-    </AuthProvider>
+    <GlobalErrorBoundary>
+      <AuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <ScrollToTop />
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </QueryClientProvider>
+      </AuthProvider>
+    </GlobalErrorBoundary>
   )
 }
 

@@ -1,172 +1,334 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '@/api/client';
-import { Bell, MessageCircle, MessageCircleQuestion } from 'lucide-react';
-import QuestionsPanel from '@/components/owner/QuestionsPanel';
-import DirectChat from '@/components/chat/DirectChat';
-
-const RED_DOT = <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#EF4444' }} />;
+import { Bell, MessageCircleQuestion, ArrowRight, MessageCircle } from 'lucide-react';
+import MessagesList from './messages/MessagesList';
+import MessagesMergedChatWindow from './messages/MessagesMergedChatWindow';
+import MessagesMergedQuestionsWindow from './messages/MessagesMergedQuestionsWindow';
+import MessagesContactPanel from './messages/MessagesContactPanel';
+import { buildPhoneLookup, groupChatsByContact, groupQuestionsByContact } from './messages/groupContacts';
+import { fmtMsgTime } from './messages/timeFormat';
 
 const SYS_READ_KEY = 'zb_read_sysmsgs_owner';
-const loadSysReadSet = () => {
-  try { return new Set(JSON.parse(localStorage.getItem(SYS_READ_KEY) || '[]')); }
-  catch { return new Set(); }
-};
+const loadSysReadSet = () => { try { return new Set(JSON.parse(localStorage.getItem(SYS_READ_KEY) || '[]')); } catch { return new Set(); } };
 const chatLastSeen = (id) => localStorage.getItem(`zb_lastSeen_chat_${id}`) || '1970-01-01T00:00:00.000Z';
 const markChatRead = (id) => localStorage.setItem(`zb_lastSeen_chat_${id}`, new Date().toISOString());
+const markSysRead = (id) => { const s = loadSysReadSet(); s.add(id); localStorage.setItem(SYS_READ_KEY, JSON.stringify([...s])); };
 
-export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, focusChatId, initialSubtab, onMarkSystemRead }) {
-  const [subtab, setSubtab] = useState(initialSubtab || 'questions');
+export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, focusChatId, onMarkSystemRead, onAddBooking, onNavigate }) {
+  const [category, setCategory] = useState('chats');
   const [threads, setThreads] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [questions, setQuestions] = useState([]);
   const [systemMsgs, setSystemMsgs] = useState([]);
-  const [activeThread, setActiveThread] = useState(null);
-  const [pendingQuestions, setPendingQuestions] = useState([]);
+  const [guestProfiles, setGuestProfiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedKey, setSelectedKey] = useState(null);
+  const [zimmerMap, setZimmerMap] = useState({});
+  const [search, setSearch] = useState('');
+  const [subFilter, setSubFilter] = useState('all');
+  const [isLg, setIsLg] = useState(false);
 
   const sysReadSet = loadSysReadSet();
-  const chatUnreadCount = threads.filter(t => {
-    const last = (t.messages || [])[t.messages.length - 1];
-    return last && last.role === 'customer' && new Date(t.updated_date || t.created_date) > new Date(chatLastSeen(t.id));
-  }).length;
-  const systemUnreadCount = systemMsgs.filter(m => !sysReadSet.has(m.id)).length;
-  const questionsUnreadCount = pendingQuestions.length;
-
-  const switchSubtab = (id) => {
-    setSubtab(id);
-    if (id === 'system') {
-      if (onMarkSystemRead) onMarkSystemRead();
-    }
-  };
 
   useEffect(() => {
-    if (!focusChatId) return;
-    setSubtab('chats');
-    (async () => {
-      try { const t = await api.entities.DirectChat.get(focusChatId); if (t) setActiveThread(t); } catch {}
-    })();
-  }, [focusChatId]);
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const update = () => setIsLg(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   const load = async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [direct, sys, qs] = await Promise.all([
+      const [direct, sys, qs, profiles] = await Promise.all([
         api.entities.DirectChat.filter({ owner_id: user.id }, '-updated_date'),
         api.entities.SystemMessage.filter({ audience: 'owner' }, '-created_date', 30),
-        api.entities.UnansweredQuestion.filter({ owner_id: user.id, status: 'ממתינה' }, '-created_date', 50),
+        api.entities.UnansweredQuestion.filter({ owner_id: user.id }, '-created_date'),
+        api.entities.GuestProfile.filter({ owner_id: user.id }).catch(() => []),
       ]);
       setThreads(direct || []);
-      setSystemMsgs((sys || []).filter(m => !m.target_user_ids?.length || (m.target_user_ids || []).includes(user?.id)));
-      setPendingQuestions(qs || []);
-    } catch (e) { /* silent */ }
+      setSystemMsgs((sys || []).filter(m => !m.target_user_ids?.length || (m.target_user_ids || []).includes(user.id)));
+      setQuestions(qs || []);
+      setGuestProfiles(profiles || []);
+    } catch { /* silent */ }
     setLoading(false);
   };
-
   useEffect(() => { load(); }, [user]);
 
-  if (activeThread) {
-    return <DirectChat thread={activeThread} isOwner={true} user={user} counterpartName={activeThread.customer_name} zimmerName={activeThread.zimmer_name} onClose={() => { setActiveThread(null); load(); }} />;
-  }
+  useEffect(() => {
+    const unsub = api.entities.DirectChat.subscribe(() => { load(); });
+    return unsub;
+  }, [user]);
 
-  const subTabs = [
-    { id: 'questions', label: 'שאלות לקוחות', icon: MessageCircleQuestion, count: questionsUnreadCount },
-    { id: 'chats', label: 'צ\'אטים ישירים', icon: MessageCircle, count: chatUnreadCount },
-    { id: 'system', label: 'הודעות מערכת', icon: Bell, count: systemUnreadCount },
-  ];
+  const lookup = useMemo(() => buildPhoneLookup(guestProfiles), [guestProfiles]);
+  const chatContacts = useMemo(() => groupChatsByContact(threads, lookup), [threads, lookup]);
+  const questionContacts = useMemo(() => groupQuestionsByContact(questions, lookup), [questions, lookup]);
+
+  // Notification deep-links → resolve to the contact that owns the item.
+  useEffect(() => {
+    if (!focusChatId) return;
+    const c = chatContacts.find(c => c.threads.some(t => t.id === focusChatId));
+    if (c) { setCategory('chats'); setSelectedKey(c.key); }
+  }, [focusChatId]);
+  useEffect(() => {
+    if (!focusQuestionId) return;
+    const c = questionContacts.find(c => c.questions.some(q => q.id === focusQuestionId));
+    if (c) { setCategory('questions'); setSelectedKey(c.key); }
+  }, [focusQuestionId]);
+
+  const switchCategory = (id) => {
+    setCategory(id);
+    setSelectedKey(null);
+    setSubFilter('all');
+    setSearch('');
+    if (id === 'system' && onMarkSystemRead) onMarkSystemRead();
+  };
+
+  // Aggregate unread + last activity for a contact.
+  const chatUnread = (c) => c.threads.some(t => {
+    const last = (t.messages || [])[t.messages.length - 1];
+    return last && last.role === 'customer' && new Date(t.updated_date || t.created_date) > new Date(chatLastSeen(t.id));
+  });
+  const chatLastActivity = (c) => c.threads.reduce((m, t) => {
+    const d = new Date(t.updated_date || t.created_date); return d > m ? d : m;
+  }, new Date(0));
+  const chatPreview = (c) => {
+    let best = null;
+    for (const t of c.threads) {
+      const last = (t.messages || [])[t.messages.length - 1];
+      if (last && (!best || new Date(t.updated_date || t.created_date) > best.ts)) best = { ts: new Date(t.updated_date || t.created_date), content: last.content, zimmer: t.zimmer_name };
+    }
+    return best;
+  };
+  const qUnread = (c) => c.questions.some(q => q.status === 'ממתינה');
+  const qLastActivity = (c) => c.questions.reduce((m, q) => { const d = new Date(q.created_date); return d > m ? d : m; }, new Date(0));
+  const qPreview = (c) => {
+    if (!c.questions.length) return null;
+    const last = [...c.questions].sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
+    return { ts: new Date(last.created_date), content: last.question, zimmer: last.zimmer_name };
+  };
+
+  const chatUnreadCount = chatContacts.filter(chatUnread).length;
+  const systemUnreadCount = systemMsgs.filter(m => !sysReadSet.has(m.id)).length;
+  const questionsUnreadCount = questionContacts.filter(qUnread).length;
+  const counts = { questions: questionsUnreadCount, chats: chatUnreadCount, system: systemUnreadCount };
+
+  const selectedChatContact = category === 'chats' ? chatContacts.find(c => c.key === selectedKey) : null;
+  const selectedQContact = category === 'questions' ? questionContacts.find(c => c.key === selectedKey) : null;
+  const selectedSystem = category === 'system' ? systemMsgs.find(m => m.id === selectedKey) : null;
+
+  // Fetch zimmer context for the selected contact (all zimmers it touched).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setZimmerMap({});
+      const c = category === 'chats' ? selectedChatContact : selectedQContact;
+      if (!c) return;
+      const ids = Array.from(new Set(
+        (c.threads || []).map(t => t.zimmer_id).filter(Boolean)
+          .concat((c.questions || []).map(q => q.zimmer_id).filter(Boolean))
+      ));
+      const entries = await Promise.all(ids.map(id => api.entities.Zimmer.get(id).catch(() => null)));
+      if (!alive) return;
+      const m = {};
+      entries.forEach(z => { if (z) m[z.id] = z; });
+      setZimmerMap(m);
+    })();
+    return () => { alive = false; };
+  }, [selectedKey, category]);
+
+  const subFilters = useMemo(() => {
+    if (category === 'questions') return [{ id: 'all', label: 'הכל' }, { id: 'pending', label: 'ממתינות' }, { id: 'answered', label: 'נענו' }];
+    if (category === 'chats') return [{ id: 'all', label: 'הכל' }, { id: 'unread', label: 'דורש טיפול' }];
+    if (category === 'system') return [{ id: 'all', label: 'הכל' }, { id: 'unread', label: 'לא נקרא' }];
+    return [];
+  }, [category]);
+
+  const listItems = useMemo(() => {
+    let arr = category === 'chats' ? chatContacts : category === 'questions' ? questionContacts : systemMsgs;
+    if (category === 'questions') {
+      if (subFilter === 'pending') arr = arr.filter(qUnread);
+      if (subFilter === 'answered') arr = arr.filter(c => !qUnread(c));
+    } else if (category === 'chats') {
+      if (subFilter === 'unread') arr = arr.filter(chatUnread);
+    } else if (category === 'system') {
+      if (subFilter === 'unread') arr = arr.filter(m => !sysReadSet.has(m.id));
+    }
+    if (search.trim()) {
+      const s = search.trim();
+      arr = arr.filter(it => {
+        if (category === 'chats') { const p = chatPreview(it); return (it.name || '').includes(s) || (p?.content || '').includes(s) || (it.threads || []).some(t => (t.zimmer_name || '').includes(s)); }
+        if (category === 'questions') { const p = qPreview(it); return (it.name || '').includes(s) || (p?.content || '').includes(s) || (it.questions || []).some(q => (q.zimmer_name || '').includes(s)); }
+        return (it.title || '').includes(s) || (it.body || '').includes(s);
+      });
+    }
+    return arr;
+  }, [category, chatContacts, questionContacts, systemMsgs, subFilter, search]);
+
+  const renderItem = (it) => {
+    if (category === 'chats') {
+      const unread = chatUnread(it);
+      const p = chatPreview(it);
+      const ts = chatLastActivity(it);
+      return (
+        <button key={it.key} onClick={() => { it.threads.forEach(t => markChatRead(t.id)); setSelectedKey(it.key); }}
+          className="w-full text-right rounded-2xl p-3 flex items-start gap-3 transition-all"
+          style={{ background: selectedKey === it.key ? '#F8F7F4' : 'transparent' }}>
+          <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: '#075E54' }}>{(it.name || 'ל').slice(0, 1)}</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-sm truncate" style={{ color: '#1A1A1A' }}>{it.name}</span>
+              <span className="text-[11px] flex-shrink-0" style={{ color: '#9CA3AF' }}>{fmtMsgTime(ts)}</span>
+            </div>
+            <p className="text-xs truncate" style={{ color: '#9CA3AF' }}>{it.threads.length} צימרים</p>
+            {it.threads.some(t => { const m = (t.messages || [])[(t.messages || []).length - 1]; return m && m.role === 'assistant'; }) && (
+              <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-0.5" style={{ background: 'rgba(34,197,94,0.12)', color: '#16A34A' }}>טופל ע"י AI</span>
+            )}
+            {p && <p className="text-xs truncate mt-0.5" style={{ color: unread ? '#4B5563' : '#9CA3AF' }}>{p.content}</p>}
+          </div>
+          {unread && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1" style={{ background: '#EF4444' }} />}
+        </button>
+      );
+    }
+    if (category === 'questions') {
+      const unread = qUnread(it);
+      const p = qPreview(it);
+      const ts = qLastActivity(it);
+      return (
+        <button key={it.key} onClick={() => setSelectedKey(it.key)}
+          className="w-full text-right rounded-2xl p-3 flex items-start gap-3 transition-all"
+          style={{ background: selectedKey === it.key ? '#F8F7F4' : 'transparent' }}>
+          <div className="w-11 h-11 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: unread ? '#F97316' : '#9CA3AF' }}><MessageCircleQuestion size={18} /></div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-sm truncate" style={{ color: '#1A1A1A' }}>{it.name}</span>
+              <span className="text-[11px] flex-shrink-0" style={{ color: '#9CA3AF' }}>{fmtMsgTime(ts)}</span>
+            </div>
+            <p className="text-xs truncate" style={{ color: '#9CA3AF' }}>{it.questions.length} שאלות</p>
+            {it.questions.some(q => q.status === 'נענתה' && q.answered_by === 'ai') && (
+              <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-0.5" style={{ background: 'rgba(34,197,94,0.12)', color: '#16A34A' }}>נענה ע"י AI</span>
+            )}
+            {it.questions.some(q => q.status === 'נענתה' && q.answered_by !== 'ai') && (
+              <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-0.5" style={{ background: '#F3F4F6', color: '#6B7280' }}>נענתה ע"י בעלים</span>
+            )}
+            {p && <p className="text-xs truncate mt-0.5" style={{ color: unread ? '#4B5563' : '#9CA3AF' }}>{p.content}</p>}
+          </div>
+          {unread && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1" style={{ background: '#EF4444' }} />}
+        </button>
+      );
+    }
+    const unRead = !sysReadSet.has(it.id);
+    return (
+      <button key={it.id} onClick={() => { markSysRead(it.id); setSelectedKey(it.id); if (onMarkSystemRead) onMarkSystemRead(); }}
+        className="w-full text-right rounded-2xl p-3 flex items-start gap-3 transition-all"
+        style={{ background: selectedKey === it.id ? '#F8F7F4' : 'transparent' }}>
+        <div className="w-11 h-11 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: '#6B7280' }}><Bell size={18} /></div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-bold text-sm truncate" style={{ color: '#1A1A1A' }}>{it.title}</span>
+            <span className="text-[11px] flex-shrink-0" style={{ color: '#9CA3AF' }}>{fmtMsgTime(it.created_date)}</span>
+          </div>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mt-0.5" style={{ background: 'rgba(249,115,22,0.1)', color: '#EA580C' }}>{it.category || 'הודעה'}</span>
+          <p className="text-xs truncate mt-1" style={{ color: '#9CA3AF' }}>{it.body}</p>
+        </div>
+        {unRead && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1" style={{ background: '#EF4444' }} />}
+      </button>
+    );
+  };
+
+  const onAnswered = () => { load(); };
+  const onDismissed = async (id) => { await api.entities.UnansweredQuestion.update(id, { status: 'נדחתה' }); load(); };
+
+  const listEl = (
+    <div className="h-full min-h-0 rounded-2xl overflow-hidden" style={{ border: '1.5px solid #F0EEE8' }}>
+      <MessagesList category={category} onCategory={switchCategory} subFilter={subFilter} onSubFilter={setSubFilter} subFilters={subFilters}
+        items={listItems} renderItem={renderItem} search={search} setSearch={setSearch}
+        onOpenSettings={() => onNavigate?.('checkin')} counts={counts} />
+    </div>
+  );
+
+  const centerEl = (
+    <div className="h-full min-h-0 rounded-2xl overflow-hidden" style={{ border: '1.5px solid #F0EEE8' }}>
+      {category === 'chats' && selectedChatContact ? (
+        <MessagesMergedChatWindow key={selectedChatContact.key} contact={selectedChatContact} zimmers={zimmerMap} user={user} />
+      ) : category === 'questions' && selectedQContact ? (
+        <MessagesMergedQuestionsWindow key={selectedQContact.key} contact={selectedQContact} zimmers={zimmerMap} onAnswered={onAnswered} onDismissed={onDismissed} />
+      ) : category === 'system' && selectedSystem ? (
+        <SystemDetail message={selectedSystem} onAction={onAction} />
+      ) : (
+        <EmptyWindow category={category} />
+      )}
+    </div>
+  );
+
+  const ctxEl = (
+    <div className="h-full min-h-0 rounded-2xl overflow-hidden" style={{ border: '1.5px solid #F0EEE8' }}>
+      {category === 'chats' && selectedChatContact ? (
+        <MessagesContactPanel contact={selectedChatContact} zimmers={zimmerMap} onAddBooking={onAddBooking} />
+      ) : category === 'questions' && selectedQContact ? (
+        <MessagesContactPanel contact={selectedQContact} zimmers={zimmerMap} onAddBooking={onAddBooking} />
+      ) : (
+        <MessagesContactPanel contact={null} zimmers={zimmerMap} />
+      )}
+    </div>
+  );
 
   return (
-    <div dir="rtl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-black" style={{ color: '#1A1A1A' }}>עדכונים והודעות</h1>
-        <p className="text-sm mt-1" style={{ color: '#9CA3AF' }}>שאלות לקוחות, צ'אטים ישירים והודעות מערכת</p>
-      </div>
-
-      {/* Sub-tabs */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {subTabs.map(({ id, label, icon: Icon, count }) => (
-          <button key={id} onClick={() => switchSubtab(id)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all relative"
-            style={subtab === id
-              ? { background: '#F97316', color: '#fff', border: '1.5px solid #F97316' }
-              : { background: '#fff', color: '#6B7280', border: '1.5px solid #E8E5E0' }}>
-            <Icon size={14} /> {label}
-            {count > 0 && <span className="mr-1">{RED_DOT}</span>}
-            {count > 0 && (
-              <span className="text-[10px] font-bold text-white rounded-full flex items-center justify-center" style={{ background: '#EF4444', minWidth: '16px', height: '16px', padding: '0 4px' }}>{count > 99 ? '99+' : count}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {subtab === 'questions' && <QuestionsPanel ownerId={user?.id} focusQuestionId={focusQuestionId} />}
-
-      {subtab === 'chats' && (
-        <div>
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-7 h-7 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
+    <div dir="rtl" style={{ fontFamily: 'Heebo, sans-serif' }} className="h-[calc(100dvh-130px)] min-h-[540px]">
+      {loading ? (
+        <div className="h-full flex items-center justify-center">
+          <div className="w-7 h-7 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
+        </div>
+      ) : isLg ? (
+        <div className="h-full grid gap-3 lg:grid-cols-[300px_1fr_320px] lg:grid-rows-1">
+          {listEl}{centerEl}{ctxEl}
+        </div>
+      ) : (
+        <div className="h-full">
+          {selectedKey ? (
+            <div className="h-full flex flex-col">
+              <div className="px-3 py-2 flex items-center gap-2 bg-white rounded-2xl mb-2" style={{ border: '1.5px solid #F0EEE8' }}>
+                <button onClick={() => setSelectedKey(null)} className="flex items-center gap-1 text-sm font-bold" style={{ color: '#1A1A1A' }}>
+                  <ArrowRight size={18} /> חזרה לרשימה
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">{centerEl}</div>
             </div>
-          ) : threads.length === 0 ? (
-            <div className="text-center py-24 rounded-2xl" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
-              <MessageCircle size={40} className="mx-auto mb-4" style={{ color: '#E8E5E0' }} />
-              <h3 className="text-lg font-black mb-2" style={{ color: '#1A1A1A' }}>אין צ'אטים ישירים עדיין</h3>
-              <p className="text-sm" style={{ color: '#9CA3AF' }}>כשלקוח יפתח צ'אט ישיר איתך מתוך פרטי הצימר או מהאזור האישי, השיחה תופיע כאן</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {threads.map(t => {
-                const last = (t.messages || [])[t.messages.length - 1];
-                const unread = last && last.role === 'customer' && new Date(t.updated_date || t.created_date) > new Date(chatLastSeen(t.id));
-                return (
-                  <button key={t.id} onClick={() => { markChatRead(t.id); setActiveThread(t); }}
-                    className="w-full text-right rounded-2xl p-4 flex items-center justify-between gap-3 hover:shadow-md transition-all relative"
-                    style={{ background: '#fff', border: `1.5px solid ${unread ? '#FCA5A5' : '#F0EEE8'}` }}>
-                    <div className="min-w-0 flex items-center gap-2">
-                      {unread && RED_DOT}
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm truncate" style={{ color: unread ? '#1A1A1A' : '#6B7280' }}>{t.customer_name || 'לקוח'} · {t.zimmer_name}</p>
-                        {last && <p className="text-xs truncate mt-0.5" style={{ color: unread ? '#4B5563' : '#9CA3AF' }}>{last.role === 'owner' ? 'אתה: ' : 'לקוח: '}{last.content}</p>}
-                      </div>
-                    </div>
-                    <span className="text-xs whitespace-nowrap" style={{ color: '#D1D5DB' }}>{new Date(t.updated_date || t.created_date).toLocaleDateString('he-IL')}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          ) : listEl}
         </div>
       )}
+    </div>
+  );
+}
 
-      {subtab === 'system' && (
-        <div className="space-y-2">
-          {systemMsgs.length === 0 ? (
-            <div className="text-center py-16 rounded-2xl" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
-              <Bell size={36} className="mx-auto mb-3" style={{ color: '#E8E5E0' }} />
-              <p className="text-sm" style={{ color: '#9CA3AF' }}>אין הודעות מערכת כרגע</p>
-            </div>
-          ) : systemMsgs.map(m => {
-            const clickable = m.action_type && m.action_entity_id && onAction;
-            const Wrapper = clickable ? 'button' : 'div';
-            const unReadSys = !sysReadSet.has(m.id);
-            return (
-              <Wrapper
-                key={m.id}
-                onClick={clickable ? () => onAction(m.action_type, m.action_entity_id) : undefined}
-                className={`rounded-2xl p-4 w-full text-right transition-all ${clickable ? 'cursor-pointer hover:shadow-md' : ''}`}
-                style={{ background: '#fff', border: `1.5px solid ${unReadSys ? '#FCA5A5' : '#F0EEE8'}` }}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  {unReadSys && RED_DOT}
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(249,115,22,0.1)', color: '#EA580C' }}>{m.category || 'הודעה'}</span>
-                  <span className="text-xs" style={{ color: '#D1D5DB' }}>{new Date(m.created_date).toLocaleDateString('he-IL')}</span>
-                  {clickable && <span className="text-xs mr-auto font-semibold" style={{ color: '#F97316' }}>עבור לפעולה ←</span>}
-                </div>
-                <p className="font-bold text-sm" style={{ color: '#1A1A1A' }}>{m.title}</p>
-                {m.body && <p className="text-sm mt-1 whitespace-pre-wrap" style={{ color: '#4B5563' }}>{m.body}</p>}
-              </Wrapper>
-            );
-          })}
-        </div>
+function SystemDetail({ message, onAction }) {
+  const clickable = message.action_type && message.action_entity_id && onAction;
+  return (
+    <div className="h-full overflow-y-auto p-5 bg-white" dir="rtl">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ background: 'rgba(249,115,22,0.1)', color: '#EA580C' }}>{message.category || 'הודעה'}</span>
+        <span className="text-xs" style={{ color: '#9CA3AF' }}>{new Date(message.created_date).toLocaleString('he-IL')}</span>
+      </div>
+      <h2 className="text-lg font-black mb-2" style={{ color: '#1A1A1A' }}>{message.title}</h2>
+      {message.body && <p className="text-sm whitespace-pre-wrap" style={{ color: '#4B5563' }}>{message.body}</p>}
+      {clickable && (
+        <button onClick={() => onAction(message.action_type, message.action_entity_id)} className="mt-4 px-4 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: '#F97316' }}>עבור לפעולה ←</button>
       )}
+    </div>
+  );
+}
+
+function EmptyWindow({ category }) {
+  const label = category === 'chats' ? 'שיחה' : category === 'questions' ? 'שאלה' : 'הודעה';
+  return (
+    <div className="h-full flex items-center justify-center bg-white" dir="rtl">
+      <div className="text-center">
+        <div className="w-16 h-16 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: '#F8F7F4' }}>
+          {category === 'chats' ? <MessageCircle size={28} style={{ color: '#D1D5DB' }} /> : <MessageCircleQuestion size={28} style={{ color: '#D1D5DB' }} />}
+        </div>
+        <p className="text-sm" style={{ color: '#9CA3AF' }}>בחר {label} מימין כדי להתחיל</p>
+      </div>
     </div>
   );
 }

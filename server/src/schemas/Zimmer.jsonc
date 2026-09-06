@@ -1,77 +1,212 @@
 {
+  "name": "Zimmer",
   "type": "object",
   "properties": {
     "name": {
       "type": "string",
-      "title": "\u05e9\u05dd \u05d4\u05e6\u05d9\u05de\u05e8"
+      "title": "שם הצימר"
     },
     "owner_id": {
       "type": "string",
-      "title": "\u05de\u05d6\u05d4\u05d4 \u05d1\u05e2\u05dc \u05d4\u05de\u05ea\u05d7\u05dd"
+      "title": "מזהה בעל המתחם"
     },
     "owner_name": {
       "type": "string",
-      "title": "\u05e9\u05dd \u05d1\u05e2\u05dc \u05d4\u05de\u05ea\u05d7\u05dd"
+      "title": "שם בעל המתחם"
     },
     "location": {
       "type": "string",
-      "title": "\u05de\u05d9\u05e7\u05d5\u05dd"
+      "title": "מיקום"
     },
     "price_per_night": {
       "type": "number",
-      "minimum": 0,
-      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05dc\u05d9\u05dc\u05d4 (\u05de\u05dc\u05d0)"
+      "title": "מחיר ללילה (מלא)",
+      "minimum": 0
     },
     "weekday_price": {
       "type": "number",
-      "minimum": 0,
-      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05dc\u05d9\u05dc\u05d4 \u05d1\u05d0\u05de\u05e6\u05e2 \u05d4\u05e9\u05d1\u05d5\u05e2 (\u05d0'-\u05d4')"
+      "title": "מחיר ללילה באמצע השבוע (א'-ה')",
+      "minimum": 0
     },
     "weekend_price": {
       "type": "number",
-      "minimum": 0,
-      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05dc\u05d9\u05dc\u05d4 \u05d1\u05e1\u05d5\u05e3 \u05d4\u05e9\u05d1\u05d5\u05e2 (\u05d4'-\u05e9')"
+      "title": "מחיר ללילה בסוף השבוע (ה'-ש')",
+      "minimum": 0
     },
     "num_rooms": {
       "type": "number",
-      "title": "\u05de\u05e1\u05e4\u05e8 \u05d7\u05d3\u05e8\u05d9\u05dd"
+      "title": "מספר חדרים"
     },
     "max_guests": {
       "type": "number",
-      "title": "\u05de\u05e1\u05e4\u05e8 \u05d0\u05d5\u05e8\u05d7\u05d9\u05dd \u05de\u05e7\u05e1\u05d9\u05de\u05dc\u05d9 \u05d1\u05de\u05d7\u05d9\u05e8 \u05d4\u05de\u05dc\u05d0"
+      "title": "אורחים מקסימלי לשינה (למחיר המלא)"
+    },
+    "max_guests_event": {
+      "type": "number",
+      "title": "אורחים מקסימלי לאירוע"
+    },
+    "size_sqm": {
+      "type": "number",
+      "title": "גודל הנכס (מ״ר)"
+    },
+    "rooms_detail": {
+      "type": "array",
+      "title": "פירוט חדרים (מיטות, סוג מיטה, רחצה, מתקנים)",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "room_name": {
+            "type": "string",
+            "title": "שם חדר (אופציונלי)"
+          },
+          "beds": {
+            "type": "array",
+            "title": "סוגי מיטות בחדר",
+            "items": {
+              "type": "object",
+              "properties": {
+                "bed_type": {
+                  "type": "string",
+                  "enum": [
+                    "king",
+                    "queen",
+                    "single",
+                    "bunk",
+                    "sofa_bed",
+                    "other"
+                  ],
+                  "default": "queen",
+                  "title": "סוג מיטה"
+                },
+                "count": {
+                  "type": "number",
+                  "title": "כמות",
+                  "default": 1
+                }
+              },
+              "required": [
+                "bed_type",
+                "count"
+              ]
+            }
+          },
+          "beds_count": {
+            "type": "number",
+            "title": "מספר מיטות בחדר (מורשת)",
+            "default": 1
+          },
+          "bed_type": {
+            "type": "string",
+            "enum": [
+              "king",
+              "queen",
+              "single",
+              "bunk",
+              "sofa_bed",
+              "other"
+            ],
+            "default": "queen",
+            "title": "סוג מיטה (מורשת)"
+          },
+          "max_guests_in_room": {
+            "type": "number",
+            "title": "קיבולת אורחים בחדר"
+          },
+          "has_bathroom": {
+            "type": "boolean",
+            "title": "חדר רחצה צמוד",
+            "default": false
+          },
+          "has_private_bathroom": {
+            "type": "boolean",
+            "title": "חדר רחצה פרטי (alias)",
+            "default": false
+          },
+          "room_photo": {
+            "type": "string",
+            "title": "תמונת חדר"
+          },
+          "amenities": {
+            "type": "array",
+            "title": "מתקנים מיוחדים בחדר",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "beds_count"
+        ]
+      }
+    },
+    "amenities": {
+      "type": "array",
+      "title": "מתקנים ברמת הנכס (רשימה שטוחה)",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "additional_bathrooms_count": {
+      "type": "number",
+      "title": "חדרי רחצה נוספים/משותפים",
+      "default": 0
+    },
+    "extra_guest_fee": {
+      "type": "number",
+      "title": "תוספת לאורח מעבר למחיר המלא (₪/לילה)"
+    },
+    "breakfast_fee": {
+      "type": "number",
+      "title": "תוספת ארוחת בוקר (₪/לילה/אורח)"
+    },
+    "contact_phone": {
+      "type": "string",
+      "title": "טלפון/וואטסאפ ליצירת קשר (פורמט בינלאומי)"
+    },
+    "expose_availability_calendar": {
+      "type": "boolean",
+      "title": "חשוף מיני-יומן זמינות ללקוחות",
+      "default": false
     },
     "partial_pricing_enabled": {
       "type": "boolean",
-      "title": "\u05ea\u05de\u05d7\u05d5\u05e8 \u05d7\u05dc\u05e7\u05d9 \u05de\u05d5\u05e4\u05e2\u05dc",
+      "title": "תמחור חלקי מופעל",
       "default": false
     },
     "min_guests": {
       "type": "number",
-      "title": "\u05d0\u05d5\u05e8\u05d7\u05d9\u05dd \u05de\u05d9\u05e0\u05d9\u05de\u05dc\u05d9\u05d9\u05dd \u05dc\u05ea\u05de\u05d7\u05d5\u05e8 \u05d7\u05dc\u05e7\u05d9"
+      "title": "אורחים מינימליים לתמחור חלקי"
     },
     "price_per_adult": {
       "type": "number",
-      "minimum": 0,
-      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05de\u05d1\u05d5\u05d2\u05e8 \u05dc\u05dc\u05d9\u05dc\u05d4 (\u05ea\u05de\u05d7\u05d5\u05e8 \u05d7\u05dc\u05e7\u05d9)"
+      "title": "מחיר למבוגר ללילה (תמחור חלקי)",
+      "minimum": 0
     },
     "price_per_child": {
       "type": "number",
-      "minimum": 0,
-      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05d9\u05dc\u05d3 \u05dc\u05dc\u05d9\u05dc\u05d4 (\u05ea\u05de\u05d7\u05d5\u05e8 \u05d7\u05dc\u05e7\u05d9)"
+      "title": "מחיר לילד ללילה (תמחור חלקי)",
+      "minimum": 0
     },
     "seasonal_pricing": {
       "type": "array",
-      "title": "\u05ea\u05de\u05d7\u05d5\u05e8 \u05e2\u05d5\u05e0\u05ea\u05d9",
+      "title": "תמחור עונתי",
       "items": {
         "type": "object",
         "properties": {
+          "label": {
+            "type": "string",
+            "title": "שם תקופה (חופשי)"
+          },
           "start_date": {
             "type": "string",
-            "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05ea\u05d7\u05dc\u05d4"
+            "title": "תאריך התחלה"
           },
           "end_date": {
             "type": "string",
-            "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05e1\u05d9\u05d5\u05dd"
+            "title": "תאריך סיום"
           },
           "adjustment": {
             "type": "string",
@@ -79,30 +214,105 @@
               "increase",
               "decrease"
             ],
-            "title": "\u05e1\u05d5\u05d2 \u05d4\u05ea\u05d0\u05de\u05d4",
+            "title": "סוג התאמה",
             "default": "increase"
           },
           "percentage": {
             "type": "number",
-            "title": "\u05d0\u05d7\u05d5\u05d6 \u05d4\u05ea\u05d0\u05de\u05d4"
+            "title": "אחוז התאמה",
+            "minimum": 0
+          },
+          "price_per_night": {
+            "type": "number",
+            "title": "מחיר מוחלט ללילה (דורס את האחוזים)"
           }
         },
         "required": [
           "start_date",
-          "end_date",
-          "adjustment",
-          "percentage"
+          "end_date"
         ]
       },
       "default": []
     },
     "description": {
       "type": "string",
-      "title": "\u05ea\u05d9\u05d0\u05d5\u05e8 \u05d7\u05d5\u05e4\u05e9\u05d9"
+      "title": "תיאור חופשי"
+    },
+    "description_cards": {
+      "type": "array",
+      "title": "כרטיסי תיאור מפוצלים (קאש AI)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "icon_keyword": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "paragraph": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "description_cards_snapshot": {
+      "type": "string",
+      "title": "חתימת תיאור בזמן פיצול הכרטיסים"
+    },
+    "cancellation_policy_text": {
+      "type": "string",
+      "title": "מדיניות ביטול (טקסט חופשי)"
+    },
+    "payment_methods": {
+      "type": "array",
+      "title": "אמצעי תשלום מקובלים",
+      "default": [],
+      "items": {
+        "type": "string",
+        "enum": [
+          "מזומן",
+          "העברה בנקאית",
+          "כרטיס אשראי"
+        ]
+      }
+    },
+    "smoking_policy": {
+      "type": "string",
+      "enum": [
+        "אסור לגמרי",
+        "מותר במרפסות בלבד",
+        "מותר"
+      ],
+      "title": "מדיניות עישון"
+    },
+    "nearby_landmarks": {
+      "type": "array",
+      "title": "אתרים מוכרים בסביבה",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "שם האתר"
+          },
+          "travel_time_minutes": {
+            "type": "number",
+            "title": "זמן הגעה בדקות"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
     },
     "images": {
       "type": "array",
-      "title": "\u05ea\u05de\u05d5\u05e0\u05d5\u05ea",
+      "title": "תמונות",
       "items": {
         "type": "string"
       }
@@ -110,67 +320,130 @@
     "approval_status": {
       "type": "string",
       "enum": [
-        "\u05de\u05de\u05ea\u05d9\u05df \u05dc\u05d0\u05d9\u05e9\u05d5\u05e8",
-        "\u05d0\u05d5\u05e9\u05e8",
-        "\u05e0\u05d3\u05d7\u05ea\u05d4"
+        "ממתין לאישור",
+        "אושר",
+        "נדחית"
       ],
-      "default": "\u05d0\u05d5\u05e9\u05e8",
-      "title": "\u05e1\u05d8\u05d8\u05d5\u05e1 \u05d0\u05d9\u05e9\u05d5\u05e8"
+      "default": "אושר",
+      "title": "סטטוס אישור"
     },
     "data_zones": {
       "type": "array",
-      "title": "\u05d0\u05d6\u05d5\u05e8\u05d9 \u05e7\u05dc\u05d9\u05d8\u05d4 \u05d5\u05d0\u05d9\u05e1\u05d5\u05e3 \u05e0\u05ea\u05d5\u05e0\u05d9\u05dd",
+      "title": "אזורי קליטה ואיסוף נתונים",
       "items": {
         "type": "object",
         "properties": {
           "content": {
             "type": "string",
-            "title": "\u05ea\u05d5\u05db\u05df"
+            "title": "תוכן"
           },
           "source_label": {
             "type": "string",
-            "title": "\u05de\u05e7\u05d5\u05e8"
+            "title": "מקור"
           },
           "source_type": {
             "type": "string",
             "enum": [
-              "\u05e9\u05d9\u05d7\u05ea \u05d8\u05dc\u05e4\u05d5\u05df",
-              "\u05e9\u05d9\u05d7\u05ea \u05d5\u05d5\u05d0\u05d8\u05e1\u05d0\u05e4",
-              "\u05d8\u05e7\u05e1\u05d8 \u05d7\u05d5\u05e4\u05e9\u05d9",
-              "\u05e9\u05d0\u05dc\u05d5\u05ea \u05d5\u05ea\u05e9\u05d5\u05d1\u05d5\u05ea"
+              "שיחת טלפון",
+              "שיחת וואטסאפ",
+              "טקסט חופשי",
+              "שאלות ותשובות"
             ],
-            "title": "\u05e1\u05d5\u05d2 \u05de\u05e7\u05d5\u05e8"
+            "title": "סוג מקור"
           },
           "source_date": {
             "type": "string",
-            "title": "\u05ea\u05d0\u05e8\u05d9\u05da"
+            "title": "תאריך"
           }
         }
       }
     },
     "info_summary": {
       "type": "string",
-      "title": "\u05e1\u05d9\u05db\u05d5\u05dd \u05de\u05d9\u05d3\u05e2 \u05dc\u05dc\u05e7\u05d5\u05d7\u05d5\u05ea"
+      "title": "סיכום מידע ללקוחות"
     },
     "info_summary_snapshot": {
       "type": "string",
-      "title": "\u05d7\u05ea\u05d9\u05de\u05ea \u05d0\u05d6\u05d5\u05e8\u05d9 \u05de\u05d9\u05d3\u05e2 \u05d1\u05d6\u05de\u05df \u05d4\u05e1\u05d9\u05db\u05d5\u05dd"
+      "title": "חתימת אזורי מידע בזמן הסיכום"
     },
     "stay_settings": {
       "type": "object",
-      "title": "\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea \u05e6'\u05e7-\u05d0\u05d9\u05df \u05d5\u05d4\u05d5\u05d3\u05e2\u05d5\u05ea \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05d5\u05ea",
+      "title": "הגדרות צ'ק-אין והודעות אוטומטיות",
       "properties": {
-        "address": { "type": "string" },
-        "nav_link": { "type": "string" },
-        "entry_code": { "type": "string" },
-        "key_location": { "type": "string" },
-        "checkin_time": { "type": "string", "default": "15:00" },
-        "checkout_time": { "type": "string", "default": "11:00" },
-        "welcome_message": { "type": "string" },
-        "review_request_message": { "type": "string" },
+        "address": {
+          "type": "string",
+          "title": "כתובת מדויקת לניווט"
+        },
+        "lat": {
+          "type": "number",
+          "title": "קואורדינטת רוחב (latitude)"
+        },
+        "lng": {
+          "type": "number",
+          "title": "קואורדינטת אורך (longitude)"
+        },
+        "nav_link": {
+          "type": "string",
+          "title": "קישור לניווט (Waze/Google Maps)"
+        },
+        "entry_code": {
+          "type": "string",
+          "title": "קוד כניסה / תיבת מפתח"
+        },
+        "key_location": {
+          "type": "string",
+          "title": "מיקום המפתח / הוראות כניסה"
+        },
+        "checkin_time": {
+          "type": "string",
+          "title": "שעת צ'ק-אין",
+          "default": "15:00"
+        },
+        "checkout_time": {
+          "type": "string",
+          "title": "שעת צ'ק-אאוט",
+          "default": "11:00"
+        },
+        "welcome_message": {
+          "type": "string",
+          "title": "הודעת ברוכים הבאים מותאמת אישית"
+        },
+        "review_request_message": {
+          "type": "string",
+          "title": "טקסט בקשת ביקורת אחרי חופשה"
+        },
         "customer_triggers": {
           "type": "array",
-          "items": { "type": "object" },
+          "title": "תזמון הודעות אוטומטיות ללקוח (בחירה + טקסט)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "pre_checkin",
+                  "checkin_day",
+                  "checkin",
+                  "post_checkin",
+                  "pre_checkout",
+                  "morning_checkout"
+                ],
+                "title": "טריגר שליחה"
+              },
+              "enabled": {
+                "type": "boolean",
+                "title": "פעיל",
+                "default": true
+              },
+              "text": {
+                "type": "string",
+                "title": "טקסט מותאם (ריק = ברירת מחדל)"
+              }
+            },
+            "required": [
+              "trigger"
+            ]
+          },
           "default": []
         }
       }
@@ -179,25 +452,42 @@
   "required": [
     "name"
   ],
-  "name": "Zimmer",
   "rls": {
     "read": {},
     "create": {
       "$or": [
-        { "user_condition": { "role": "admin" } },
-        { "data.owner_id": "{{user.id}}" }
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "data.owner_id": "{{user.id}}"
+        }
       ]
     },
     "update": {
       "$or": [
-        { "user_condition": { "role": "admin" } },
-        { "data.owner_id": "{{user.id}}" }
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "data.owner_id": "{{user.id}}"
+        }
       ]
     },
     "delete": {
       "$or": [
-        { "user_condition": { "role": "admin" } },
-        { "data.owner_id": "{{user.id}}" }
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "data.owner_id": "{{user.id}}"
+        }
       ]
     }
   }

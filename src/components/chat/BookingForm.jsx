@@ -6,10 +6,34 @@ import { getBookedRangesForZimmer } from '@/components/chat/DateSearchWidget';
 import BookingDatePicker from '@/components/chat/BookingDatePicker';
 
 export default function BookingForm({ zimmer, onSubmit, prefillDates, promo, onClose }) {
-  const prefillCheckIn = promo?.check_in || prefillDates?.checkIn || '';
-  const prefillCheckOut = promo?.check_out || prefillDates?.checkOut || '';
   const prefillAdults = prefillDates?.num_adults || prefillDates?.numGuests || 1;
   const prefillChildren = prefillDates?.num_children || 0;
+
+  // For an exact search the chosen dates are concrete. For a flexible search
+  // (range + number of nights) we preselect the first valid window so the
+  // calendar opens with a concrete, editable range instead of empty.
+  const computeFlexible = () => {
+    if (prefillDates?.mode !== 'flexible') return { ci: '', co: '' };
+    const rs = prefillDates?.rangeStart;
+    if (!rs) return { ci: '', co: '' };
+    const nights = prefillDates?.numNights || 2;
+    const start = new Date(rs);
+    const out = new Date(start.getTime() + nights * 86400000);
+    const toISO = (d) => { const x = new Date(d); const y = x.getFullYear(); const m = String(x.getMonth() + 1).padStart(2, '0'); const day = String(x.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; };
+    let ci = toISO(start);
+    let co = toISO(out);
+    // If the computed checkout falls past the range end, anchor checkout at the range end
+    const re = prefillDates?.rangeEnd;
+    if (re && new Date(co) > new Date(re)) {
+      co = re;
+      const shifted = new Date(new Date(re).getTime() - nights * 86400000);
+      ci = toISO(shifted);
+    }
+    return { ci, co };
+  };
+  const flex = computeFlexible();
+  const prefillCheckIn = promo?.check_in || prefillDates?.checkIn || flex.ci || '';
+  const prefillCheckOut = promo?.check_out || prefillDates?.checkOut || flex.co || '';
 
   const [form, setForm] = useState({
     guest_name: '',
@@ -33,6 +57,36 @@ export default function BookingForm({ zimmer, onSubmit, prefillDates, promo, onC
       .catch(() => { if (active) setLoadingAvailability(false); });
     return () => { active = false; };
   }, [zimmer.id]);
+
+  // Pre-fill name & phone from what we already know about the customer (profile / past bookings).
+  // Dates and guest counts are already pre-filled from the search context; everything stays editable.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const me = await api.auth.me();
+        if (!me || !active) return;
+        let phone = '';
+        try {
+          const profiles = await api.entities.CustomerProfile.filter({ user_id: me.id });
+          if (profiles[0]?.phone) phone = profiles[0].phone;
+        } catch {}
+        if (!phone) {
+          try {
+            const bookings = await api.entities.BookingRequest.filter({ created_by_id: me.id }, '-created_date', 1);
+            if (bookings[0]?.guest_phone) phone = bookings[0].guest_phone;
+          } catch {}
+        }
+        if (!active) return;
+        setForm(f => ({
+          ...f,
+          guest_name: f.guest_name || me.full_name || '',
+          guest_phone: f.guest_phone || phone || '',
+        }));
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, []);
 
   const totalGuests = (parseInt(form.num_adults) || 0) + (parseInt(form.num_children) || 0);
   const nights = calcNights(form.check_in, form.check_out);

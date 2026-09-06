@@ -53,9 +53,9 @@ async function main() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt: 'שלום' }),
   });
-  assert(ok.status === 410, 'SEC-005 invoke-llm deprecated → 410');
+  assert(ok.status === 200, 'SEC-005 guest invoke-llm → 200');
   const okBody = await ok.json();
-  assert(okBody.code === 'DEPRECATED', 'invoke-llm returns DEPRECATED code');
+  assert(typeof okBody === 'string' && okBody.length > 0, 'invoke-llm returns mock string');
 
   const blocked = await fetch(`${base}/api/ai/invoke-llm`, {
     method: 'POST',
@@ -65,7 +65,7 @@ async function main() {
       add_context_from_internet: true,
     }),
   });
-  assert(blocked.status === 410, 'SEC-005 deprecated route blocks all invoke-llm calls');
+  assert(blocked.status === 403, 'SEC-005 anon internet context → 403');
 
   await new Promise((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));

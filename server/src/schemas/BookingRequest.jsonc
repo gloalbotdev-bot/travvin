@@ -3,92 +3,92 @@
   "properties": {
     "zimmer_id": {
       "type": "string",
-      "title": "\u05de\u05d6\u05d4\u05d4 \u05e6\u05d9\u05de\u05e8"
+      "title": "מזהה צימר"
     },
     "zimmer_name": {
       "type": "string",
-      "title": "\u05e9\u05dd \u05d4\u05e6\u05d9\u05de\u05e8"
+      "title": "שם הצימר"
     },
     "owner_id": {
       "type": "string",
-      "title": "\u05de\u05d6\u05d4\u05d4 \u05d1\u05e2\u05dc \u05d4\u05de\u05ea\u05d7\u05dd"
+      "title": "מזהה בעל המתחם"
     },
     "guest_name": {
       "type": "string",
-      "title": "\u05e9\u05dd \u05d4\u05dc\u05e7\u05d5\u05d7"
+      "title": "שם הלקוח"
     },
     "guest_phone": {
       "type": "string",
-      "title": "\u05d8\u05dc\u05e4\u05d5\u05df"
+      "title": "טלפון"
     },
     "check_in": {
       "type": "string",
       "format": "date",
-      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05db\u05e0\u05d9\u05e1\u05d4"
+      "title": "תאריך כניסה"
     },
     "check_out": {
       "type": "string",
       "format": "date",
-      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d9\u05e6\u05d9\u05d0\u05d4"
+      "title": "תאריך יציאה"
     },
     "num_guests": {
       "type": "number",
-      "title": "\u05de\u05e1\u05e4\u05e8 \u05d0\u05d5\u05e8\u05d7\u05d9\u05dd"
+      "title": "מספר אורחים"
     },
     "num_adults": {
       "type": "number",
-      "title": "\u05de\u05e1\u05e4\u05e8 \u05de\u05d1\u05d5\u05d2\u05e8\u05d9\u05dd"
+      "title": "מספר מבוגרים"
     },
     "num_children": {
       "type": "number",
-      "title": "\u05de\u05e1\u05e4\u05e8 \u05d9\u05dc\u05d3\u05d9\u05dd"
+      "title": "מספר ילדים"
     },
     "status": {
       "type": "string",
       "enum": [
-        "\u05de\u05de\u05ea\u05d9\u05e0\u05d4",
-        "\u05d0\u05d5\u05e9\u05e8\u05d4",
-        "\u05e0\u05d3\u05d7\u05ea\u05d4"
+        "ממתינה",
+        "אושרה",
+        "נדחתה"
       ],
-      "default": "\u05de\u05de\u05ea\u05d9\u05e0\u05d4",
-      "title": "\u05e1\u05d8\u05d8\u05d5\u05e1"
+      "default": "ממתינה",
+      "title": "סטטוס"
     },
     "notes": {
       "type": "string",
-      "title": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+      "title": "הערות"
     },
     "total_price": {
       "type": "number",
-      "title": "\u05e1\u05da \u05ea\u05e9\u05dc\u05d5\u05dd \u05de\u05d7\u05d5\u05e9\u05d1"
+      "title": "סך תשלום מחושב"
     },
     "calendar_event_id": {
       "type": "string",
-      "title": "\u05de\u05d6\u05d4\u05d4 \u05d0\u05d9\u05e8\u05d5\u05e2 \u05d1\u05d9\u05d5\u05de\u05df"
+      "title": "מזהה אירוע ביומן"
     },
     "deletion_request_reason": {
       "type": "string",
-      "title": "\u05e1\u05d9\u05d1\u05ea \u05d1\u05e7\u05e9\u05ea \u05de\u05d7\u05d9\u05e7\u05d4 (\u05d1\u05e2\u05dc \u05de\u05ea\u05d7\u05dd \u2192 \u05d0\u05d3\u05de\u05d9\u05df)"
+      "title": "סיבת בקשת מחיקה (בעל מתחם → אדמין)"
     },
     "deletion_request_at": {
       "type": "string",
-      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d1\u05e7\u05e9\u05ea \u05de\u05d7\u05d9\u05e7\u05d4"
+      "title": "תאריך בקשת מחיקה"
     },
     "cancel_request_reason": {
       "type": "string",
-      "title": "\u05e1\u05d9\u05d1\u05ea \u05d1\u05e7\u05e9\u05ea \u05d1\u05d9\u05d8\u05d5\u05dc (\u05dc\u05e7\u05d5\u05d7 \u2192 \u05d1\u05e2\u05dc \u05de\u05ea\u05d7\u05dd)"
+      "title": "סיבת בקשת ביטול (לקוח → בעל מתחם)"
     },
     "cancel_request_at": {
       "type": "string",
-      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d1\u05e7\u05e9\u05ea \u05d1\u05d9\u05d8\u05d5\u05dc"
+      "title": "תאריך בקשת ביטול"
     },
     "checked_out": {
       "type": "boolean",
-      "title": "\u05d1\u05d5\u05e6\u05e2 \u05e6'\u05e7-\u05d0\u05d0\u05d5\u05d8",
+      "title": "בוצע צ'ק-אאוט",
       "default": false
     },
     "checked_out_at": {
       "type": "string",
-      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d1\u05d9\u05e6\u05d5\u05e2 \u05e6'\u05e7-\u05d0\u05d0\u05d5\u05d8"
+      "title": "תאריך ביצוע צ'ק-אאוט"
     },
     "checkout_by": {
       "type": "string",
@@ -97,11 +97,11 @@
         "owner",
         "admin"
       ],
-      "title": "\u05de\u05d9 \u05d1\u05d9\u05e6\u05e2 \u05d0\u05ea \u05d4\u05e6'\u05e7-\u05d0\u05d0\u05d5\u05d8"
+      "title": "מי ביצע את הצ'ק-אאוט"
     },
     "checkout_photos": {
       "type": "array",
-      "title": "\u05ea\u05de\u05d5\u05e0\u05d5\u05ea \u05e6'\u05e7-\u05d0\u05d0\u05d5\u05d8",
+      "title": "תמונות צ'ק-אאוט",
       "items": {
         "type": "string"
       },
@@ -109,15 +109,19 @@
     },
     "checkout_notes": {
       "type": "string",
-      "title": "\u05d4\u05e2\u05e8\u05d5\u05ea \u05e6'\u05e7-\u05d0\u05d0\u05d5\u05d8"
+      "title": "הערות צ'ק-אאוט"
     },
     "checkout_rating": {
       "type": "number",
-      "title": "\u05d3\u05d9\u05e8\u05d5\u05d2 \u05d7\u05d5\u05e4\u05e9\u05d4 (\u05e6'\u05e7-\u05d0\u05d0\u05d5\u05d8)"
+      "title": "דירוג חופשה (צ'ק-אאוט)"
     },
     "checkout_report": {
       "type": "string",
-      "title": "\u05d3\u05d9\u05d5\u05d5\u05d7 \u05ea\u05e7\u05dc\u05d4/\u05e0\u05d6\u05e7 \u05d1\u05e6'\u05e7-\u05d0\u05d0\u05d5\u05d8"
+      "title": "דיווח תקלה/נזק בצ'ק-אאוט"
+    },
+    "source_video_id": {
+      "type": "string",
+      "title": "מזהה סרטון מקור (Discover)"
     }
   },
   "required": [
@@ -131,29 +135,61 @@
   "rls": {
     "read": {
       "$or": [
-        { "data.owner_id": "{{user.id}}" },
-        { "created_by_id": "{{user.id}}" },
-        { "user_condition": { "role": "admin" } }
+        {
+          "data.owner_id": "{{user.id}}"
+        },
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
       ]
     },
     "create": {
       "$or": [
-        { "user_condition": { "authenticated": true } },
-        { "user_condition": { "role": "admin" } }
+        {
+          "user_condition": {
+            "authenticated": true
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
       ]
     },
     "update": {
       "$or": [
-        { "data.owner_id": "{{user.id}}" },
-        { "created_by_id": "{{user.id}}" },
-        { "user_condition": { "role": "admin" } }
+        {
+          "data.owner_id": "{{user.id}}"
+        },
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
       ]
     },
     "delete": {
       "$or": [
-        { "data.owner_id": "{{user.id}}" },
-        { "created_by_id": "{{user.id}}" },
-        { "user_condition": { "role": "admin" } }
+        {
+          "data.owner_id": "{{user.id}}"
+        },
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
       ]
     }
   }

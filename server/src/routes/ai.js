@@ -1,8 +1,12 @@
 /**
- * AI routes — M10 InvokeLLM (deprecated Phase 8; use /api/assistant/chat).
+ * AI routes — M10 InvokeLLM + TranscribeAudio (ported UI compatibility).
+ * Prefer /api/assistant/chat for new assistant flows.
  */
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import { invokeLlm } from '../lib/llm/index.js';
+import { transcribeAudioUrl } from '../lib/transcribe-audio.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const guestLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -50,12 +54,33 @@ export function applyLlmGuestCaps(body, user) {
 export function createAiRouter() {
   const router = Router();
 
-  router.post('/invoke-llm', guestLimiter, authLimiter, (_req, res) => {
-    res.status(410).json({
-      error:
-        'POST /api/ai/invoke-llm is deprecated. Use POST /api/assistant/chat with a profile instead.',
-      code: 'DEPRECATED',
-    });
+  router.post('/invoke-llm', guestLimiter, authLimiter, async (req, res) => {
+    try {
+      const payload = applyLlmGuestCaps(req.body, req.user);
+      const result = await invokeLlm(payload);
+      res.json(result);
+    } catch (err) {
+      const status = err.status || 500;
+      res.status(status).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  router.post('/transcribe-audio', requireAuth, guestLimiter, authLimiter, async (req, res) => {
+    try {
+      const audioUrl = req.body?.audio_url;
+      if (!audioUrl) {
+        return res.status(400).json({ error: 'audio_url required' });
+      }
+      const text = await transcribeAudioUrl(String(audioUrl));
+      res.json(text);
+    } catch (err) {
+      const status = err.status || 500;
+      res.status(status).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   });
 
   return router;

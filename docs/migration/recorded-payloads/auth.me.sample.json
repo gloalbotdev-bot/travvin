@@ -1,0 +1,7 @@
+{
+  "_comment": "Skeleton — capture auth.me() from a test account after login.",
+  "id": "user-id",
+  "email": "test@example.com",
+  "full_name": "Test User",
+  "role": "owner"
+}

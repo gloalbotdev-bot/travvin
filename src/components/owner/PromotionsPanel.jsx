@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
 import { Tag, X, Trash2, Sparkles } from 'lucide-react';
 import { calcBookingTotalForZimmer, calcNights, formatILS, clampDiscount } from '@/lib/bookingPrice';
+import DateRangeField from '@/components/common/DateRangeField';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 const addDays = (d, n) => new Date(new Date(d).getTime() + n * 86400000).toISOString().split('T')[0];
@@ -27,7 +28,7 @@ export default function PromotionsPanel({ ownerId }) {
     setLoading(true);
     const [zs, bks, prs] = await Promise.all([
       api.entities.Zimmer.filter({ owner_id: ownerId }),
-      api.entities.BookingRequest.filter({ owner_id: ownerId, status: 'אושרה' }),
+      api.entities.BookingRequest.filter({ status: 'אושרה' }),
       api.entities.Promotion.filter({ owner_id: ownerId }),
     ]);
     setZimmers(zs);
@@ -199,19 +200,16 @@ export default function PromotionsPanel({ ownerId }) {
               <button onClick={() => setCreating(null)} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#F8F7F4', color: '#6B7280' }}><X size={16} /></button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div>
-                <label className="text-xs font-medium block mb-1" style={{ color: '#6B7280' }}>כניסה</label>
-                <input type="date" min={weekStart} max={weekEnd} value={form.check_in}
-                  onChange={e => { const ci = e.target.value; setForm(f => ({ ...f, check_in: ci, check_out: addDays(ci, 1) })); }}
-                  className="w-full px-3 py-2.5 text-sm rounded-xl outline-none" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0' }} />
-              </div>
-              <div>
-                <label className="text-xs font-medium block mb-1" style={{ color: '#6B7280' }}>יציאה</label>
-                <input type="date" min={minCheckOut} max={weekEnd} value={form.check_out}
-                  onChange={e => setForm(f => ({ ...f, check_out: e.target.value }))}
-                  className="w-full px-3 py-2.5 text-sm rounded-xl outline-none" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0' }} />
-              </div>
+            <div className="mb-4">
+              <label className="text-xs font-medium block mb-1" style={{ color: '#6B7280' }}>תאריכי המבצע</label>
+              <DateRangeField
+                start={form.check_in}
+                end={form.check_out}
+                onChange={(s, e) => setForm(f => ({ ...f, check_in: s, check_out: e }))}
+                min={weekStart}
+                max={weekEnd}
+                placeholder="בחר תאריכים בשבוע הקרוב"
+              />
             </div>
 
             <div className="mb-5">

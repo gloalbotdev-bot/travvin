@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/api/client';
 import { Send, Sparkles, MapPin, Utensils, Compass, ArrowRight } from 'lucide-react';
+import { useAutoResize } from '@/hooks/useAutoResize';
+import MicButton from '@/components/chat/MicButton';
 
 const fmtTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
@@ -29,6 +31,7 @@ export default function VacationAgentChat({ user, onSwitchToSearch }) {
   const [profile, setProfile] = useState(null);
   const [quickOpts, setQuickOpts] = useState([]);
   const endRef = useRef(null);
+  const { ref: inputRef, resize: resizeInput } = useAutoResize(input, 240);
 
   useEffect(() => {
     (async () => {
@@ -36,13 +39,10 @@ export default function VacationAgentChat({ user, onSwitchToSearch }) {
       let prof = null;
       try {
         if (user?.id) {
-          const all = await api.entities.BookingRequest.filter(
-            { created_by_id: user.id },
-            '-created_date',
-            60,
-          );
+          const all = await api.entities.BookingRequest.list('-created_date', 60);
+          const isMine = b => b.created_by_id === user.id || (b.guest_name && user.full_name && b.guest_name.trim() === user.full_name.trim());
           upcoming = all
-            .filter(b => new Date(b.check_in) >= new Date())
+            .filter(b => isMine(b) && new Date(b.check_in) >= new Date())
             .sort((a, b) => new Date(a.check_in) - new Date(b.check_in));
           const profs = await api.entities.CustomerProfile.filter({ user_id: user.id });
           prof = profs[0] || null;
@@ -72,6 +72,25 @@ export default function VacationAgentChat({ user, onSwitchToSearch }) {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, isTyping]);
 
+  const buildContext = () => {
+    let c = `פרטי הלקוח: ${user?.full_name || ''} (${user?.email || ''}).`;
+    if (profile) {
+      if (profile.vacation_preferences) c += `\nהעדפות נופש: ${profile.vacation_preferences}`;
+      if (profile.preferred_regions) c += `\nאזורים מועדפים: ${profile.preferred_regions}`;
+      if (profile.num_guests_usual) c += `\nמספר אורחים רגיל: ${profile.num_guests_usual}`;
+    }
+    if (bookings.length > 0) {
+      c += `\n\nהזמנות קרובות:`;
+      bookings.slice(0, 3).forEach(b => {
+        const parts = [b.num_adults ? `${b.num_adults} מבוגרים` : null, b.num_children ? `${b.num_children} ילדים` : null].filter(Boolean).join(' + ');
+        c += `\n- ${b.zimmer_name} | כניסה ${b.check_in} עד ${b.check_out} | ${parts || 'הרכב לא צוין'} | סטטוס: ${b.status}`;
+      });
+    } else {
+      c += `\nאין הזמנות קרובות כרגע.`;
+    }
+    return c;
+  };
+
   const send = async (overrideText) => {
     const text = (overrideText || input).trim();
     if (!text || isTyping) return;
@@ -80,17 +99,22 @@ export default function VacationAgentChat({ user, onSwitchToSearch }) {
     setMessages(prev => [...prev, { id: Date.now() + Math.random(), role: 'user', content: text, time: fmtTime() }]);
     setIsTyping(true);
     try {
-      const recentTurns = messages
-        .filter((m) => m.role === 'user' || m.role === 'bot')
-        .slice(-11)
-        .map((m) => ({ role: m.role, content: m.content }));
+      const ctx = buildContext();
+      const prompt = `אתה סוכן נופש אישי. ענה בעברית חמה ומועילה.
+${ctx}
 
-      const response = await api.assistant.chat({
-        profile: 'vacation_agent',
-        message: text,
-        clientState: { recentTurns },
+בקשת הלקוח: "${text}"
+
+המלץ בצורה מפורטת: מסעדות, אטרקציות, נקודות עניין ופעילויות באזור החופשה ובדרך אליו.
+- התאם את ההמלצות להרכב הנוסעים (מבוגרים/ילדים) שמופיע למעלה. אם יש ילדים, תעדף מקומות מתאימים למשפחות.
+- השתמש במידע עדכני מהרשת (כתובות, שעות פתיחה, דירוגים).
+- פרק את התשובה לפסקאות עם כותרות ורשימות להבהרה.`;
+      const res = await api.integrations.Core.InvokeLLM({
+        prompt,
+        add_context_from_internet: true,
+        model: 'gemini_3_flash',
       });
-      const answer = response?.message?.content || 'מצטער, לא הצלחתי להפיק תשובה.';
+      const answer = typeof res === 'string' ? res : (res?.message || 'מצטער, לא הצלחתי להפיק תשובה.');
       setMessages(prev => [...prev, { id: Date.now() + Math.random(), role: 'bot', content: answer, time: fmtTime() }]);
       setQuickOpts(buildQuick(bookings));
     } catch (e) {
@@ -146,7 +170,7 @@ export default function VacationAgentChat({ user, onSwitchToSearch }) {
       </div>
 
       {/* Input */}
-      <div className="bg-[#F0F0F0] px-3 py-3 flex items-end gap-2">
+      <div className="bg-[#F0F0F0] px-3 py-3 flex items-end gap-2" style={{ paddingBottom: 'max(0.75rem, calc(env(safe-area-inset-bottom) + 64px))' }}>
         <button
           onClick={() => send(null)}
           disabled={!input.trim() || isTyping}
@@ -156,15 +180,17 @@ export default function VacationAgentChat({ user, onSwitchToSearch }) {
         </button>
         <div className="flex-1 bg-white rounded-full px-4 py-3 flex items-center shadow-sm min-h-[48px]">
           <textarea
+            ref={inputRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => { setInput(e.target.value); resizeInput(); }}
             onKeyDown={handleKeyDown}
             placeholder="במה לעזור לך בחופשה?..."
-            className="w-full bg-transparent outline-none resize-none text-gray-800 text-sm leading-5 max-h-32"
+            className="w-full bg-transparent outline-none resize-none overflow-y-auto text-gray-800 text-sm leading-5"
             rows={1}
             style={{ direction: 'rtl' }}
           />
         </div>
+        <MicButton tone="light" disabled={isTyping} onText={t => setInput(p => (p ? p.replace(/\s+$/, '') + ' ' + t : t))} />
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Calendar, Users, Search, Wallet, Sparkles, MapPin } from 'lucide-react';
 import { REGION_OPTIONS } from '@/lib/regions';
 import { ownFetch } from '@/api/own/http';
+import DateRangeField from '@/components/common/DateRangeField';
 
 // Checks if two date ranges overlap (inclusive nights)
 export function datesOverlap(checkIn1, checkOut1, checkIn2, checkOut2) {
@@ -12,7 +13,7 @@ export function datesOverlap(checkIn1, checkOut1, checkIn2, checkOut2) {
   return a1 < b2 && a2 > b1;
 }
 
-/** Busy ranges without PII (M15 #2) — public /api/bookings/busy */
+/** Busy ranges without PII — public /api/bookings/busy */
 async function fetchBusyRanges(zimmerId) {
   const q = zimmerId ? `?zimmer_id=${encodeURIComponent(zimmerId)}` : '';
   const data = await ownFetch(`/api/bookings/busy${q}`, { method: 'GET', auth: false });
@@ -149,29 +150,16 @@ export default function DateSearchWidget({ onSearch, mode = 'exact', initialAmen
 
       <form onSubmit={handleSubmit} className="p-4 space-y-3">
         {searchMode === 'exact' ? (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs font-medium text-gray-600 block mb-1">כניסה</label>
-              <input
-                required
-                type="date"
-                min={today}
-                value={checkIn}
-                onChange={e => { setCheckIn(e.target.value); if (checkOut && e.target.value >= checkOut) setCheckOut(''); }}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-400"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600 block mb-1">יציאה</label>
-              <input
-                required
-                type="date"
-                min={minCheckOut}
-                value={checkOut}
-                onChange={e => setCheckOut(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-400"
-              />
-            </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">תאריכי שהייה</label>
+            <DateRangeField
+              start={checkIn}
+              end={checkOut}
+              onChange={(s, e) => { setCheckIn(s); setCheckOut(e); }}
+              min={today}
+              placeholder="בחר כניסה ויציאה"
+              className=""
+            />
           </div>
         ) : (
           <div className="space-y-3">
@@ -190,29 +178,15 @@ export default function DateSearchWidget({ onSearch, mode = 'exact', initialAmen
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">החל מ</label>
-                <input
-                  required
-                  type="date"
-                  min={today}
-                  value={rangeStart}
-                  onChange={e => setRangeStart(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-400"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">עד</label>
-                <input
-                  required
-                  type="date"
-                  min={rangeStart || today}
-                  value={rangeEnd}
-                  onChange={e => setRangeEnd(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-400"
-                />
-              </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">טווח תאריכים אפשרי</label>
+              <DateRangeField
+                start={rangeStart}
+                end={rangeEnd}
+                onChange={(s, e) => { setRangeStart(s); setRangeEnd(e); }}
+                min={today}
+                placeholder="בחר טווח תאריכים"
+              />
             </div>
           </div>
         )}

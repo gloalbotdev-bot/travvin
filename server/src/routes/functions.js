@@ -17,6 +17,21 @@ import { sendGuestMessage } from '../lib/send-guest-message.js';
 import { sendSupplierMessage } from '../lib/send-supplier-message.js';
 import { performCheckout } from '../lib/perform-checkout.js';
 import { generateAIRecommendations } from '../lib/generate-ai-recommendations.js';
+import { getVideoFeed } from '../lib/video-feed.js';
+import { toggleVideoLike } from '../lib/video-likes.js';
+import {
+  createZimmerVideo,
+  deleteVideo,
+  listOwnerVideos,
+  setVideoVisibility,
+  setVideoCommentsHidden,
+  updateVideoCaption,
+} from '../lib/video-owner.js';
+import { createVideoProposal, respondVideoProposal } from '../lib/video-proposal.js';
+import { searchIsraelAddresses } from '../lib/israel-address-search.js';
+import { buildGuestSummary } from '../lib/build-guest-summary.js';
+import { appendChatMessage, splitCustomerChat } from '../lib/chat-session-write.js';
+import { getOwnerStatistics } from '../lib/get-owner-statistics.js';
 
 /**
  * @param {ReturnType<import('../lib/entity-store.js').createEntityStore>} store
@@ -156,6 +171,178 @@ export function createFunctionsRouter(store, prisma) {
 
   router.post('/sendScheduledSupplierMessages', (_req, res) => {
     res.status(403).json({ error: 'Forbidden: internal only' });
+  });
+
+  router.post('/autoCheckoutExpiredStays', (_req, res) => {
+    res.status(403).json({ error: 'Forbidden: internal only' });
+  });
+
+  router.post('/getVideoFeed', async (req, res) => {
+    try {
+      const result = await getVideoFeed(store, { actor: req.actor || null });
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/toggleVideoLike', requireAuth, async (req, res) => {
+    try {
+      const result = await toggleVideoLike(store, {
+        video_id: req.body?.video_id,
+        actor: req.actor || req.user,
+      });
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/createZimmerVideo', requireAuth, async (req, res) => {
+    try {
+      const result = await createZimmerVideo(store, {
+        zimmer_id: req.body?.zimmer_id,
+        video_url: req.body?.video_url,
+        caption: req.body?.caption,
+        actor: req.actor || req.user,
+      });
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/deleteVideo', requireAuth, async (req, res) => {
+    try {
+      const result = await deleteVideo(store, {
+        video_id: req.body?.video_id,
+        actor: req.actor || req.user,
+      });
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/listOwnerVideos', requireAuth, async (req, res) => {
+    try {
+      const result = await listOwnerVideos(store, { actor: req.actor || req.user });
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/setVideoVisibility', requireAuth, async (req, res) => {
+    try {
+      const result = await setVideoVisibility(store, {
+        video_id: req.body?.video_id,
+        hidden: req.body?.hidden,
+        actor: req.actor || req.user,
+      });
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/setVideoCommentsHidden', requireAuth, async (req, res) => {
+    try {
+      const result = await setVideoCommentsHidden(store, {
+        zimmer_id: req.body?.zimmer_id,
+        comments_hidden: req.body?.comments_hidden,
+        actor: req.actor || req.user,
+      });
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/updateVideoCaption', requireAuth, async (req, res) => {
+    try {
+      const result = await updateVideoCaption(store, {
+        video_id: req.body?.video_id,
+        caption: req.body?.caption,
+        actor: req.actor || req.user,
+      });
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/createVideoProposal', requireAuth, async (req, res) => {
+    try {
+      const result = await createVideoProposal(store, {
+        zimmer_id: req.body?.zimmer_id,
+        video_url: req.body?.video_url,
+        caption: req.body?.caption,
+        note: req.body?.note,
+        actor: req.actor || req.user,
+      });
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/respondVideoProposal', requireAuth, async (req, res) => {
+    try {
+      const result = await respondVideoProposal(store, {
+        video_id: req.body?.video_id,
+        decision: req.body?.decision,
+        actor: req.actor || req.user,
+      });
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/searchIsraelAddresses', requireAuth, async (req, res) => {
+    try {
+      const result = await searchIsraelAddresses(req.body || {});
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/buildGuestSummary', requireAuth, async (req, res) => {
+    try {
+      const result = await buildGuestSummary(store, req.body || {}, req.actor || req.user);
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/appendChatMessage', requireAuth, async (req, res) => {
+    try {
+      const result = await appendChatMessage(store, req.body || {}, req.actor || req.user);
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/splitCustomerChat', requireAuth, async (req, res) => {
+    try {
+      const result = await splitCustomerChat(store, req.body || {}, req.actor || req.user);
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/getOwnerStatistics', requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const result = await getOwnerStatistics(store, req.actor || req.user);
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
   });
 
   return router;

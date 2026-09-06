@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { getApiBase, getStoredToken } from '@/api/own/http';
-import { User, Bell, Link, ArrowRight, Save, Check } from 'lucide-react';
+import { User, Bell, Link, ArrowRight, Save, Check, Upload } from 'lucide-react';
 
 const inputStyle = {
   background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A', borderRadius: '12px', outline: 'none',
@@ -14,35 +13,21 @@ export default function AccountSettings({ embedded = false }) {
   const [tab, setTab] = useState('profile');
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState({ full_name: '', phone: '', business_name: '' });
+  const [profile, setProfile] = useState({ full_name: '', phone: '', business_name: '', avatar_url: '' });
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const [notifications, setNotifications] = useState({ new_booking: true, booking_approved: true, booking_rejected: false, daily_summary: false });
-  const [calStatus, setCalStatus] = useState({ connected: false });
 
   useEffect(() => {
-    api.auth.me().then(async (u) => {
+    api.auth.me().then(u => {
       setUser(u);
-      setProfile({ full_name: u.full_name || '', phone: u.phone || '', business_name: u.business_name || '' });
-      if (u.notifications) setNotifications((n) => ({ ...n, ...u.notifications }));
+      setProfile({ full_name: u.full_name || '', phone: u.phone || '', business_name: u.business_name || '', avatar_url: u.avatar_url || '' });
+      if (u.notifications) setNotifications({ ...notifications, ...u.notifications });
       setLoading(false);
-      try {
-        const token = getStoredToken();
-        if (token) {
-          const res = await fetch(`${getApiBase()}/api/connectors/google-calendar/status`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) setCalStatus(await res.json());
-        }
-      } catch { /* ignore */ }
     });
   }, []);
 
-  const connectCalendar = () => {
-    const token = getStoredToken();
-    if (!token) return;
-    window.location.href = `${getApiBase()}/api/connectors/google-calendar/oauth?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent('/account-settings')}`;
-  };
   const handleSave = async () => {
-    if (tab === 'profile') await api.auth.updateMe({ phone: profile.phone, business_name: profile.business_name });
+    if (tab === 'profile') await api.auth.updateMe({ phone: profile.phone, business_name: profile.business_name, avatar_url: profile.avatar_url });
     else if (tab === 'notifications') await api.auth.updateMe({ notifications });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -98,6 +83,33 @@ export default function AccountSettings({ embedded = false }) {
         {/* Profile */}
         {tab === 'profile' && (
           <div className="rounded-2xl p-6 space-y-4" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
+            <div className="flex items-center gap-4 pb-4" style={{ borderBottom: '1px solid #F0EEE8' }}>
+              <div className="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ background: '#F0EEE8', border: '2px solid #F3EEE3' }}>
+                {profile.avatar_url
+                  ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                  : <span className="text-xl font-bold" style={{ color: '#9CA3AF' }}>{(profile.full_name || '?')[0]}</span>}
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>תמונת פרופיל</p>
+                <p className="text-xs mb-2" style={{ color: '#9CA3AF' }}>מוצגת ללקוחות בפיד הוידאו ובצ'אט הישיר</p>
+                <label className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition-all" style={{ background: 'rgba(249,115,22,0.1)', color: '#EA580C' }}>
+                  {avatarBusy ? <div className="w-3.5 h-3.5 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin" /> : <Upload size={13} />}
+                  {avatarBusy ? 'מעלה...' : 'העלה תמונה'}
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const f = e.target.files?.[0]; e.target.value = '';
+                    if (!f) return;
+                    setAvatarBusy(true);
+                    try {
+                      const { file_url } = await api.integrations.Core.UploadFile({ file: f });
+                      const updated = await api.auth.updateMe({ avatar_url: file_url });
+                      setProfile((p) => ({ ...p, avatar_url: file_url }));
+                      setUser((u) => ({ ...u, avatar_url: file_url }));
+                    } catch { alert('שגיאה בהעלאת התמונה.'); }
+                    setAvatarBusy(false);
+                  }} />
+                </label>
+              </div>
+            </div>
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: '#6B7280' }}>שם מלא</label>
               <input value={profile.full_name} disabled className="w-full px-4 py-3 text-sm cursor-not-allowed" style={{ ...inputStyle, color: '#9CA3AF' }} />
@@ -159,17 +171,7 @@ export default function AccountSettings({ embedded = false }) {
                   <p className="text-xs" style={{ color: '#9CA3AF' }}>סנכרן הזמנות ישירות ליומן שלך</p>
                 </div>
               </div>
-              <span
-                className="text-xs px-3 py-1 rounded-full font-semibold cursor-pointer"
-                style={{
-                  background: calStatus.connected ? 'rgba(34,197,94,0.1)' : 'rgba(249,115,22,0.12)',
-                  color: calStatus.connected ? '#16A34A' : '#EA580C',
-                }}
-                onClick={() => { if (!calStatus.connected) connectCalendar(); }}
-                title={calStatus.connected ? calStatus.account_email || 'מחובר' : 'לחץ לחיבור'}
-              >
-                {calStatus.connected ? 'מחובר ✓' : 'חבר יומן'}
-              </span>
+              <span className="text-xs px-3 py-1 rounded-full font-semibold" style={{ background: 'rgba(34,197,94,0.1)', color: '#16A34A' }}>מחובר ✓</span>
             </div>
             {[
               { label: 'WhatsApp Business', desc: 'שלח עדכונים ללקוחות דרך וואטסאפ', icon: '📱' },

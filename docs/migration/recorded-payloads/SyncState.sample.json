@@ -1,0 +1,14 @@
+{
+  "_comment": "Skeleton golden fixture — replace with live API samples (no unnecessary PII). Shape only.",
+  "entity": "SyncState",
+  "sample": {
+    "id": "example-id",
+    "sync_token": null,
+    "last_sync_at": null,
+    "last_status": null,
+    "last_error": null,
+    "auto_sync": false,
+    "created_date": "2026-01-01T00:00:00.000Z",
+    "updated_date": "2026-01-01T00:00:00.000Z"
+  }
+}

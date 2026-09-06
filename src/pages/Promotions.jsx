@@ -4,6 +4,7 @@ import { api } from '@/api/client';
 import { Tag, ArrowRight, MessageSquare, CalendarCheck, Sparkles } from 'lucide-react';
 import { Image } from '@/components/ui/image';
 import { calcNights, formatILS, promoOriginalPerNight, promoDiscountedPerNight, promoStayTotal } from '@/lib/bookingPrice';
+import CustomerBottomNav from '@/components/customer/CustomerBottomNav';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -52,7 +53,7 @@ export default function Promotions() {
         <a href="/chat" className="text-xs px-3 py-1.5 rounded-full" style={{ background: '#F8F7F4', color: '#6B7280' }}>צ'אט</a>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-6">
+      <div className="max-w-5xl mx-auto px-4 py-6" style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
         {loading ? (
           <div className="flex items-center justify-center py-24">
             <div className="w-7 h-7 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
@@ -119,6 +120,7 @@ export default function Promotions() {
           </div>
         )}
       </div>
+      <CustomerBottomNav />
     </div>
   );
 }

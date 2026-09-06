@@ -33,6 +33,7 @@ const ENTITY_NAMES = [
   'CustomerProfile',
   'DirectChat',
   'GuestMessage',
+  'GuestProfile',
   'OwnerRequest',
   'Promotion',
   'Review',
@@ -42,7 +43,9 @@ const ENTITY_NAMES = [
   'SystemMessage',
   'UnansweredQuestion',
   'User',
+  'VideoLike',
   'Zimmer',
+  'ZimmerVideo',
 ];
 
 /** Auto fields managed by the store — not validated as schema properties. */

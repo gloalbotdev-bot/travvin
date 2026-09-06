@@ -1,0 +1,121 @@
+{
+  "name": "GuestProfile",
+  "type": "object",
+  "title": "\u05e4\u05e8\u05d5\u05e4\u05d9\u05dc \u05d0\u05d5\u05e8\u05d7",
+  "properties": {
+    "owner_id": {
+      "type": "string",
+      "title": "\u05de\u05d6\u05d4\u05d4 \u05d1\u05e2\u05dc \u05de\u05ea\u05d7\u05dd"
+    },
+    "guest_name": {
+      "type": "string",
+      "title": "\u05e9\u05dd \u05d4\u05d0\u05d5\u05e8\u05d7"
+    },
+    "phone_e164": {
+      "type": "string",
+      "title": "\u05d8\u05dc\u05e4\u05d5\u05df \u05de\u05e0\u05d5\u05e8\u05de\u05dc (E.164)"
+    },
+    "guest_user_ids": {
+      "type": "array",
+      "title": "\u05de\u05d6\u05d4\u05d9 \u05de\u05e9\u05ea\u05de\u05e9 \u05de\u05e9\u05d5\u05d9\u05d9\u05db\u05d9\u05dd (\u05d0\u05dd \u05d9\u05d3\u05d5\u05e2)",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "stays_count": {
+      "type": "number",
+      "title": "\u05de\u05e1\u05e4\u05e8 \u05e9\u05d4\u05d9\u05d5\u05ea \u05e9\u05d1\u05d5\u05e6\u05e2\u05d5",
+      "default": 0
+    },
+    "total_paid": {
+      "type": "number",
+      "title": "\u05e1\u05da \u05ea\u05e9\u05dc\u05d5\u05de\u05d9\u05dd (\u20aa)",
+      "default": 0
+    },
+    "last_checkin": {
+      "type": "string",
+      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05db\u05e0\u05d9\u05e1\u05d4 \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "last_checkout": {
+      "type": "string",
+      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05d9\u05e6\u05d9\u05d0\u05d4 \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "last_zimmer_name": {
+      "type": "string",
+      "title": "\u05e6\u05d9\u05de\u05e8 \u05d0\u05d7\u05e8\u05d5\u05df"
+    },
+    "first_seen": {
+      "type": "string",
+      "title": "\u05d4\u05ea\u05d0\u05e8\u05d7 \u05dc\u05e8\u05d0\u05e9\u05d5\u05e0\u05d4 \u05d1"
+    },
+    "notes": {
+      "type": "string",
+      "title": "\u05d4\u05e2\u05e8\u05d5\u05ea \u05e4\u05e0\u05d9\u05de\u05d9\u05d5\u05ea \u05e9\u05dc \u05d4\u05d1\u05e2\u05dc\u05d9\u05dd"
+    },
+    "ai_summary": {
+      "type": "string",
+      "title": "\u05e1\u05d9\u05db\u05d5\u05dd AI"
+    },
+    "ai_summary_updated_at": {
+      "type": "string",
+      "title": "\u05ea\u05d0\u05e8\u05d9\u05da \u05e2\u05d3\u05db\u05d5\u05df \u05e1\u05d9\u05db\u05d5\u05dd AI"
+    }
+  },
+  "required": [
+    "owner_id",
+    "phone_e164"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "data.owner_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "owner"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.owner_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "data.owner_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

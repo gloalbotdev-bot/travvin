@@ -20,6 +20,7 @@ export const api = {
   integrations: {
     Core: {
       InvokeLLM: ownIntegrationsCore.InvokeLLM,
+      TranscribeAudio: ownIntegrationsCore.TranscribeAudio,
       UploadFile: ownIntegrationsCore.UploadFile,
     },
   },

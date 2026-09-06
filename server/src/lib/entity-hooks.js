@@ -5,6 +5,8 @@
  */
 import { pushInAppNotification } from './push-in-app-notification.js';
 import { sendGuestMessage } from './send-guest-message.js';
+import { buildGuestSummary } from './build-guest-summary.js';
+import { SERVICE_ACTOR } from './service-role.js';
 
 export function notificationsEnabled() {
   return process.env.NOTIFICATIONS_ENABLED !== 'false';
@@ -34,6 +36,14 @@ export function createEntityHooks({ store, jobs }) {
     },
 
     async afterUpdate(entityType, record, old) {
+      try {
+        if (entityType === 'BookingRequest') {
+          await onBookingCheckoutSummary(store, record, old);
+        }
+      } catch (err) {
+        console.error('[entity-hooks] checkout summary', err);
+      }
+
       if (!notificationsEnabled()) return;
       try {
         if (entityType === 'BookingRequest') {
@@ -50,6 +60,14 @@ export function createEntityHooks({ store, jobs }) {
       }
     },
   };
+}
+
+async function onBookingCheckoutSummary(store, data, old) {
+  if (data.checked_out === true && old?.checked_out !== true && data.id) {
+    buildGuestSummary(store, { booking_id: data.id }, SERVICE_ACTOR).catch((err) => {
+      console.error('[entity-hooks] buildGuestSummary', err);
+    });
+  }
 }
 
 async function onNewBooking(store, data) {

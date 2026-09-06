@@ -1,19 +1,44 @@
 /**
- * Own-backend integrations.Core — M11 UploadFile (InvokeLLM deprecated → api.assistant.chat).
+ * Own-backend integrations.Core — UploadFile + InvokeLLM + TranscribeAudio.
  */
 import { getApiBase, getStoredToken } from './http.js';
 
-export const ownIntegrationsCore = {
-  /**
-   * @deprecated Use api.assistant.chat with a profile instead.
-   */
-  async InvokeLLM() {
-    const err = new Error(
-      'InvokeLLM is deprecated. Use api.assistant.chat with a profile instead.',
-    );
-    err.status = 410;
-    err.code = 'DEPRECATED';
+async function postJson(path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  const token = getStoredToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${getApiBase()}${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body || {}),
+  });
+  let data = null;
+  const text = await res.text();
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+  if (!res.ok) {
+    const err = new Error(data?.error || res.statusText);
+    err.status = res.status;
+    err.data = data;
     throw err;
+  }
+  return data;
+}
+
+export const ownIntegrationsCore = {
+  /** Same contract as Base44 Core.InvokeLLM */
+  async InvokeLLM(payload = {}) {
+    return postJson('/api/ai/invoke-llm', payload);
+  },
+
+  /** Transcribe uploaded audio URL to Hebrew text */
+  async TranscribeAudio({ audio_url } = {}) {
+    return postJson('/api/ai/transcribe-audio', { audio_url });
   },
 
   /**

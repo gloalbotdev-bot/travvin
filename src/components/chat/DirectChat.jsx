@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/api/client';
 import { Send, X, Home } from 'lucide-react';
+import { useAutoResize } from '@/hooks/useAutoResize';
+import MicButton from '@/components/chat/MicButton';
 
 const fmtTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
@@ -30,6 +32,7 @@ export default function DirectChat({ thread, isOwner, user, counterpartName, zim
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const endRef = useRef(null);
+  const { ref: inputRef, resize: resizeInput } = useAutoResize(input, 240);
 
   useEffect(() => { setMessages(thread?.messages || []); }, [thread?.id]);
 
@@ -91,7 +94,7 @@ export default function DirectChat({ thread, isOwner, user, counterpartName, zim
                 style={{ background: m.role === 'owner' ? '#075E54' : '#25D366' }}>
                 {m.role === 'owner' ? 'ב' : 'ל'}
               </div>
-              <div className={`max-w-xs lg:max-w-md px-3 py-2 rounded-2xl shadow-sm ${mine ? 'bg-[#DCF8C6] text-gray-800 rounded-br-sm' : 'bg-white text-gray-800 rounded-bl-sm'}`}>
+              <div className={`max-w-[85%] lg:max-w-md px-3 py-2 rounded-2xl shadow-sm ${mine ? 'bg-[#DCF8C6] text-gray-800 rounded-br-sm' : 'bg-white text-gray-800 rounded-bl-sm'}`}>
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
                 <span className="text-[10px] text-gray-400 block text-left mt-0.5">{m.time}{mine && <span className="text-blue-400"> ✓✓</span>}</span>
               </div>
@@ -114,15 +117,16 @@ export default function DirectChat({ thread, isOwner, user, counterpartName, zim
       </div>
 
       {/* Input */}
-      <div className="bg-[#F0F0F0] px-3 py-3 flex items-end gap-2">
+      <div className="bg-[#F0F0F0] px-3 pt-3 flex items-end gap-2" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
         <button onClick={send} disabled={!input.trim() || sending}
           className="w-12 h-12 bg-[#25D366] rounded-full flex items-center justify-center text-white shadow-md hover:bg-[#128C7E] transition-colors disabled:opacity-50 flex-shrink-0">
           <Send size={20} />
         </button>
         <div className="flex-1 bg-white rounded-full px-4 py-3 flex items-center shadow-sm min-h-[48px]">
-          <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-            placeholder="כתוב הודעה..." className="w-full bg-transparent outline-none resize-none text-gray-800 text-sm leading-5 max-h-32" rows={1} style={{ direction: 'rtl' }} />
+          <textarea ref={inputRef} value={input} onChange={e => { setInput(e.target.value); resizeInput(); }} onKeyDown={handleKeyDown}
+            placeholder="כתוב הודעה..." className="w-full bg-transparent outline-none resize-none overflow-y-auto text-gray-800 text-sm leading-5" rows={1} style={{ direction: 'rtl' }} />
         </div>
+        <MicButton tone="light" disabled={sending} onText={t => setInput(p => (p ? p.replace(/\s+$/, '') + ' ' + t : t))} />
       </div>
     </div>
   );

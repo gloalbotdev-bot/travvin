@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { api } from '@/api/client';
 import { X, Calendar, User, Phone, Users, Home, MessageSquare, Check } from 'lucide-react';
-import { calcNights, calcBookingTotalForZimmer, formatILS } from '@/lib/bookingPrice';
-import { bookingErrorMessage } from '@/lib/bookingErrors';
+import { calcNights, calcBookingTotal, formatILS } from '@/lib/bookingPrice';
+import DateRangeField from '@/components/common/DateRangeField';
 
 export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, onSwitchToText, initialDate }) {
   const [form, setForm] = useState({
@@ -16,12 +16,11 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
     status: 'אושרה',
   });
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
 
   const selectedZimmer = zimmers.find(z => z.id === form.zimmer_id);
   const nights = useMemo(() => calcNights(form.check_in, form.check_out), [form.check_in, form.check_out]);
   const total = useMemo(
-    () => calcBookingTotalForZimmer(selectedZimmer, form.check_in, form.check_out, 0, 0),
+    () => calcBookingTotal(form.check_in, form.check_out, selectedZimmer?.price_per_night),
     [form.check_in, form.check_out, selectedZimmer]
   );
 
@@ -32,7 +31,6 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
   const handleSubmit = async () => {
     if (!valid) return;
     setSaving(true);
-    setError('');
     const payload = {
       ...form,
       zimmer_name: selectedZimmer?.name || '',
@@ -43,8 +41,6 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
       await api.entities.BookingRequest.create(payload);
       onSaved?.();
       onClose?.();
-    } catch (e) {
-      setError(bookingErrorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -95,30 +91,19 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
           </div>
 
           {/* Dates */}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="כניסה" icon={Calendar}>
-              <input type="date" value={form.check_in} onChange={e => update('check_in', e.target.value)}
-                className="w-full px-3 py-2.5 text-sm outline-none rounded-xl" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A' }} />
-            </Field>
-            <Field label="יציאה" icon={Calendar}>
-              <input type="date" value={form.check_out} onChange={e => update('check_out', e.target.value)} min={form.check_in || undefined}
-                className="w-full px-3 py-2.5 text-sm outline-none rounded-xl" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A' }} />
-            </Field>
-          </div>
+          <Field label="תאריכי שהייה" icon={Calendar}>
+            <DateRangeField
+              start={form.check_in}
+              end={form.check_out}
+              onChange={(s, e) => setForm(f => ({ ...f, check_in: s, check_out: e }))}
+              placeholder="בחר תאריכי כניסה ויציאה"
+            />
+          </Field>
 
           {/* Guests */}
           <Field label="מספר אורחים" icon={Users}>
             <input type="number" min={1} value={form.num_guests} onChange={e => update('num_guests', Number(e.target.value))}
               className="w-full px-3 py-2.5 text-sm outline-none rounded-xl" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A' }} />
-          </Field>
-
-          {/* Status */}
-          <Field label="סטטוס">
-            <select value={form.status} onChange={e => update('status', e.target.value)}
-              className="w-full px-3 py-2.5 text-sm outline-none rounded-xl" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A' }}>
-              <option value="אושרה">אושרה</option>
-              <option value="ממתינה">ממתינה לאישור</option>
-            </select>
           </Field>
 
           {/* Notes */}
@@ -141,9 +126,6 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
           )}
           {form.check_in && form.check_out && nights <= 0 && (
             <p className="text-xs text-red-500">תאריך היציאה חייב להיות אחרי תאריך הכניסה</p>
-          )}
-          {error && (
-            <p className="text-sm font-semibold text-center" style={{ color: '#EF4444' }}>⚠️ {error}</p>
           )}
 
           {/* Actions */}
