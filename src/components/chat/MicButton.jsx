@@ -5,7 +5,8 @@ import { Mic, Loader2 } from 'lucide-react';
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 // tone: 'dark' for dark chats (owner/admin panels), 'light' for customer-facing chats.
-export default function MicButton({ onText, disabled, tone = 'light', size = 18 }) {
+// compact: smaller control for dense input bars (e.g. owner home).
+export default function MicButton({ onText, disabled, tone = 'light', size = 18, compact = false, iconSrc = null, iconWidth = null, iconHeight = null }) {
   const { recording, transcribing, error, elapsedSec, toggle } = useVoiceInput({ onText });
   const [showErr, setShowErr] = useState(false);
   useEffect(() => {
@@ -15,7 +16,12 @@ export default function MicButton({ onText, disabled, tone = 'light', size = 18 
   let style;
   if (recording) style = { background: '#EF4444', color: '#fff' };
   else if (transcribing) style = tone === 'dark' ? { background: '#374151', color: '#9CA3AF' } : { background: '#F3F4F6', color: '#9CA3AF' };
+  else if (compact && tone === 'ghost') style = { background: 'transparent', color: '#535353' };
   else style = tone === 'dark' ? { background: '#374151', color: '#D1D5DB' } : { background: '#fff', color: '#9CA3AF', border: '1.5px solid #E8E5E0' };
+
+  const dim = compact ? 'w-7 h-7' : 'w-12 h-12';
+  const iw = iconWidth ?? size;
+  const ih = iconHeight ?? size;
 
   return (
     <div className="relative flex-shrink-0">
@@ -26,12 +32,14 @@ export default function MicButton({ onText, disabled, tone = 'light', size = 18 
       )}
       <button type="button" onClick={toggle} disabled={disabled || transcribing}
         title={recording ? 'עצור הקלטה' : 'הקלט קול'}
-        className="w-12 h-12 rounded-full flex items-center justify-center transition-colors disabled:opacity-50"
+        className={`${dim} rounded-full flex items-center justify-center transition-colors disabled:opacity-50 overflow-visible`}
         style={style}>
         {recording
-          ? <span className="text-xs font-bold tabular-nums">{fmt(elapsedSec)}</span>
+          ? <span className="text-[10px] font-bold tabular-nums">{fmt(elapsedSec)}</span>
           : transcribing ? <Loader2 size={size} className="animate-spin" />
-          : <Mic size={size} />}
+          : iconSrc
+            ? <img src={iconSrc} alt="" width={iw} height={ih} className="block" style={{ width: iw, height: ih }} />
+            : <Mic size={size} />}
       </button>
     </div>
   );

@@ -2,3 +2,46 @@
 
 /* Hide the scrollbar on the Discover vertical feed without inline <style>. */
 .discover-feed-scroll::-webkit-scrollbar { display: none; } @layer base { :root { --background: 210 40% 98%; --foreground: 222 47% 11%; --card: 0 0% 100%; --card-foreground: 222 47% 11%; --popover: 0 0% 100%; --popover-foreground: 222 47% 11%; --primary: 221 83% 53%; --primary-foreground: 210 40% 98%; --secondary: 210 40% 96%; --secondary-foreground: 222 47% 11%; --muted: 210 40% 96%; --muted-foreground: 215 16% 47%; --accent: 210 40% 96%; --accent-foreground: 222 47% 11%; --destructive: 0 84% 60%; --destructive-foreground: 210 40% 98%; --border: 214 32% 91%; --ring: 221 83% 53%; } }
+
+/* Owner-home Figma fonts — files in src/assets/fonts/ */
+@font-face {
+  font-family: "Simona Pro";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/SimonaPro-Regular.otf") format("opentype");
+}
+@font-face {
+  font-family: "Simona Pro";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/SimonaPro-Medium.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Simona Pro";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/SimonaPro-Bold.otf") format("opentype");
+}
+@font-face {
+  font-family: "SimplerPro Extended";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/SimplerPro_Extended-Regular.otf") format("opentype");
+}
+@font-face {
+  font-family: "SimplerPro Extended";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/SimplerPro_Extended-Semibold.otf") format("opentype");
+}
+.font-simona {
+  font-family: "Simona Pro", Heebo, sans-serif;
+}
+.font-simpler {
+  font-family: "SimplerPro Extended", Heebo, sans-serif;
+}
