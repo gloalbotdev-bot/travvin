@@ -113,7 +113,7 @@ export default function OwnerPanel() {
     { id: 'settings', label: 'הגדרות חשבון', icon: Settings },
   ];
   const primaryIds = ['home', 'calendar', 'zimmers', 'updates', 'bookings'];
-  const primaryNav = navItems.filter(n => primaryIds.includes(n.id));
+  const primaryNav = primaryIds.map(id => navItems.find(n => n.id === id)).filter(Boolean);
 
   const handleNav = (id) => { setTab(id); setSidebarOpen(false); };
   const handleHomeChat = (text) => { setAssistantPrompt(text); setTab('assistant'); };
@@ -130,7 +130,7 @@ export default function OwnerPanel() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col" dir="rtl" style={{ background: '#F9FAFB', fontFamily: 'Heebo, sans-serif' }}>
+    <div className="min-h-screen flex flex-col" dir="rtl" style={{ background: '#FAFAFA', fontFamily: 'Heebo, sans-serif' }}>
       {showAssistant && <AdminAssistantChat onClose={() => setShowAssistant(false)} onRefresh={() => loadZimmers(currentUser?.id)} />}
       {showBookingCreator && <BookingCreatorChat onClose={() => setShowBookingCreator(false)} onSaved={() => { setShowBookingCreator(false); setTab('bookings'); }} zimmers={zimmers} ownerId={currentUser?.id} />}
 
@@ -240,11 +240,11 @@ export default function OwnerPanel() {
           </div>
         )}
       </main>
-      {tab === 'home' && (
-        <aside className="hidden lg:block w-72 flex-shrink-0" style={{ borderRight: '1px solid #F0EEE8' }}>
-          <OwnerDashboardSidebar ownerId={currentUser?.id} zimmers={zimmers} currentUser={currentUser} tab={tab} onAction={openNotificationAction} onNavigate={(t) => setTab(t)} onEditZimmer={(z) => setEditingZimmer(z)} />
-        </aside>
-      )}
+        {tab === 'home' && (
+          <aside className="hidden lg:block w-[460px] flex-shrink-0" style={{ borderRight: '1px solid #F0EEE8' }}>
+            <OwnerDashboardSidebar ownerId={currentUser?.id} zimmers={zimmers} currentUser={currentUser} tab={tab} onAction={openNotificationAction} onNavigate={(t) => setTab(t)} onEditZimmer={(z) => setEditingZimmer(z)} />
+          </aside>
+        )}
       </div>
     </div>
   );
