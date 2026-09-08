@@ -1,15 +1,21 @@
 import React, { useState, useRef } from 'react';
 import { api } from '@/api/client';
-import { ChevronDown, Sparkles, CalendarClock, Tag, Plus, Wand2, Send, Loader2, ArrowUp, Mic } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import BlockDateForm from '@/components/owner/BlockDateForm';
 import PriceUpdateForm from '@/components/owner/PriceUpdateForm';
 import CalendarAiSuggestions from '@/components/owner/CalendarAiSuggestions';
+import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
+import MicButton from '@/components/chat/MicButton';
+import iconChevron from '@/assets/owner/calendar/chevron-action.svg';
+import iconPlus from '@/assets/owner/home/icon-plus.svg';
+import iconSend from '@/assets/owner/home/icon-send.svg';
+import iconMic from '@/assets/owner/home/icon-mic.svg';
 
 const SECTIONS = [
-  { id: 'block', title: 'חסימת תאריך', icon: CalendarClock, desc: 'סגירת יום או טווח תאריכים שלא יהיו זמינים להזמנה. מתאים לתחזוקה, שימוש פרטי, חופשה או כל סיבה אחרת.' },
-  { id: 'price', title: 'עדכון מחיר', icon: Tag, desc: 'שינוי מחיר ליום מסוים או לטווח תאריכים. אפשר לקבוע מחיר חדש, להעלות באחוזים או להוריד לפי צורך.' },
-  { id: 'booking', title: 'הוספת הזמנה', icon: Plus, desc: 'יצירת הזמנה ידנית ביומן. מתאים להזמנה שנסגרה מחוץ למערכת, בטלפון או מול בעל הצימר ישירות.' },
-  { id: 'ai', title: 'הצעות AI', icon: Wand2, desc: 'קבלת הצעות חכמות לשיפור היומן. למשל: עדכון מחיר, פתיחת זמינות, הנחה לתאריך פנוי או בדיקת תקופה מבוקשת.' },
+  { id: 'block', title: 'חסימת תאריך', desc: 'סגירת יום או טווח תאריכים שלא יהיו זמינים להזמנה.\nמתאים לתחזוקה, שימוש פרטי, חופשה או כל סיבה אחרת.' },
+  { id: 'price', title: 'עדכון מחיר', desc: 'שינוי מחיר ליום מסוים או לטווח תאריכים. אפשר לקבוע מחיר חדש, להעלות באחוזים או להוריד לפי צורך.' },
+  { id: 'booking', title: 'הוספת הזמנה', desc: 'יצירת הזמנה ידנית ביומן. מתאים להזמנה שנסגרה מחוץ למערכת, בטלפון או מול בעל הצימר ישירות.' },
+  { id: 'ai', title: 'הצעות AI', desc: 'קבלת הצעות חכמות לשיפור היומן. למשל: עדכון מחיר, פתיחת זמינות, הנחה לתאריך פנוי או בדיקת תקופה מבוקשת.' },
 ];
 
 export default function OwnerCalendarActionsSidebar({ ownerId, zimmers, bookings, selectedDate, onRefresh, onOpenManual, onZimmerSaved, command, onCommandConsumed }) {
@@ -89,56 +95,101 @@ export default function OwnerCalendarActionsSidebar({ ownerId, zimmers, bookings
         setOpen('ai');
       }
       setAiText('');
-    } catch (e) {
+    } catch {
       setAiError('שגיאה. נסה לנסח אחרת.');
     }
     setAiBusy(false);
   };
 
   return (
-    <div dir="rtl" className="h-full flex flex-col" style={{ background: '#f9f9f9', fontFamily: 'Heebo, sans-serif' }}>
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(249,115,22,0.1)' }}>
-            <Sparkles size={18} style={{ color: '#F97316' }} />
-          </div>
-          <h2 className="font-black text-lg" style={{ color: '#1A1A1A' }}>פעולות</h2>
+    <div
+      dir="rtl"
+      className="h-full flex flex-col font-simona"
+      style={{ background: '#FFFFFF', borderRadius: 23 }}
+    >
+      <div className="flex-1 overflow-y-auto px-6 pt-8 pb-4">
+        <div className="flex items-center gap-3 mb-10" dir="rtl">
+          {/* Figma: AI icon to the RIGHT of «פעולות» */}
+          <OwnerAiIcon size={40} />
+          <h2
+            className="font-simpler"
+            style={{ color: '#000', fontSize: 29, fontWeight: 600, lineHeight: 'normal' }}
+          >
+            פעולות
+          </h2>
         </div>
 
-        <div className="space-y-2.5">
-          {SECTIONS.map(s => {
+        <div className="flex flex-col" style={{ gap: 19 }}>
+          {SECTIONS.map((s) => {
             const isOpen = open === s.id;
-            const Icon = s.icon;
             return (
-              <div key={s.id} className="rounded-2xl overflow-hidden" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
-                <button onClick={() => toggle(s.id)} className="w-full flex items-center gap-3 px-4 py-3.5 text-right transition-all hover:bg-gray-50">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#F8F7F4' }}>
-                    <Icon size={16} style={{ color: '#1A1A1A' }} />
+              <div key={s.id} className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggle(s.id)}
+                  className="w-full text-right transition-opacity hover:opacity-80"
+                >
+                  <div className="flex items-start gap-3" dir="rtl">
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="font-simpler"
+                        style={{ color: '#000', fontSize: 19, fontWeight: 600, lineHeight: 'normal' }}
+                      >
+                        {s.title}
+                      </p>
+                      <p
+                        className="font-simona mt-[11px] whitespace-pre-line"
+                        style={{ color: '#000', fontSize: 14, fontWeight: 400, lineHeight: '26px' }}
+                      >
+                        {s.desc}
+                      </p>
+                    </div>
+                    {/* Figma 1011:1019 — chevron on the left, full glyph not clipped */}
+                    <span
+                      className="flex-shrink-0 mt-1 flex items-center justify-center"
+                      style={{
+                        width: 12,
+                        height: 16,
+                        transform: isOpen ? 'rotate(-90deg)' : 'none',
+                        transition: 'transform 0.2s',
+                      }}
+                    >
+                      <img src={iconChevron} alt="" width={12} height={16} className="block" style={{ width: 12, height: 16 }} />
+                    </span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold" style={{ color: '#1A1A1A' }}>{s.title}</p>
-                    {!isOpen && <p className="text-xs mt-0.5 line-clamp-2 leading-snug" style={{ color: '#9CA3AF' }}>{s.desc}</p>}
-                  </div>
-                  <ChevronDown size={16} style={{ color: '#9CA3AF', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
                 </button>
 
                 {isOpen && (
-                  <div className="px-4 pb-4 pt-1">
-                    <p className="text-xs mb-3 leading-snug" style={{ color: '#6B7280' }}>{s.desc}</p>
+                  <div className="mt-3 pb-2">
                     {s.id === 'block' && (
-                      <BlockDateForm key={blockPrefill.date + blockPrefill.zimmerId} zimmers={zimmers} ownerId={ownerId}
-                        initialDate={blockPrefill.date} initialZimmerId={blockPrefill.zimmerId}
-                        onSaved={onRefresh} onDone={() => setOpen(null)} />
+                      <BlockDateForm
+                        key={blockPrefill.date + blockPrefill.zimmerId}
+                        zimmers={zimmers}
+                        ownerId={ownerId}
+                        initialDate={blockPrefill.date}
+                        initialZimmerId={blockPrefill.zimmerId}
+                        onSaved={onRefresh}
+                        onDone={() => setOpen(null)}
+                      />
                     )}
                     {s.id === 'price' && (
-                      <PriceUpdateForm key={(pricePrefill.range?.start || '') + pricePrefill.zimmerId} zimmers={zimmers}
-                        initialZimmerId={pricePrefill.zimmerId} initialRange={pricePrefill.range}
-                        onSaved={() => { onRefresh(); onZimmerSaved?.(); }} onDone={() => setOpen(null)} />
+                      <PriceUpdateForm
+                        key={(pricePrefill.range?.start || '') + pricePrefill.zimmerId}
+                        zimmers={zimmers}
+                        initialZimmerId={pricePrefill.zimmerId}
+                        initialRange={pricePrefill.range}
+                        onSaved={() => { onRefresh(); onZimmerSaved?.(); }}
+                        onDone={() => setOpen(null)}
+                      />
                     )}
                     {s.id === 'booking' && (
-                      <button onClick={() => onOpenManual?.(selectedDate)} type="button"
-                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-white text-sm font-bold transition-all hover:opacity-90" style={{ background: '#F97316' }}>
-                        <Plus size={15} /> פתח טופס הוספת הזמנה
+                      <button
+                        onClick={() => onOpenManual?.(selectedDate)}
+                        type="button"
+                        className="font-simona w-full flex items-center justify-center gap-2 py-2.5 rounded-[10px] transition-all hover:opacity-90"
+                        style={{ background: '#0B3838', color: '#fff', fontSize: 14, fontWeight: 500 }}
+                      >
+                        פתח טופס הוספת הזמנה
                       </button>
                     )}
                     {s.id === 'ai' && (
@@ -146,26 +197,71 @@ export default function OwnerCalendarActionsSidebar({ ownerId, zimmers, bookings
                     )}
                   </div>
                 )}
+
+                <div className="mt-[20px]" style={{ height: 1, background: '#E8E8E8' }} />
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Bottom assistant input */}
-      <div className="px-4 py-3" style={{ borderTop: '1.5px solid #F0EEE8', background: '#fff' }}>
-        {aiError && <p className="text-xs mb-1.5 text-red-500">{aiError}</p>}
-        <div className="flex items-center gap-2 rounded-2xl px-3 py-2.5" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0' }}>
-          <input ref={inputRef} value={aiText} onChange={e => setAiText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); classifyAndRoute(); } }}
+      {/* Bottom assistant input — Figma 1011:1201 */}
+      <div className="px-6 pb-8 pt-2">
+        {aiError && <p className="font-simona text-xs mb-1.5 text-red-500">{aiError}</p>}
+        <div
+          className="flex flex-col justify-center rounded-[11px] px-4 py-3 bg-white"
+          style={{
+            minHeight: 86,
+            gap: 14,
+            border: '1.5px solid #E5E5E5',
+          }}
+        >
+          <input
+            ref={inputRef}
+            value={aiText}
+            onChange={(e) => setAiText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); classifyAndRoute(); } }}
             placeholder="מה תרצי לשנות או לבדוק בצימר?"
-            className="flex-1 bg-transparent outline-none text-sm" style={{ color: '#1A1A1A' }} />
-          <button type="button" className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: '#9CA3AF' }}><ArrowUp size={15} /></button>
-          <button type="button" className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: '#9CA3AF' }}><Mic size={15} /></button>
-          <button onClick={classifyAndRoute} disabled={aiBusy || !aiText.trim()} type="button"
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white transition-all disabled:opacity-40" style={{ background: '#F97316' }}>
-            {aiBusy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-          </button>
+            className="font-simona w-full bg-transparent outline-none text-right"
+            style={{ color: '#6B7280', fontSize: 17, fontWeight: 400 }}
+          />
+          <div className="flex items-center justify-between" dir="ltr">
+            {/* Figma 1011:1203 — send+mic on the left, plus on the right */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={classifyAndRoute}
+                disabled={aiBusy || !aiText.trim()}
+                className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-40"
+                style={{ background: '#0B3838' }}
+                title="שלח"
+              >
+                {aiBusy
+                  ? <Loader2 size={14} className="animate-spin text-white" />
+                  : <img src={iconSend} alt="" width={8} height={12} className="block" style={{ width: 8, height: 12 }} />}
+              </button>
+              <MicButton
+                tone="ghost"
+                compact
+                size={14}
+                iconWidth={14}
+                iconHeight={19}
+                iconSrc={iconMic}
+                onText={(t) => setAiText((p) => (p ? p.replace(/\s+$/, '') + ' ' + t : t))}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenManual?.(selectedDate)}
+              title="הוספת הזמנה"
+              className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105"
+              style={{ background: '#E9E9E9' }}
+            >
+              <span className="overflow-hidden" style={{ width: 12, height: 12 }}>
+                <img src={iconPlus} alt="" width={12} height={12} className="block w-full h-full" />
+              </span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

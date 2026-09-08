@@ -50,9 +50,18 @@ export default function CustomerPortal() {
   const openNotificationAction = (actionType, entityId) => {
     if (!actionType) return;
     if (actionType === 'open_booking') setTab('bookings');
-    else if (actionType === 'open_answer') { setFocusQuestionId(entityId); setTab('updates'); setTimeout(() => setFocusQuestionId(null), 200); }
-    else if (actionType === 'open_chat') { setFocusChatId(entityId); setTab('updates'); setTimeout(() => setFocusChatId(null), 200); }
-    else if (actionType === 'open_review') { setFocusReviewId(entityId); setTab('reviews'); setTimeout(() => setFocusReviewId(null), 500); }
+    else if (actionType === 'open_answer') {
+      // Keep focus until CustomerUpdatesTab expands + scrolls (load is async).
+      setFocusQuestionId(entityId);
+      setTab('updates');
+    } else if (actionType === 'open_chat') {
+      setFocusChatId(entityId);
+      setTab('updates');
+    } else if (actionType === 'open_review') {
+      setFocusReviewId(entityId);
+      setTab('reviews');
+      setTimeout(() => setFocusReviewId(null), 500);
+    }
   };
 
   const initials = currentUser?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2) || '??';

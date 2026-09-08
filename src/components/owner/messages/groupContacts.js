@@ -41,11 +41,23 @@ export function groupChatsByContact(threads, lookup) {
 export function groupQuestionsByContact(questions, lookup) {
   const map = new Map();
   for (const q of questions || []) {
-    const phone = lookup.byName.get(normName(q.customer_name)) || '';
-    const key = buildContactKey(q.customer_name, phone);
+    const phone =
+      lookup.byUserId.get(q.created_by_id) ||
+      lookup.byName.get(normName(q.customer_name)) ||
+      '';
+    // Prefer stable id when name/phone missing so anonymous questions still appear.
+    const key = phone || normName(q.customer_name)
+      ? buildContactKey(q.customer_name, phone)
+      : `qid:${q.created_by_id || q.id}`;
     if (!map.has(key)) {
       const profile = lookup.profileByKey.get(key);
-      map.set(key, { key, name: q.customer_name || 'לקוח', phone, staysCount: profile?.stays_count || 0, questions: [] });
+      map.set(key, {
+        key,
+        name: q.customer_name || 'לקוח',
+        phone,
+        staysCount: profile?.stays_count || 0,
+        questions: [],
+      });
     }
     map.get(key).questions.push(q);
   }

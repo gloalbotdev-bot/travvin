@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '@/api/client';
 import { Plus, AlertTriangle } from 'lucide-react';
 import BookingsSummaryCards from './BookingsSummaryCards';
@@ -7,6 +7,8 @@ import BookingsTabs from './BookingsTabs';
 import BookingsTable from './BookingsTable';
 import BookingDetailsModal from './BookingDetailsModal';
 import BookingsAiSidebar from './BookingsAiSidebar';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import PullIndicator from '@/components/common/PullIndicator';
 import { needsAttention, isUpcoming, isActive, isPast } from './bookingStatus';
 
 // Replaces OwnerBookingsList with the Figma design. All business logic
@@ -24,6 +26,7 @@ export default function OwnerBookingsPage({ ownerId, zimmers = [], onAddBooking,
   const [zimmerFilter, setZimmerFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const mainRef = useRef(null);
 
   useEffect(() => { if (ownerId) loadBookings(); }, [ownerId]);
 
@@ -47,6 +50,8 @@ export default function OwnerBookingsPage({ ownerId, zimmers = [], onAddBooking,
       setBookings(updated.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
     });
   };
+
+  const { pull, refreshing } = usePullToRefresh(mainRef, loadBookings);
 
   const handleStatusChange = async (booking, newStatus) => {
     if (newStatus === 'אושרה') {
@@ -148,7 +153,8 @@ export default function OwnerBookingsPage({ ownerId, zimmers = [], onAddBooking,
       />
 
       {/* Main content */}
-      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-auto">
+      <main ref={mainRef} className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-auto">
+        <PullIndicator pull={pull} refreshing={refreshing} />
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>

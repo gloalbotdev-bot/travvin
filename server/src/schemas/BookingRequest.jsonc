@@ -48,10 +48,20 @@
       "enum": [
         "ממתינה",
         "אושרה",
-        "נדחתה"
+        "נדחתה",
+        "חסום"
       ],
       "default": "ממתינה",
       "title": "סטטוס"
+    },
+    "is_block": {
+      "type": "boolean",
+      "title": "חסימת תאריך (לא הזמנה)",
+      "default": false
+    },
+    "block_reason": {
+      "type": "string",
+      "title": "סיבת חסימה"
     },
     "notes": {
       "type": "string",

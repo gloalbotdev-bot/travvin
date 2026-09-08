@@ -11,6 +11,7 @@ export default function ZimmerAskOwnerForm({ zimmer, user, initialQuestion, onCl
   const [text, setText] = useState(initialQuestion || '');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
   const { ref: inputRef, resize } = useAutoResize(text, 160);
 
   useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 60); return () => clearTimeout(t); }, []);
@@ -18,7 +19,12 @@ export default function ZimmerAskOwnerForm({ zimmer, user, initialQuestion, onCl
   const submit = async () => {
     const v = text.trim();
     if (!v || sending || sent) return;
+    if (!user?.id) {
+      setError('יש להתחבר כדי לשלוח שאלה לבעל הצימר.');
+      return;
+    }
     setSending(true);
+    setError('');
     try {
       await api.entities.UnansweredQuestion.create({
         zimmer_id: zimmer.id,
@@ -30,7 +36,11 @@ export default function ZimmerAskOwnerForm({ zimmer, user, initialQuestion, onCl
         status: 'ממתינה',
       });
       setSent(true);
-    } catch (e) { /* silent */ }
+    } catch (e) {
+      setError(e?.status === 401 || e?.status === 403
+        ? 'יש להתחבר כדי לשלוח שאלה לבעל הצימר.'
+        : 'שליחת השאלה נכשלה. נסה שוב.');
+    }
     setSending(false);
   };
 
@@ -61,6 +71,9 @@ export default function ZimmerAskOwnerForm({ zimmer, user, initialQuestion, onCl
         </div>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={15} /></button>
       </div>
+      {error && (
+        <p className="text-xs mb-2 font-semibold" style={{ color: '#DC2626' }}>{error}</p>
+      )}
       <div className="flex items-end gap-2">
         <div className="flex-1 bg-white rounded-2xl px-3 py-2 flex items-center shadow-sm" style={{ border: '1px solid #E8E5E0' }}>
           <textarea ref={inputRef} value={text} onChange={(e) => { setText(e.target.value); resize(); }} onKeyDown={handleKeyDown}

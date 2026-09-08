@@ -366,7 +366,23 @@ async function main() {
   );
   assert(legitBooking.owner_id === 'owner-1', 'SEC-007 server sets owner_id from zimmer');
   await store.delete('BookingRequest', legitBooking.id, admin);
-  await store.delete('Zimmer', zForged.id, admin);
+
+  let forgedChatDenied = false;
+  try {
+    await store.create(
+      'DirectChat',
+      {
+        zimmer_id: zForged.id,
+        customer_id: 'cust-1',
+        owner_id: 'other-owner',
+        messages: [],
+      },
+      { actor: customer },
+    );
+  } catch (e) {
+    forgedChatDenied = e.status === 403;
+  }
+  assert(forgedChatDenied, 'SEC-008 forged owner_id on DirectChat → 403');
 
   // Scope
   assert(readScopeWhere('SystemMessage', anon) === false, 'SystemMessage anon → empty scope');
@@ -376,11 +392,11 @@ async function main() {
   assert(readScopeWhere('DirectChat', admin) === null, 'DirectChat admin unrestricted');
   assert(readScopeWhere('DirectChat', anon) === false, 'DirectChat anon → empty scope');
 
-  // Store integration
+  // Store integration — resolve owner_id from real Zimmer
   const created = await store.create(
     'DirectChat',
     {
-      zimmer_id: 'z-authz',
+      zimmer_id: zForged.id,
       customer_id: 'cust-1',
       owner_id: 'owner-1',
       messages: [],
@@ -388,6 +404,7 @@ async function main() {
     { actor: customer },
   );
   assert(created.id, 'create DirectChat as customer');
+  assert(created.owner_id === 'owner-1', 'DirectChat owner_id resolved from zimmer');
 
   const asCustomer = await store.list('DirectChat', '-created_date', 50, customer);
   assert(asCustomer.some((r) => r.id === created.id), 'customer lists own chat');
@@ -405,6 +422,9 @@ async function main() {
 
   const asAdmin = await store.get('DirectChat', created.id, admin);
   assert(asAdmin.id === created.id, 'admin get ok');
+
+  await store.delete('DirectChat', created.id, admin);
+  await store.delete('Zimmer', zForged.id, admin);
 
   // SystemMessage write — admin only (#20)
   const msg = await store.create(
@@ -482,7 +502,6 @@ async function main() {
   assert(sessDenied, 'stranger get ChatSession → 403');
   await store.delete('ChatSession', sess.id, admin);
 
-  await store.delete('DirectChat', created.id, admin);
   await store.delete('SystemMessage', msg.id, admin);
 
   // Zimmer — open read; owner/admin mutate only

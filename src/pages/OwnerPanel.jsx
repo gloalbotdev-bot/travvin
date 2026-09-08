@@ -49,9 +49,12 @@ export default function OwnerPanel() {
   const openNotificationAction = (actionType, entityId) => {
     if (!actionType || !entityId) { setTab('updates'); return; }
     if (actionType === 'answer_question') {
-      setFocusQuestionId(entityId); setTab('updates'); setTimeout(() => setFocusQuestionId(null), 200);
+      // Keep focus id until OwnerUpdatesPanel consumes it (load is async).
+      setFocusQuestionId(entityId);
+      setTab('updates');
     } else if (actionType === 'open_chat') {
-      setFocusChatId(entityId); setTab('updates'); setTimeout(() => setFocusChatId(null), 200);
+      setFocusChatId(entityId);
+      setTab('updates');
     } else if (actionType === 'open_review') {
       setFocusReviewId(entityId); setTab('reviews'); setTimeout(() => setFocusReviewId(null), 500);
     } else {
@@ -130,7 +133,11 @@ export default function OwnerPanel() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col" dir="rtl" style={{ background: '#FAFAFA', fontFamily: 'Heebo, sans-serif' }}>
+    <div
+      className={`flex flex-col ${tab === 'home' ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}
+      dir="rtl"
+      style={{ background: '#FAFAFA', fontFamily: 'Heebo, sans-serif' }}
+    >
       {showAssistant && <AdminAssistantChat onClose={() => setShowAssistant(false)} onRefresh={() => loadZimmers(currentUser?.id)} />}
       {showBookingCreator && <BookingCreatorChat onClose={() => setShowBookingCreator(false)} onSaved={() => { setShowBookingCreator(false); setTab('bookings'); }} zimmers={zimmers} ownerId={currentUser?.id} />}
 
@@ -156,18 +163,30 @@ export default function OwnerPanel() {
         onLogout={() => api.auth.logout('/')}
       />
 
-      <div className="flex flex-1 overflow-hidden">
-      <main className={`flex-1 overflow-auto ${tab === 'assistant' || tab === 'bookings' ? '' : 'p-4 sm:p-6 lg:p-8'}`}>
+      <div className={`flex flex-1 ${tab === 'home' ? 'min-h-0 overflow-hidden' : 'overflow-hidden'}`}>
+      <main
+        className={`flex-1 min-h-0 ${
+          tab === 'home'
+            ? 'overflow-hidden p-4 pt-0 sm:p-6 sm:pt-0 lg:p-8 lg:pt-0'
+            : tab === 'assistant' || tab === 'bookings'
+              ? 'overflow-auto'
+              : 'overflow-auto p-4 sm:p-6 lg:p-8'
+        }`}
+      >
         {tab === 'home' && (
-          <OwnerAssistantHome
-            ownerId={currentUser?.id}
-            zimmers={zimmers}
-            loading={loading}
-            onChat={handleHomeChat}
-            onQuickAction={handleQuickAction}
-            onNavigate={(t) => setTab(t)}
-            onAddBooking={() => setShowBookingCreator(true)}
-          />
+          <div className="h-full rounded-[23px] bg-white overflow-auto owner-hide-scrollbar">
+            <div className="p-6 lg:p-8">
+              <OwnerAssistantHome
+                ownerId={currentUser?.id}
+                zimmers={zimmers}
+                loading={loading}
+                onChat={handleHomeChat}
+                onQuickAction={handleQuickAction}
+                onNavigate={(t) => setTab(t)}
+                onAddBooking={() => setShowBookingCreator(true)}
+              />
+            </div>
+          </div>
         )}
         {tab === 'assistant' && (
           <OwnerInfoAssistant
@@ -241,7 +260,10 @@ export default function OwnerPanel() {
         )}
       </main>
         {tab === 'home' && (
-          <aside className="hidden lg:block w-[460px] flex-shrink-0" style={{ borderRight: '1px solid #F0EEE8' }}>
+          <aside
+            className="hidden lg:flex flex-col flex-shrink-0 self-stretch min-h-0 h-full overflow-hidden"
+            style={{ width: 460, borderRight: '1px solid #F0EEE8' }}
+          >
             <OwnerDashboardSidebar ownerId={currentUser?.id} zimmers={zimmers} currentUser={currentUser} tab={tab} onAction={openNotificationAction} onNavigate={(t) => setTab(t)} onEditZimmer={(z) => setEditingZimmer(z)} />
           </aside>
         )}

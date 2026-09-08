@@ -215,24 +215,36 @@ export default function SearchChat({ user, onResults, onSelectZimmer, onBookZimm
         if (res.unanswered_question && res.zimmer_id) {
           const z = avail.find((x) => x.id === res.zimmer_id);
           if (z) {
-            const searchSummary = searchDates
-              ? (searchDates.checkIn
-                  ? `${searchDates.checkIn} עד ${searchDates.checkOut}, ${searchDates.numGuests} אורחים`
-                  : `${searchDates.numNights} לילות בין ${searchDates.rangeStart} ל-${searchDates.rangeEnd}, ${searchDates.numGuests} אורחים`)
-              : null;
-            await api.entities.UnansweredQuestion.create({
-              zimmer_id: z.id,
-              zimmer_name: z.name,
-              owner_id: z.owner_id,
-              question: text,
-              session_id: sessionIdRef.current || '',
-              customer_search_summary: searchSummary,
-              customer_name: user?.full_name || '',
-              status: 'ממתינה',
-            }).catch(() => {});
+            if (!user?.id) {
+              addMsg('bot', 'text', 'כדי לשלוח שאלה לבעל הצימר צריך להתחבר קודם.');
+            } else {
+              const searchSummary = searchDates
+                ? (searchDates.checkIn
+                    ? `${searchDates.checkIn} עד ${searchDates.checkOut}, ${searchDates.numGuests} אורחים`
+                    : `${searchDates.numNights} לילות בין ${searchDates.rangeStart} ל-${searchDates.rangeEnd}, ${searchDates.numGuests} אורחים`)
+                : null;
+              try {
+                await api.entities.UnansweredQuestion.create({
+                  zimmer_id: z.id,
+                  zimmer_name: z.name,
+                  owner_id: z.owner_id,
+                  question: text,
+                  session_id: sessionIdRef.current || '',
+                  customer_search_summary: searchSummary,
+                  customer_name: user?.full_name || '',
+                  status: 'ממתינה',
+                });
+                addMsg('bot', 'text', res.message || `השאלה הועברה לבעל ${z.name}. תקבל תשובה בעדכונים.`);
+              } catch {
+                addMsg('bot', 'text', 'לא הצלחתי לשלוח את השאלה לבעל הצימר. נסה שוב אחרי התחברות.');
+              }
+            }
+          } else {
+            addMsg('bot', 'text', res.message || 'מצטער, לא הצלחתי לעבד את הבקשה.');
           }
+        } else {
+          addMsg('bot', 'text', res.message || 'מצטער, לא הצלחתי לעבד את הבקשה.');
         }
-        addMsg('bot', 'text', res.message || 'מצטער, לא הצלחתי לעבד את הבקשה.');
         setQuickOptions([
           { label: '💬 שאלה נוספת', text: 'יש לי עוד שאלה' },
           { label: '🔄 שנה תאריכים', text: 'אני רוצה לשנות תאריכים' },

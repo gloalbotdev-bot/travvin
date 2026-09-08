@@ -72,6 +72,8 @@ async function onBookingCheckoutSummary(store, data, old) {
 
 async function onNewBooking(store, data) {
   if (!data.owner_id) return;
+  // Calendar blocks are not guest booking requests — skip owner "new booking" push.
+  if (data.is_block || data.status === 'חסום') return;
   await pushInAppNotification(store, {
     audience: 'owner',
     target_user_ids: [data.owner_id],
@@ -145,6 +147,28 @@ async function onBookingUpdate(store, data, old) {
       action_type: 'open_booking',
       action_entity_id: data.id,
     });
+  }
+
+  // Owner field edit (no Base44 approval workflow) — notify guest of details change.
+  if (
+    data.created_by_id &&
+    data.created_by_id !== data.owner_id &&
+    data.status !== 'נדחתה' &&
+    old?.status === data.status
+  ) {
+    const fields = ['guest_name', 'guest_phone', 'check_in', 'check_out', 'num_guests', 'notes', 'total_price'];
+    const changed = fields.some((f) => String(old?.[f] ?? '') !== String(data?.[f] ?? ''));
+    if (changed) {
+      await pushInAppNotification(store, {
+        audience: 'customer',
+        target_user_ids: [data.created_by_id],
+        category: 'עדכון',
+        title: 'פרטי ההזמנה עודכנו',
+        body: `בעל הצימר עדכן את ההזמנה ל-${data.zimmer_name || ''} (${data.check_in || ''} עד ${data.check_out || ''}). לחץ לצפייה בפרטים.`,
+        action_type: 'open_booking',
+        action_entity_id: data.id,
+      });
+    }
   }
 }
 

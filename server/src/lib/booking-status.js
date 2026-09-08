@@ -10,6 +10,7 @@ const OWNER_STATUS_TRANSITIONS = {
   'ממתינה': new Set(['אושרה', 'נדחתה']),
   'אושרה': new Set(['נדחתה']),
   'נדחתה': new Set(['ממתינה', 'אושרה']),
+  'חסום': new Set(['ממתינה', 'אושרה', 'נדחתה']),
 };
 
 function isAdmin(actor) {

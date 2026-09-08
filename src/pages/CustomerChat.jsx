@@ -128,7 +128,6 @@ export default function CustomerChat() {
   // the active session the customer can continue in.
   const handleHistorySelect = useCallback(async (item) => {
     setHistoryOpen(false);
-    if (item && item.id && item.id === currentSessionId) return;
     clearPersistedChat();
     setPendingBooking(null);
     setQuickOptions([]);
@@ -372,16 +371,29 @@ export default function CustomerChat() {
       const textMsgs = msgs
         .filter(m => m.type === 'text')
         .map(m => ({ role: m.role === 'bot' ? 'assistant' : m.role, content: m.content, time: m.time || '' }));
-      const res = await api.functions.invoke('appendChatMessage', {
+      const payload = {
         session_id: currentSessionId || null,
         messages: textMsgs,
         zimmer_ids: [...new Set(zimmerIds)],
         booking_created: bookingCreated,
         user_name: user.full_name,
         user_email: user.email,
-      });
+      };
+      let res;
+      try {
+        res = await api.functions.invoke('appendChatMessage', payload);
+      } catch (e) {
+        // Stale session id (login switch / leftover state) — start a fresh session.
+        if ((e?.status === 403 || e?.status === 404 || e?.status === 409) && payload.session_id) {
+          currentSessionId = null;
+          payload.session_id = null;
+          res = await api.functions.invoke('appendChatMessage', payload);
+        } else {
+          throw e;
+        }
+      }
       const data = res && res.data ? res.data : res;
-      if (data && data.session_id && !currentSessionId) {
+      if (data && data.session_id) {
         currentSessionId = data.session_id;
         try { setActiveSession({ id: data.session_id, locked: false }); } catch {}
       }
@@ -546,8 +558,9 @@ message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
 
       setMessages(prev => { saveSession(prev, sessionZimmerIds); return prev; });
     } catch (e) {
+      console.error('[CustomerChat] handleDateSearch failed', e);
       setIsTyping(false);
-      addMessage('bot', 'text', 'מצטער, אירעה שגיאה. נסה שוב.');
+      addMessage('bot', 'text', `מצטער, אירעה שגיאה${e?.message ? `: ${e.message}` : ''}. נסה שוב.`);
     }
   };
 
@@ -581,6 +594,76 @@ message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
       setInput(text);
       return;
     }
+
+    // Quick option: re-show zimmer cards so the guest can pick one and ask — no LLM needed.
+    if (text.includes('אני רוצה לשאול שאלות על אחד מהצימרים') || text.includes('בחר צימר ושאל')) {
+      addMessage('user', 'text', text);
+      const fromIds = [...new Set(sessionZimmerIds)].filter(Boolean);
+      const byId = new Map(zimmers.map((z) => [z.id, z]));
+      let cards = fromIds.map((id) => byId.get(id)).filter(Boolean);
+      if (!cards.length) {
+        for (const m of [...messages].reverse()) {
+          if (m.type === 'zimmers' && Array.isArray(m.content) && m.content.length) {
+            cards = m.content;
+            break;
+          }
+        }
+      }
+      if (cards.length) {
+        addMessage('bot', 'text', 'בחרי צימר מהרשימה ולחצי «שאל שאלה» או כתבי שאלה שמתחילה ב־«בנוגע לצימר...»');
+        addMessage('bot', 'zimmers', cards);
+        setQuickOptions(cards.slice(0, 5).map((z) => ({
+          label: `💬 שאלה על ${z.name}`,
+          text: `בנוגע לצימר "${z.name}": `,
+        })));
+      } else {
+        addMessage('bot', 'text', 'עדיין אין צימרים בשיחה. בחרי תאריכים כדי לראות תוצאות, ואז אפשר לשאול.');
+        setMessages((prev) => [...prev, { id: Date.now() + Math.random(), role: 'bot', type: 'date_search', content: null, time: formatTime() }]);
+      }
+      setMessages((prev) => { saveSession(prev, sessionZimmerIds); return prev; });
+      return;
+    }
+
+    // Direct ask-owner: "בנוגע לצימר \"X\": question…" — skip LLM (was failing and showing generic error).
+    const askMatch = text.match(/^בנוגע לצימר\s*"([^"]+)"\s*:\s*(.+)$/s);
+    if (askMatch) {
+      const zimmerName = askMatch[1].trim();
+      const qText = askMatch[2].trim();
+      if (qText) {
+        addMessage('user', 'text', text);
+        let target =
+          zimmers.find((z) => z.name === zimmerName) ||
+          null;
+        if (!target) {
+          for (const m of [...messages].reverse()) {
+            if (m.type === 'zimmers' && Array.isArray(m.content)) {
+              target = m.content.find((z) => z.name === zimmerName) || null;
+              if (target) break;
+            }
+          }
+        }
+        if (!target && sessionZimmerIds.length) {
+          try {
+            const list = await api.entities.Zimmer.filter({ approval_status: 'אושר' });
+            target = (list || []).find((z) => z.name === zimmerName || sessionZimmerIds.includes(z.id)) || null;
+            if (list?.length) setZimmers(list);
+          } catch { /* continue */ }
+        }
+        if (target) {
+          const searchSummary = searchDates
+            ? (searchDates.checkIn
+                ? `${searchDates.checkIn} עד ${searchDates.checkOut}, ${searchDates.numGuests} אורחים`
+                : `${searchDates.numNights} לילות בין ${searchDates.rangeStart} ל-${searchDates.rangeEnd}, ${searchDates.numGuests} אורחים`)
+            : null;
+          await handleQuestionSubmit(qText, target, searchSummary);
+          setMessages((prev) => { saveSession(prev, sessionZimmerIds); return prev; });
+          return;
+        }
+        addMessage('bot', 'text', `לא מצאתי את הצימר "${zimmerName}" בשיחה. בחרי שוב מכרטיס הצימר.`);
+        return;
+      }
+    }
+
     // Book the active promotion directly (keeps the discounted price)
     if (text.includes('הזמן במבצע') && activePromo) {
       const promoDates = { checkIn: activePromo.promo.check_in, checkOut: activePromo.promo.check_out, numGuests: 2, num_adults: 2, num_children: 0 };
@@ -842,8 +925,9 @@ JSON בלבד.`;
       }
       setMessages(prev => { saveSession(prev, sessionZimmerIds); return prev; });
     } catch (e) {
+      console.error('[CustomerChat] handleSend failed', e);
       setIsTyping(false);
-      addMessage('bot', 'text', 'מצטער, אירעה שגיאה. נסה שוב.');
+      addMessage('bot', 'text', `מצטער, אירעה שגיאה${e?.message ? `: ${e.message}` : ''}. נסה שוב.`);
     }
   };
 
@@ -890,6 +974,10 @@ JSON בלבד.`;
   };
 
   const handleQuestionSubmit = async (qText, zimmer, searchSummary) => {
+    if (!currentUser?.id) {
+      addMessage('bot', 'text', 'כדי לשלוח שאלה לבעל הצימר צריך להתחבר קודם.');
+      return;
+    }
     try {
       await api.entities.UnansweredQuestion.create({
         zimmer_id: zimmer.id,
@@ -903,7 +991,13 @@ JSON בלבד.`;
       });
       addMessage('bot', 'text', `✅ השאלה שלך הועברה לבעל ${zimmer.name}. תקבל תשובה בפאנל האישי תחת "עדכונים" ברגע שיענה 🙏`);
     } catch (e) {
-      addMessage('bot', 'text', 'מצטער, לא הצלחתי לשלוח את השאלה. נסה שוב.');
+      console.error('[CustomerChat] UnansweredQuestion.create failed', e);
+      const status = e?.status;
+      if (status === 401 || status === 403) {
+        addMessage('bot', 'text', 'כדי לשלוח שאלה לבעל הצימר צריך להתחבר קודם.');
+      } else {
+        addMessage('bot', 'text', `מצטער, לא הצלחתי לשלוח את השאלה${e?.message ? ` (${e.message})` : ''}. נסה שוב.`);
+      }
     }
   };
 

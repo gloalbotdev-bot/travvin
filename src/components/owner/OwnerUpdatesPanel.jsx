@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '@/api/client';
 import { Bell, MessageCircleQuestion, ArrowRight, MessageCircle } from 'lucide-react';
 import MessagesList from './messages/MessagesList';
@@ -26,6 +26,7 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
   const [search, setSearch] = useState('');
   const [subFilter, setSubFilter] = useState('all');
   const [isLg, setIsLg] = useState(false);
+  const preferredCategoryDone = useRef(false);
 
   const sysReadSet = loadSysReadSet();
 
@@ -57,25 +58,46 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
   useEffect(() => { load(); }, [user]);
 
   useEffect(() => {
-    const unsub = api.entities.DirectChat.subscribe(() => { load(); });
-    return unsub;
+    const u1 = api.entities.DirectChat.subscribe(() => { load(); });
+    const u2 = api.entities.UnansweredQuestion.subscribe(() => { load(); });
+    const u3 = api.entities.SystemMessage.subscribe(() => { load(); });
+    return () => { u1(); u2(); u3(); };
   }, [user]);
 
   const lookup = useMemo(() => buildPhoneLookup(guestProfiles), [guestProfiles]);
   const chatContacts = useMemo(() => groupChatsByContact(threads, lookup), [threads, lookup]);
   const questionContacts = useMemo(() => groupQuestionsByContact(questions, lookup), [questions, lookup]);
 
-  // Notification deep-links → resolve to the contact that owns the item.
+  // Notification deep-links → resolve after data loads (OwnerPanel used to clear
+  // focus after 200ms, before this panel finished loading).
   useEffect(() => {
-    if (!focusChatId) return;
-    const c = chatContacts.find(c => c.threads.some(t => t.id === focusChatId));
-    if (c) { setCategory('chats'); setSelectedKey(c.key); }
-  }, [focusChatId]);
+    if (!focusChatId || loading) return;
+    preferredCategoryDone.current = true;
+    setCategory('chats');
+    setSubFilter('all');
+    const c = chatContacts.find((x) => x.threads.some((t) => t.id === focusChatId));
+    if (c) setSelectedKey(c.key);
+  }, [focusChatId, chatContacts, loading]);
+
   useEffect(() => {
-    if (!focusQuestionId) return;
-    const c = questionContacts.find(c => c.questions.some(q => q.id === focusQuestionId));
-    if (c) { setCategory('questions'); setSelectedKey(c.key); }
-  }, [focusQuestionId]);
+    if (!focusQuestionId || loading) return;
+    preferredCategoryDone.current = true;
+    setCategory('questions');
+    setSubFilter('pending');
+    const c = questionContacts.find((x) => x.questions.some((q) => q.id === focusQuestionId));
+    if (c) setSelectedKey(c.key);
+  }, [focusQuestionId, questionContacts, loading]);
+
+  // Questions live under "שאלות לקוחות", not "צ'אטים ישירים". When the owner opens
+  // Messages with pending questions (and no chat deep-link), land on questions.
+  useEffect(() => {
+    if (loading || preferredCategoryDone.current || focusChatId || focusQuestionId) return;
+    const hasPendingQ = questionContacts.some((c) => c.questions.some((q) => q.status === 'ממתינה'));
+    if (!hasPendingQ) return;
+    preferredCategoryDone.current = true;
+    setCategory('questions');
+    setSubFilter('pending');
+  }, [loading, questionContacts, focusChatId, focusQuestionId]);
 
   const switchCategory = (id) => {
     setCategory(id);

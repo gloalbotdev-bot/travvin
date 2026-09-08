@@ -211,6 +211,7 @@ export function stripImmutableOwnershipFields(entityType, patch, user) {
   if (
     entityType === 'BookingRequest' ||
     entityType === 'UnansweredQuestion' ||
+    entityType === 'DirectChat' ||
     entityType === 'Zimmer'
   ) {
     delete next.owner_id;
