@@ -63,7 +63,19 @@ app.use(express.json({ limit: '2mb' }));
 app.use(attachAuthUser);
 
 // Local-disk uploads (M11) — public read; write via /api/upload
-app.use(storage.urlPrefix, express.static(storage.rootDir));
+app.use(
+  storage.urlPrefix,
+  express.static(storage.rootDir, {
+    setHeaders(res, filePath) {
+      // express.static maps .webm → video/webm; Gemini STT needs audio/*.
+      if (/\.webm$/i.test(filePath)) res.setHeader('Content-Type', 'audio/webm');
+      else if (/\.m4a$/i.test(filePath)) res.setHeader('Content-Type', 'audio/mp4');
+      else if (/\.ogg$/i.test(filePath)) res.setHeader('Content-Type', 'audio/ogg');
+      else if (/\.wav$/i.test(filePath)) res.setHeader('Content-Type', 'audio/wav');
+      else if (/\.mp3$/i.test(filePath)) res.setHeader('Content-Type', 'audio/mpeg');
+    },
+  }),
+);
 
 app.get('/api/health', async (_req, res) => {
   // Liveness for Render: always 200 if process is up (DB hang must not block deploy).

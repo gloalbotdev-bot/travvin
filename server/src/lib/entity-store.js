@@ -96,10 +96,15 @@ export function createEntityStore(prisma, hooks = {}) {
 
     async create(entityType, data, opts = {}) {
       assertEntity(entityType);
-      const user = normalizeActor(opts.actor ?? {
-        id: opts.createdById,
-        email: opts.createdBy,
-      });
+      // Accept `{ actor }`, legacy `{ createdById, createdBy }`, or a bare Actor object.
+      const user = normalizeActor(
+        opts.actor ||
+          (opts.id && !opts.createdById ? opts : null) || {
+            id: opts.createdById,
+            email: opts.createdBy,
+            role: opts.role,
+          },
+      );
       if (entityType === 'User') {
         assertCan('User', 'create', user, data);
         const err = new Error('Forbidden: User creation is not allowed via entity API');
@@ -127,7 +132,11 @@ export function createEntityStore(prisma, hooks = {}) {
           throw err;
         }
       }
-      if (entityType === 'BookingRequest' || entityType === 'UnansweredQuestion') {
+      if (
+        entityType === 'BookingRequest' ||
+        entityType === 'UnansweredQuestion' ||
+        entityType === 'DirectChat'
+      ) {
         await resolveOwnerFromZimmer(prisma, payload, user);
       }
       assertCan(entityType, 'create', user, payload);

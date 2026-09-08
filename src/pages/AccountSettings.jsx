@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { User, Bell, Link, ArrowRight, Save, Check, Upload } from 'lucide-react';
+import { User, Bell, Link, ArrowRight, Save, Check, Upload, AlertTriangle, Trash2, X } from 'lucide-react';
 
 const inputStyle = {
   background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A', borderRadius: '12px', outline: 'none',
@@ -16,6 +16,9 @@ export default function AccountSettings({ embedded = false }) {
   const [profile, setProfile] = useState({ full_name: '', phone: '', business_name: '', avatar_url: '' });
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [notifications, setNotifications] = useState({ new_booking: true, booking_approved: true, booking_rejected: false, daily_summary: false });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     api.auth.me().then(u => {
@@ -31,6 +34,17 @@ export default function AccountSettings({ embedded = false }) {
     else if (tab === 'notifications') await api.auth.updateMe({ notifications });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await api.functions.invoke('requestAccountDeletion', {});
+      await api.auth.logout('/welcome');
+    } catch (e) {
+      alert('שגיאה בשליחת בקשת המחיקה: ' + (e?.message || String(e)));
+      setDeleting(false);
+    }
   };
 
   if (loading) return (
@@ -198,7 +212,51 @@ export default function AccountSettings({ embedded = false }) {
             {saved ? <><Check size={16} /> נשמר!</> : <><Save size={16} /> שמור שינויים</>}
           </button>
         )}
+
+        {/* Danger zone — account deletion (store compliance) */}
+        <div className="mt-8 rounded-2xl p-6" style={{ background: '#fff', border: '1.5px solid #FECACA' }}>
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle size={18} style={{ color: '#DC2626' }} />
+            <h3 className="text-sm font-black" style={{ color: '#1A1A1A' }}>אזור מסוכן</h3>
+          </div>
+          <p className="text-xs mb-4" style={{ color: '#6B7280' }}>מחיקת החשבון תסיר לצמיתות את גישתך ואת הנתונים האישיים המשויכים אליו ב-Travvin. פעולה זו אינה הפיכה.</p>
+          <button onClick={() => setShowDeleteModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-white transition-all hover:opacity-90"
+            style={{ background: '#DC2626' }}>
+            <Trash2 size={15} /> מחיקת חשבון
+          </button>
+        </div>
       </div>
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => !deleting && setShowDeleteModal(false)}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ background: '#fff' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black" style={{ color: '#1A1A1A' }}>מחיקת חשבון</h3>
+              {!deleting && <button onClick={() => setShowDeleteModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>}
+            </div>
+            <div className="flex items-center gap-2 mb-3 p-3 rounded-xl" style={{ background: '#FEF2F2' }}>
+              <AlertTriangle size={18} style={{ color: '#DC2626' }} />
+              <p className="text-xs font-semibold" style={{ color: '#991B1B' }}>אזהרה: פעולה זו בלתי הפיכה</p>
+            </div>
+            <p className="text-sm mb-4" style={{ color: '#4B5563' }}>
+              מחיקת החשבון תסיר לצמיתות את כל הנתונים האישיים שלך ב-Travvin, כולל פרופיל, היסטוריית שיחות והזמנות. בקשתך תועבר לטיפול ותאושרר באימייל.
+            </p>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#6B7280' }}>לאישור, הקלד <span style={{ color: '#DC2626', fontWeight: 800 }}>מחק</span></label>
+            <input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)}
+              className="w-full px-4 py-3 text-sm mb-4" style={inputStyle} onFocus={inputFocus} onBlur={inputBlur} placeholder="מחק" />
+            <div className="flex gap-2">
+              <button onClick={handleDeleteAccount} disabled={deleting || deleteConfirm.trim() !== 'מחק'}
+                className="flex-1 flex items-center justify-center gap-2 py-3 text-white rounded-xl font-bold text-sm transition-all hover:opacity-90 disabled:opacity-50"
+                style={{ background: '#DC2626' }}>
+                <Trash2 size={16} /> {deleting ? 'שולח בקשה...' : 'מחק את חשבוני לצמיתות'}
+              </button>
+              <button onClick={() => setShowDeleteModal(false)} disabled={deleting}
+                className="px-4 py-3 rounded-xl text-sm font-semibold" style={{ background: '#F8F7F4', color: '#6B7280' }}>ביטול</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

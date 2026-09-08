@@ -29,6 +29,7 @@ const OWN_FUNCTIONS = {
   appendChatMessage: { path: '/api/functions/appendChatMessage', auth: true },
   splitCustomerChat: { path: '/api/functions/splitCustomerChat', auth: true },
   getOwnerStatistics: { path: '/api/functions/getOwnerStatistics', auth: true },
+  requestAccountDeletion: { path: '/api/functions/requestAccountDeletion', auth: true },
 };
 
 export const ownFunctions = {

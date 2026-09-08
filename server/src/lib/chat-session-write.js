@@ -35,29 +35,43 @@ export async function appendChatMessage(store, payload = {}, actor) {
   const data = {
     user_id: actor.id,
     user_name: user_name || actor.full_name || '',
-    user_email: user_email || actor.email || '',
     messages: msgDocs,
     zimmer_ids_shown: [...new Set(zimmerIds)],
     booking_created: !!booking_created,
   };
+  // ChatSession.user_email is format:email — empty string fails Zod validation (400).
+  const email = String(user_email || actor.email || '').trim();
+  if (email && email.includes('@')) data.user_email = email;
 
   if (session_id) {
-    const existing = await store.get('ChatSession', session_id, SERVICE_ACTOR);
-    if (existing.locked) {
-      const err = new Error('locked');
-      err.status = 409;
-      throw err;
+    let existing = null;
+    try {
+      existing = await store.get('ChatSession', session_id, SERVICE_ACTOR);
+    } catch {
+      existing = null;
     }
-    if (existing.user_id !== actor.id && actor.role !== 'admin') {
-      const err = new Error('forbidden');
-      err.status = 403;
-      throw err;
+
+    if (existing) {
+      if (existing.locked) {
+        const err = new Error('locked');
+        err.status = 409;
+        throw err;
+      }
+      // Only write into the caller's own session. Stale/foreign session_id
+      // (common after login switch or leftover localStorage) → create fresh.
+      // Base44 overwrote any session via service role; we keep tenancy.
+      if (existing.user_id === actor.id || actor.role === 'admin') {
+        const updated = await store.update('ChatSession', session_id, data, SERVICE_ACTOR);
+        return { session_id: updated.id };
+      }
     }
-    const updated = await store.update('ChatSession', session_id, data, SERVICE_ACTOR);
-    return { session_id: updated.id };
   }
 
-  const created = await store.create('ChatSession', data, actor);
+  const created = await store.create('ChatSession', data, {
+    actor,
+    createdById: actor.id,
+    createdBy: actor.email,
+  });
   return { session_id: created.id };
 }
 
@@ -153,7 +167,11 @@ export async function splitCustomerChat(store, payload = {}, actor) {
       summary,
       title,
     },
-    actor,
+    {
+      actor,
+      createdById: actor.id,
+      createdBy: actor.email,
+    },
   );
 
   return {

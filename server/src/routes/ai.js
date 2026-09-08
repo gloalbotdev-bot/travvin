@@ -74,7 +74,8 @@ export function createAiRouter() {
         return res.status(400).json({ error: 'audio_url required' });
       }
       const text = await transcribeAudioUrl(String(audioUrl));
-      res.json(text);
+      // Always return an object so clients never confuse a JSON string body.
+      res.json({ text: typeof text === 'string' ? text : String(text || '') });
     } catch (err) {
       const status = err.status || 500;
       res.status(status).json({

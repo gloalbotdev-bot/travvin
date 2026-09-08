@@ -5,7 +5,7 @@ import iconLogout from '@/assets/owner/home/icon-logout.svg';
 import iconLogin from '@/assets/owner/home/icon-login.svg';
 import iconBell from '@/assets/owner/home/icon-bell-stat.svg';
 import iconUsers from '@/assets/owner/home/icon-users.svg';
-import iconChevron from '@/assets/owner/home/icon-chevron.svg';
+import iconChevron from '@/assets/owner/calendar/chevron-action.svg';
 import badgeAlert from '@/assets/owner/home/badge-alert.svg';
 import badgeQuestion from '@/assets/owner/home/badge-question.svg';
 import badgeMail from '@/assets/owner/home/badge-mail.svg';
@@ -46,19 +46,31 @@ export default function OwnerDashboardSidebar({ ownerId, zimmers, currentUser, t
 
   useEffect(() => {
     if (!ownerId) return;
-    (async () => {
+    let cancelled = false;
+    const load = async () => {
       try {
         const [b, q, c] = await Promise.all([
           api.entities.BookingRequest.filter({ owner_id: ownerId }),
           api.entities.UnansweredQuestion.filter({ owner_id: ownerId, status: 'ממתינה' }),
           api.entities.DirectChat.filter({ owner_id: ownerId }, '-updated_date'),
         ]);
+        if (cancelled) return;
         setBookings(b || []);
         setQuestions(q || []);
         setChats(c || []);
       } catch { /* silent */ }
-      setLoading(false);
-    })();
+      if (!cancelled) setLoading(false);
+    };
+    load();
+    const u1 = api.entities.BookingRequest.subscribe(() => { load(); });
+    const u2 = api.entities.UnansweredQuestion.subscribe(() => { load(); });
+    const u3 = api.entities.DirectChat.subscribe(() => { load(); });
+    return () => {
+      cancelled = true;
+      u1();
+      u2();
+      u3();
+    };
   }, [ownerId]);
 
   useEffect(() => {
@@ -141,8 +153,17 @@ export default function OwnerDashboardSidebar({ ownerId, zimmers, currentUser, t
   const selectedLabel = selectedZimmer === 'all' ? `כל הנכסים (${zimmers.length})` : (zimmers.find(z => z.id === selectedZimmer)?.name || 'נכס');
 
   return (
-    <div dir="rtl" className="h-full flex flex-col font-simona" style={{ background: '#FAFAFA' }}>
-      <div className="px-5 py-5 overflow-y-auto flex-1">
+    <div className="h-full min-h-0 flex flex-col font-simona" style={{ background: '#FAFAFA' }}>
+      {/*
+        Figma 1011:209 — scrollbar on physical RIGHT of left sidebar.
+        dir=ltr on the scrollport puts the thumb on the right; inner stays RTL.
+      */}
+      <div
+        className="owner-sidebar-scroll overflow-y-auto flex-1 min-h-0 overscroll-contain"
+        dir="ltr"
+        style={{ paddingTop: 46, paddingBottom: 20 }}
+      >
+        <div dir="rtl" className="px-5 font-simona">
         {tab === 'home' && (
           <>
             <h1 className="font-simpler leading-tight" style={{ color: '#0B3838', fontSize: 29, fontWeight: 600 }}>
@@ -248,21 +269,25 @@ export default function OwnerDashboardSidebar({ ownerId, zimmers, currentUser, t
                       <span
                         className="font-simona inline-flex items-center gap-1.5 px-2 py-1 rounded"
                         style={{ background: '#D9F3F9', color: '#0B3838', fontSize: 12, fontWeight: 700 }}
+                        dir="rtl"
                       >
-                        {badge.label}
-                        <span className="overflow-hidden" style={{ width: 14, height: 14 }}>
+                        {/* Figma: icon on the RIGHT of the label */}
+                        <span className="overflow-hidden flex-shrink-0" style={{ width: 14, height: 14 }}>
                           <img src={badge.icon} alt="" width={14} height={14} className="block w-full h-full" />
                         </span>
+                        {badge.label}
                       </span>
                       <button
                         type="button"
                         onClick={() => handleAction(a)}
-                        className="font-simona flex items-center gap-1.5 transition-all hover:opacity-70 flex-shrink-0"
+                        className="font-simona inline-flex items-center gap-2 transition-all hover:opacity-70 flex-shrink-0"
                         style={{ color: '#0B3838', fontSize: 16, fontWeight: 400 }}
+                        dir="rtl"
                       >
                         {ACTION_LABEL[a.type] || 'טפל'}
-                        <span className="overflow-hidden" style={{ width: 6, height: 12 }}>
-                          <img src={iconChevron} alt="" width={6} height={12} className="block w-full h-full" />
+                        {/* Full chevron — no overflow clip (stroke was cut at 6×12) */}
+                        <span className="flex-shrink-0 flex items-center justify-center" style={{ width: 12, height: 16 }}>
+                          <img src={iconChevron} alt="" width={12} height={16} className="block" style={{ width: 12, height: 16 }} />
                         </span>
                       </button>
                     </div>
@@ -273,6 +298,7 @@ export default function OwnerDashboardSidebar({ ownerId, zimmers, currentUser, t
               })}
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>

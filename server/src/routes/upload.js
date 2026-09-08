@@ -28,6 +28,8 @@ const AUDIO_MIME = new Set([
   'audio/mpeg',
   'audio/mp4',
   'audio/wav',
+  'audio/x-m4a',
+  'audio/aac',
 ]);
 const VIDEO_MIME = new Set([
   'video/mp4',
@@ -41,6 +43,13 @@ const upload = multer({
   // Use the larger video cap; reject non-video over MAX_BYTES below.
   limits: { fileSize: Math.max(MAX_BYTES, MAX_VIDEO_BYTES), files: 1 },
 });
+
+function normalizeMime(raw) {
+  return String(raw || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+}
 
 function extFor(file) {
   const fromName = path.extname(file.originalname || '').toLowerCase();
@@ -59,9 +68,11 @@ function extFor(file) {
     'audio/ogg': '.ogg',
     'audio/mpeg': '.mp3',
     'audio/mp4': '.m4a',
+    'audio/x-m4a': '.m4a',
+    'audio/aac': '.m4a',
     'audio/wav': '.wav',
   };
-  return map[file.mimetype] || '.bin';
+  return map[normalizeMime(file.mimetype)] || '.bin';
 }
 
 function maxBytesForMime(mime) {
@@ -89,13 +100,19 @@ export function createUploadRouter(storage) {
         if (!file || !file.buffer?.length) {
           return res.status(400).json({ error: 'file is required' });
         }
-        if (file.mimetype && !ALLOWED_MIME.has(file.mimetype)) {
+        let mime = normalizeMime(file.mimetype);
+        // Voice recordings are often labeled video/webm by the browser.
+        if (mime === 'video/webm' && /^voice[-_]/i.test(file.originalname || '')) {
+          mime = 'audio/webm';
+        }
+        file.mimetype = mime;
+        if (mime && !ALLOWED_MIME.has(mime)) {
           return res.status(400).json({
-            error: `Unsupported file type: ${file.mimetype}`,
+            error: `Unsupported file type: ${mime || file.mimetype}`,
           });
         }
 
-        const maxForType = maxBytesForMime(file.mimetype);
+        const maxForType = maxBytesForMime(mime);
         if (file.size > maxForType) {
           return res.status(400).json({
             error: `File too large (max ${Math.round(maxForType / (1024 * 1024))}MB for this type)`,
@@ -106,7 +123,7 @@ export function createUploadRouter(storage) {
         await storage.put({
           key,
           body: file.buffer,
-          contentType: file.mimetype,
+          contentType: mime || file.mimetype,
         });
         const file_url = storage.getUrl(key);
         // Same shape as Base44 Core.UploadFile

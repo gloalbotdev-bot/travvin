@@ -60,8 +60,23 @@ export default function CustomerUpdatesTab({ user, onAction, focusQuestionId, fo
 
   const toggle = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
-  useEffect(() => { if (focusQuestionId) setExpanded(prev => ({ ...prev, [focusQuestionId]: true })); }, [focusQuestionId]);
+  // Deep-link from "תשובה חדשה מבעל הצימר" — expand + scroll after data is ready.
+  useEffect(() => {
+    if (!focusQuestionId || loading) return;
+    setExpanded((prev) => ({ ...prev, [focusQuestionId]: true }));
+    const t = window.setTimeout(() => {
+      const el =
+        document.getElementById(`customer-answer-${focusQuestionId}`) ||
+        document.getElementById(`customer-answer-focus`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+    return () => window.clearTimeout(t);
+  }, [focusQuestionId, loading, questions]);
+
   const answeredQuestions = questions.filter(q => q.status === 'נענתה');
+  const focusedAnswer = focusQuestionId
+    ? questions.find((q) => q.id === focusQuestionId && q.status === 'נענתה')
+    : null;
 
   // Unified feed (not divided by category) — shows new items on top; older ones get pushed down
   const recentFeed = (() => {
@@ -101,6 +116,34 @@ export default function CustomerUpdatesTab({ user, onAction, focusQuestionId, fo
         <h1 className="text-2xl font-black" style={{ color: '#1A1A1A' }}>עדכונים</h1>
         <p className="text-sm mt-1" style={{ color: '#9CA3AF' }}>הודעות מערכת, הזמנות קרובות, תשובות מבעלי צימרים והתכתבות ישירה</p>
       </div>
+
+      {focusedAnswer && (
+        <div
+          id="customer-answer-focus"
+          className="mb-8 rounded-2xl overflow-hidden"
+          style={{ background: '#fff', border: '1.5px solid rgba(34,197,94,0.35)', boxShadow: '0 8px 24px rgba(34,197,94,0.08)' }}
+        >
+          <div className="px-4 py-3 flex items-center gap-2" style={{ background: 'rgba(34,197,94,0.08)' }}>
+            <CheckCircle size={18} style={{ color: '#22C55E' }} />
+            <p className="font-bold text-sm" style={{ color: '#166534' }}>תשובת בעל הצימר</p>
+            {focusedAnswer.zimmer_name && (
+              <span className="text-xs mr-auto" style={{ color: '#9CA3AF' }}>{focusedAnswer.zimmer_name}</span>
+            )}
+          </div>
+          <div className="px-4 py-4 space-y-3">
+            <div>
+              <p className="text-[11px] font-bold mb-1" style={{ color: '#9CA3AF' }}>השאלה שלך</p>
+              <p className="text-sm" style={{ color: '#4B5563' }}>{focusedAnswer.question}</p>
+            </div>
+            {focusedAnswer.owner_answer && (
+              <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                <p className="text-[11px] font-bold mb-1" style={{ color: '#16A34A' }}>התשובה</p>
+                <p className="text-sm whitespace-pre-wrap" style={{ color: '#1A1A1A' }}>{focusedAnswer.owner_answer}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* עדכונים אחרונים — unified feed, not categorized. Stays on top until pushed down. */}
       <div className="mb-10">
@@ -205,9 +248,19 @@ export default function CustomerUpdatesTab({ user, onAction, focusQuestionId, fo
         ) : (
           <div className="space-y-2">
             {answeredQuestions.map(q => {
-              const isOpen = expanded[q.id];
+              const isOpen = expanded[q.id] || q.id === focusQuestionId;
               return (
-                <div key={q.id} className="rounded-2xl overflow-hidden" style={{ background: '#fff', border: '1.5px solid rgba(34,197,94,0.25)' }}>
+                <div
+                  key={q.id}
+                  id={`customer-answer-${q.id}`}
+                  className="rounded-2xl overflow-hidden"
+                  style={{
+                    background: '#fff',
+                    border: q.id === focusQuestionId
+                      ? '1.5px solid rgba(34,197,94,0.55)'
+                      : '1.5px solid rgba(34,197,94,0.25)',
+                  }}
+                >
                   <button className="w-full flex items-center gap-3 px-4 py-3 text-right" onClick={() => toggle(q.id)}>
                     <CheckCircle size={18} style={{ color: '#22C55E' }} />
                     <div className="flex-1 min-w-0">
@@ -219,7 +272,7 @@ export default function CustomerUpdatesTab({ user, onAction, focusQuestionId, fo
                   {isOpen && q.owner_answer && (
                     <div className="px-4 pb-4">
                       <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)' }}>
-                        <p className="text-sm" style={{ color: '#1A1A1A' }}>{q.owner_answer}</p>
+                        <p className="text-sm whitespace-pre-wrap" style={{ color: '#1A1A1A' }}>{q.owner_answer}</p>
                       </div>
                     </div>
                   )}

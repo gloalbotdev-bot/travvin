@@ -32,6 +32,7 @@ import { searchIsraelAddresses } from '../lib/israel-address-search.js';
 import { buildGuestSummary } from '../lib/build-guest-summary.js';
 import { appendChatMessage, splitCustomerChat } from '../lib/chat-session-write.js';
 import { getOwnerStatistics } from '../lib/get-owner-statistics.js';
+import { requestAccountDeletion } from '../lib/request-account-deletion.js';
 
 /**
  * @param {ReturnType<import('../lib/entity-store.js').createEntityStore>} store
@@ -339,6 +340,16 @@ export function createFunctionsRouter(store, prisma) {
   router.post('/getOwnerStatistics', requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const result = await getOwnerStatistics(store, req.actor || req.user);
+      res.json(result);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  // Store compliance — confirm deletion request; admin removes the user manually.
+  router.post('/requestAccountDeletion', requireAuth, async (req, res) => {
+    try {
+      const result = await requestAccountDeletion(store, req.actor || req.user);
       res.json(result);
     } catch (err) {
       sendError(res, err);
