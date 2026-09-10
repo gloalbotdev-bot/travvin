@@ -30,6 +30,7 @@ ${zones || '(אין מידע נוסף)'}
     try {
       await api.entities.UnansweredQuestion.update(question.id, {
         status: 'נענתה',
+        answered_by: 'owner',
         owner_answer: answer.trim(),
         save_to_knowledge: true,
         answered_at: new Date().toISOString().split('T')[0],

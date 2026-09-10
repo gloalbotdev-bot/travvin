@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 
 // Per-message read tracking for owner system messages.
-// A message stays "unread" until the owner opens the system sub-tab.
+// A message stays "unread" until the owner opens that specific message.
 // Robust against timestamp poisoning that the old lastSeen approach suffered from.
 const READ_KEY = 'zb_read_sysmsgs_owner';
 
@@ -42,5 +42,16 @@ export function useOwnerSystemUnread(userId) {
     saveReadSet(next);
   }, [messages]);
 
-  return { messages, count, markAllRead, refresh: load };
+  const markOneRead = useCallback((id) => {
+    if (!id) return;
+    setReadSet((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      saveReadSet(next);
+      return next;
+    });
+  }, []);
+
+  return { messages, count, markAllRead, markOneRead, refresh: load };
 }

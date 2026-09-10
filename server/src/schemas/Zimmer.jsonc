@@ -366,6 +366,10 @@
       "type": "string",
       "title": "חתימת אזורי מידע בזמן הסיכום"
     },
+    "knowledge_summary": {
+      "type": "string",
+      "title": "סיכום AI פנימי למאגר הידע (בעלים)"
+    },
     "stay_settings": {
       "type": "object",
       "title": "הגדרות צ'ק-אין והודעות אוטומטיות",

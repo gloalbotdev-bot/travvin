@@ -26,7 +26,7 @@ export default function UpdatesPopover({ userId, fullUserName, onGoAll }) {
         mineQ.forEach(q => {
           if (q.status === 'ממתינה') feed.push({ key: 'p_' + q.id, kind: 'pending', date: q.created_date, title: 'שאלה ממתינה לתשובה', body: q.question, color: '#D97706', badge: 'ממתינה', zimmerName: q.zimmer_name });
           else if (q.status === 'נענתה') feed.push({ key: 'a_' + q.id, kind: 'answered', date: q.answered_at || q.created_date, title: 'תשובה התקבלה מבעל הצימר', body: q.question, answer: q.owner_answer, color: '#22C55E', badge: 'תשובה', zimmerName: q.zimmer_name });
-          else if (q.status === 'נדחיתה') feed.push({ key: 'r_' + q.id, kind: 'rejected', date: q.created_date, title: 'שאלה נדחתה', body: q.question, color: '#9CA3AF', badge: 'נדחית', zimmerName: q.zimmer_name });
+          else if (q.status === 'נדחתה') feed.push({ key: 'r_' + q.id, kind: 'rejected', date: q.created_date, title: 'שאלה נדחתה', body: q.question, color: '#9CA3AF', badge: 'נדחית', zimmerName: q.zimmer_name });
         });
         feed.sort((a, b) => new Date(b.date) - new Date(a.date));
         setItems(feed.slice(0, 6));

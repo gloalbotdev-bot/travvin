@@ -92,7 +92,7 @@ export default function CustomerUpdatesTab({ user, onAction, focusQuestionId, fo
         items.push({ key: 'pending_' + q.id, kind: 'pending', date: q.created_date, title: 'שאלה ממתינה לתשובה', body: q.question, color: '#D97706', badge: 'ממתינה', zimmerName: q.zimmer_name });
       } else if (q.status === 'נענתה') {
         items.push({ key: 'answered_' + q.id, kind: 'answered', date: q.answered_at || q.created_date, title: 'תשובה התקבלה מבעל הצימר', body: q.question, answer: q.owner_answer, color: '#22C55E', badge: 'תשובה', zimmerName: q.zimmer_name, questionId: q.id });
-      } else if (q.status === 'נדחיתה') {
+      } else if (q.status === 'נדחתה') {
         items.push({ key: 'rejected_' + q.id, kind: 'rejected', date: q.created_date, title: 'שאלה נדחתה', body: q.question, color: '#9CA3AF', badge: 'נדחית', zimmerName: q.zimmer_name });
       }
     });

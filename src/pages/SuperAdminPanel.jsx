@@ -108,6 +108,27 @@ export default function SuperAdminPanel() {
     return allBookings.filter(b => ids.includes(b.zimmer_id)).length;
   };
 
+  const handleZimmerSave = async (data) => {
+    let saved;
+    if (data.id) {
+      saved = await api.entities.Zimmer.update(data.id, data);
+    } else {
+      saved = await api.entities.Zimmer.create(data);
+    }
+    const next = saved || data;
+    setEditingZimmer(null);
+    if (next?.id && viewingZimmer?.id === next.id) {
+      setViewingZimmer(next);
+    }
+    setAllZimmers((prev) => {
+      if (!next?.id) return prev;
+      const exists = prev.some((z) => z.id === next.id);
+      return exists ? prev.map((z) => (z.id === next.id ? next : z)) : [...prev, next];
+    });
+    await loadAll();
+    return next;
+  };
+
   if (accessDenied) return (
     <div className="min-h-screen flex items-center justify-center" dir="rtl" style={{ background: '#F8F7F4', fontFamily: 'Heebo, sans-serif' }}>
       <div className="text-center p-8 rounded-2xl" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
@@ -121,8 +142,20 @@ export default function SuperAdminPanel() {
 
   const allowedPages = adminPermission?.allowed_pages; // null = all pages allowed
 
-  if (viewingZimmer) return <ZimmerView zimmer={viewingZimmer} onEdit={() => { setEditingZimmer(viewingZimmer); setViewingZimmer(null); }} onCancel={() => setViewingZimmer(null)} />;
-  if (editingZimmer) return <ZimmerEditor zimmer={editingZimmer} onSave={async (data) => { if (data.id) { await api.entities.Zimmer.update(data.id, data); } else { await api.entities.Zimmer.create(data); } setEditingZimmer(null); loadAll(); }} onCancel={() => setEditingZimmer(null)} />;
+  if (viewingZimmer) {
+    return (
+      <ZimmerView
+        zimmer={viewingZimmer}
+        onCancel={() => setViewingZimmer(null)}
+        onSave={handleZimmerSave}
+        onUpdated={(updated) => {
+          setViewingZimmer(updated);
+          setAllZimmers((prev) => prev.map((z) => (z.id === updated.id ? updated : z)));
+        }}
+      />
+    );
+  }
+  if (editingZimmer) return <ZimmerEditor zimmer={editingZimmer} onSave={handleZimmerSave} onCancel={() => setEditingZimmer(null)} />;
   if (creatingZimmer) return <ZimmerCreatorChat onSave={async (data) => { await api.entities.Zimmer.create({ ...data, owner_id: newZimmerOwnerId, owner_name: owners.find(o => o.id === newZimmerOwnerId)?.full_name || '' }); setCreatingZimmer(false); setNewZimmerOwnerId(''); loadAll(); }} onCancel={() => { setCreatingZimmer(false); setNewZimmerOwnerId(''); }} />;
 
   const allNavItems = [

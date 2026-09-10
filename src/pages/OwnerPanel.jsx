@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Home, ClipboardList, MessageSquare, CalendarDays, Users, Settings, Database, Star, Bot, Tag, Bell, Key, Video, Plus, BarChart3 } from 'lucide-react';
 import OwnerStatistics from '@/pages/OwnerStatistics';
@@ -62,7 +62,12 @@ export default function OwnerPanel() {
     }
   };
 
-  const { count: notifCount, markAllRead: markSystemRead } = useOwnerSystemUnread(currentUser?.id);
+  const onFocusConsumed = useCallback((kind) => {
+    if (kind === 'question') setFocusQuestionId(null);
+    else if (kind === 'chat') setFocusChatId(null);
+  }, []);
+
+  const { count: notifCount, markOneRead: markSystemRead } = useOwnerSystemUnread(currentUser?.id);
 
   const loadZimmers = async (ownerId) => {
     setLoading(true);
@@ -72,13 +77,19 @@ export default function OwnerPanel() {
   };
 
   const handleSave = async (data) => {
+    let saved;
     if (data.id) {
-      await api.entities.Zimmer.update(data.id, data);
+      saved = await api.entities.Zimmer.update(data.id, data);
     } else {
-      await api.entities.Zimmer.create({ ...data, owner_id: currentUser?.id, owner_name: currentUser?.full_name, approval_status: 'אושר' });
+      saved = await api.entities.Zimmer.create({ ...data, owner_id: currentUser?.id, owner_name: currentUser?.full_name, approval_status: 'אושר' });
     }
+    const next = saved || data;
     setEditingZimmer(null);
-    loadZimmers(currentUser?.id);
+    if (next?.id && viewingZimmer?.id === next.id) {
+      setViewingZimmer(next);
+    }
+    await loadZimmers(currentUser?.id);
+    return next;
   };
 
   const handleDelete = async (id) => {
@@ -162,6 +173,7 @@ export default function OwnerPanel() {
           embedded
           zimmer={viewingZimmer}
           onCancel={() => setViewingZimmer(null)}
+          onSave={handleSave}
           onUpdated={(updated) => { setViewingZimmer(updated); setZimmers(prev => prev.map(z => z.id === updated.id ? updated : z)); }}
           onDelete={handleDelete}
         />
@@ -210,7 +222,7 @@ export default function OwnerPanel() {
         {tab === 'database' && <ZimmerDatabase ownerId={currentUser?.id} />}
         {tab === 'reviews' && <ReviewsPanel ownerId={currentUser?.id} focusReviewId={focusReviewId} />}
         {tab === 'questions' && <QuestionsPanel ownerId={currentUser?.id} />}
-        {tab === 'updates' && <OwnerUpdatesPanel user={currentUser} onAction={openNotificationAction} focusQuestionId={focusQuestionId} focusChatId={focusChatId} onMarkSystemRead={markSystemRead} onAddBooking={() => setShowBookingCreator(true)} onNavigate={(t) => setTab(t)} />}
+        {tab === 'updates' && <OwnerUpdatesPanel user={currentUser} onAction={openNotificationAction} focusQuestionId={focusQuestionId} focusChatId={focusChatId} onFocusConsumed={onFocusConsumed} onMarkSystemRead={markSystemRead} onAddBooking={() => setShowBookingCreator(true)} onNavigate={(t) => setTab(t)} />}
         {tab === 'videos' && <OwnerVideos ownerId={currentUser?.id} />}
         {tab === 'promotions' && <PromotionsPanel ownerId={currentUser?.id} />}
         {tab === 'statistics' && <OwnerStatistics ownerId={currentUser?.id} onNavigate={(t) => setTab(t)} />}

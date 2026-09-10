@@ -14,7 +14,7 @@ const chatLastSeen = (id) => localStorage.getItem(`zb_lastSeen_chat_${id}`) || '
 const markChatRead = (id) => localStorage.setItem(`zb_lastSeen_chat_${id}`, new Date().toISOString());
 const markSysRead = (id) => { const s = loadSysReadSet(); s.add(id); localStorage.setItem(SYS_READ_KEY, JSON.stringify([...s])); };
 
-export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, focusChatId, onMarkSystemRead, onAddBooking, onNavigate }) {
+export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, focusChatId, onFocusConsumed, onMarkSystemRead, onAddBooking, onNavigate }) {
   const [category, setCategory] = useState('chats');
   const [threads, setThreads] = useState([]);
   const [questions, setQuestions] = useState([]);
@@ -27,6 +27,10 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
   const [subFilter, setSubFilter] = useState('all');
   const [isLg, setIsLg] = useState(false);
   const preferredCategoryDone = useRef(false);
+  const consumedChatFocus = useRef(null);
+  const consumedQuestionFocus = useRef(null);
+  const userIdRef = useRef(user?.id);
+  userIdRef.current = user?.id;
 
   const sysReadSet = loadSysReadSet();
 
@@ -38,55 +42,93 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
     return () => mq.removeEventListener('change', update);
   }, []);
 
-  const load = async () => {
-    if (!user?.id) return;
-    setLoading(true);
-    try {
-      const [direct, sys, qs, profiles] = await Promise.all([
-        api.entities.DirectChat.filter({ owner_id: user.id }, '-updated_date'),
-        api.entities.SystemMessage.filter({ audience: 'owner' }, '-created_date', 30),
-        api.entities.UnansweredQuestion.filter({ owner_id: user.id }, '-created_date'),
-        api.entities.GuestProfile.filter({ owner_id: user.id }).catch(() => []),
-      ]);
-      setThreads(direct || []);
-      setSystemMsgs((sys || []).filter(m => !m.target_user_ids?.length || (m.target_user_ids || []).includes(user.id)));
-      setQuestions(qs || []);
-      setGuestProfiles(profiles || []);
-    } catch { /* silent */ }
-    setLoading(false);
+  // Per-entity load so one failing query (e.g. SystemMessage) does not wipe questions/chats.
+  const load = async ({ silent = false } = {}) => {
+    const uid = userIdRef.current;
+    if (!uid) {
+      setLoading(false);
+      return;
+    }
+    if (!silent) setLoading(true);
+    const asArray = (v) => (Array.isArray(v) ? v : []);
+    // Wrap each call so a missing entity client (undefined.filter) becomes a rejected
+    // settlement instead of crashing the whole load before allSettled runs.
+    const safe = (fn) => Promise.resolve().then(fn);
+    const settled = await Promise.allSettled([
+      safe(() => api.entities.DirectChat.filter({ owner_id: uid }, '-updated_date')),
+      safe(() => api.entities.SystemMessage.filter({ audience: 'owner' }, '-created_date', 30)),
+      safe(() => api.entities.UnansweredQuestion.filter({ owner_id: uid }, '-created_date')),
+      safe(() => api.entities.GuestProfile?.filter({ owner_id: uid }) ?? []),
+    ]);
+    const [directR, sysR, qsR, profilesR] = settled;
+    if (directR.status === 'fulfilled') setThreads(asArray(directR.value));
+    else console.warn('[OwnerUpdatesPanel] DirectChat.load failed', directR.reason);
+    if (sysR.status === 'fulfilled') {
+      setSystemMsgs(asArray(sysR.value).filter(
+        (m) => !m.target_user_ids?.length || (m.target_user_ids || []).includes(uid),
+      ));
+    } else console.warn('[OwnerUpdatesPanel] SystemMessage.load failed', sysR.reason);
+    if (qsR.status === 'fulfilled') setQuestions(asArray(qsR.value));
+    else console.warn('[OwnerUpdatesPanel] UnansweredQuestion.load failed', qsR.reason);
+    if (profilesR.status === 'fulfilled') setGuestProfiles(asArray(profilesR.value));
+    else {
+      console.warn('[OwnerUpdatesPanel] GuestProfile.load failed', profilesR.reason);
+      setGuestProfiles([]);
+    }
+    if (!silent) setLoading(false);
   };
-  useEffect(() => { load(); }, [user]);
+  useEffect(() => { load(); }, [user?.id]);
 
   useEffect(() => {
-    const u1 = api.entities.DirectChat.subscribe(() => { load(); });
-    const u2 = api.entities.UnansweredQuestion.subscribe(() => { load(); });
-    const u3 = api.entities.SystemMessage.subscribe(() => { load(); });
+    const u1 = api.entities.DirectChat.subscribe(() => { load({ silent: true }); });
+    const u2 = api.entities.UnansweredQuestion.subscribe(() => { load({ silent: true }); });
+    const u3 = api.entities.SystemMessage.subscribe(() => { load({ silent: true }); });
     return () => { u1(); u2(); u3(); };
-  }, [user]);
+  }, [user?.id]);
 
   const lookup = useMemo(() => buildPhoneLookup(guestProfiles), [guestProfiles]);
-  const chatContacts = useMemo(() => groupChatsByContact(threads, lookup), [threads, lookup]);
+  // Hide threads opened but never messaged — inbox only shows real conversations.
+  const activeThreads = useMemo(
+    () => (threads || []).filter((t) => (t.messages || []).length > 0),
+    [threads],
+  );
+  const chatContacts = useMemo(() => groupChatsByContact(activeThreads, lookup), [activeThreads, lookup]);
   const questionContacts = useMemo(() => groupQuestionsByContact(questions, lookup), [questions, lookup]);
 
-  // Notification deep-links → resolve after data loads (OwnerPanel used to clear
-  // focus after 200ms, before this panel finished loading).
+  // Notification deep-links → resolve after data loads, then clear focus in parent
+  // so a stale id cannot keep locking category/subFilter on later visits.
   useEffect(() => {
-    if (!focusChatId || loading) return;
+    if (!focusChatId) {
+      consumedChatFocus.current = null;
+      return;
+    }
+    if (loading) return;
+    if (consumedChatFocus.current === focusChatId) return;
     preferredCategoryDone.current = true;
     setCategory('chats');
     setSubFilter('all');
     const c = chatContacts.find((x) => x.threads.some((t) => t.id === focusChatId));
     if (c) setSelectedKey(c.key);
-  }, [focusChatId, chatContacts, loading]);
+    consumedChatFocus.current = focusChatId;
+    onFocusConsumed?.('chat');
+  }, [focusChatId, chatContacts, loading, onFocusConsumed]);
 
   useEffect(() => {
-    if (!focusQuestionId || loading) return;
+    if (!focusQuestionId) {
+      consumedQuestionFocus.current = null;
+      return;
+    }
+    if (loading) return;
+    if (consumedQuestionFocus.current === focusQuestionId) return;
     preferredCategoryDone.current = true;
     setCategory('questions');
-    setSubFilter('pending');
+    // Use "all" so an answered/dismissed focused question still appears in the list.
+    setSubFilter('all');
     const c = questionContacts.find((x) => x.questions.some((q) => q.id === focusQuestionId));
     if (c) setSelectedKey(c.key);
-  }, [focusQuestionId, questionContacts, loading]);
+    consumedQuestionFocus.current = focusQuestionId;
+    onFocusConsumed?.('question');
+  }, [focusQuestionId, questionContacts, loading, onFocusConsumed]);
 
   // Questions live under "שאלות לקוחות", not "צ'אטים ישירים". When the owner opens
   // Messages with pending questions (and no chat deep-link), land on questions.
@@ -104,7 +146,6 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
     setSelectedKey(null);
     setSubFilter('all');
     setSearch('');
-    if (id === 'system' && onMarkSystemRead) onMarkSystemRead();
   };
 
   // Aggregate unread + last activity for a contact.
@@ -135,6 +176,8 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
   const systemUnreadCount = systemMsgs.filter(m => !sysReadSet.has(m.id)).length;
   const questionsUnreadCount = questionContacts.filter(qUnread).length;
   const counts = { questions: questionsUnreadCount, chats: chatUnreadCount, system: systemUnreadCount };
+  // Totals (not only unread) — used by empty-state hints across categories.
+  const totals = { questions: questionContacts.length, chats: chatContacts.length, system: systemMsgs.length };
 
   const selectedChatContact = category === 'chats' ? chatContacts.find(c => c.key === selectedKey) : null;
   const selectedQContact = category === 'questions' ? questionContacts.find(c => c.key === selectedKey) : null;
@@ -204,9 +247,6 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
               <span className="text-[11px] flex-shrink-0" style={{ color: '#9CA3AF' }}>{fmtMsgTime(ts)}</span>
             </div>
             <p className="text-xs truncate" style={{ color: '#9CA3AF' }}>{it.threads.length} צימרים</p>
-            {it.threads.some(t => { const m = (t.messages || [])[(t.messages || []).length - 1]; return m && m.role === 'assistant'; }) && (
-              <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-0.5" style={{ background: 'rgba(34,197,94,0.12)', color: '#16A34A' }}>טופל ע"י AI</span>
-            )}
             {p && <p className="text-xs truncate mt-0.5" style={{ color: unread ? '#4B5563' : '#9CA3AF' }}>{p.content}</p>}
           </div>
           {unread && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1" style={{ background: '#EF4444' }} />}
@@ -242,7 +282,7 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
     }
     const unRead = !sysReadSet.has(it.id);
     return (
-      <button key={it.id} onClick={() => { markSysRead(it.id); setSelectedKey(it.id); if (onMarkSystemRead) onMarkSystemRead(); }}
+      <button key={it.id} onClick={() => { markSysRead(it.id); setSelectedKey(it.id); if (onMarkSystemRead) onMarkSystemRead(it.id); }}
         className="w-full text-right rounded-2xl p-3 flex items-start gap-3 transition-all"
         style={{ background: selectedKey === it.id ? '#F8F7F4' : 'transparent' }}>
         <div className="w-11 h-11 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: '#6B7280' }}><Bell size={18} /></div>
@@ -266,7 +306,7 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
     <div className="h-full min-h-0 rounded-2xl overflow-hidden" style={{ border: '1.5px solid #F0EEE8' }}>
       <MessagesList category={category} onCategory={switchCategory} subFilter={subFilter} onSubFilter={setSubFilter} subFilters={subFilters}
         items={listItems} renderItem={renderItem} search={search} setSearch={setSearch}
-        onOpenSettings={() => onNavigate?.('checkin')} counts={counts} />
+        onOpenSettings={() => onNavigate?.('checkin')} counts={counts} totals={totals} />
     </div>
   );
 

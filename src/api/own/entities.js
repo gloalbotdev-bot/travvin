@@ -14,6 +14,7 @@ const ENTITY_NAMES = [
   'CustomerProfile',
   'DirectChat',
   'GuestMessage',
+  'GuestProfile',
   'OwnerRequest',
   'Promotion',
   'Review',
