@@ -7,7 +7,17 @@ const CATS = [
   { id: 'system', label: 'הודעות מערכת', icon: Bell },
 ];
 
-export default function MessagesList({ category, onCategory, subFilter, onSubFilter, subFilters, items, renderItem, search, setSearch, onOpenSettings, counts }) {
+const CAT_LABEL = {
+  questions: 'שאלות לקוחות',
+  chats: "צ'אטים ישירים",
+  system: 'הודעות מערכת',
+};
+
+export default function MessagesList({ category, onCategory, subFilter, onSubFilter, subFilters, items, renderItem, search, setSearch, onOpenSettings, counts, totals }) {
+  const otherHints = CATS
+    .filter((c) => c.id !== category && (totals?.[c.id] || 0) > 0)
+    .map((c) => ({ id: c.id, label: CAT_LABEL[c.id], n: totals[c.id] }));
+
   return (
     <div className="h-full flex flex-col bg-white" dir="rtl">
       {/* Header */}
@@ -55,7 +65,24 @@ export default function MessagesList({ category, onCategory, subFilter, onSubFil
       {/* List */}
       <div className="flex-1 overflow-y-auto px-2 pb-3">
         {items.length === 0 ? (
-          <div className="text-center py-12 px-4"><p className="text-sm" style={{ color: '#9CA3AF' }}>אין הודעות</p></div>
+          <div className="text-center py-12 px-4 space-y-3">
+            <p className="text-sm" style={{ color: '#9CA3AF' }}>אין הודעות בקטגוריה זו</p>
+            {otherHints.length > 0 && (
+              <div className="space-y-2">
+                {otherHints.map((h) => (
+                  <button
+                    key={h.id}
+                    type="button"
+                    onClick={() => onCategory(h.id)}
+                    className="block w-full text-sm font-semibold px-3 py-2 rounded-xl transition-all"
+                    style={{ background: '#F8F7F4', color: '#EA580C' }}
+                  >
+                    יש {h.n} ב«{h.label}» — לחצי כאן
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ) : items.map((it, i) => renderItem(it, i))}
       </div>
     </div>

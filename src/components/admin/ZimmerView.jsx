@@ -5,6 +5,9 @@ import { Image } from '@/components/ui/image';
 import ZimmerAiSidebar from '@/components/admin/ZimmerAiSidebar';
 import ZimmerMapView from '@/components/admin/ZimmerMapView';
 import ZimmerEditor from '@/components/admin/ZimmerEditor';
+import InfoSummarySection from '@/components/admin/InfoSummarySection';
+import InfoSummaryEditor from '@/components/admin/InfoSummaryEditor';
+import ReviewsSection from '@/components/reviews/ReviewsSection';
 import ManualBookingForm from '@/components/owner/ManualBookingForm';
 import BlockDateForm from '@/components/owner/BlockDateForm';
 import CustomerPreviewModal from '@/components/admin/CustomerPreviewModal';
@@ -60,11 +63,12 @@ function amenityIcon(label) {
   return iconPool;
 }
 
-export default function ZimmerView({ zimmer, onCancel, onUpdated, onDelete, embedded = false }) {
+export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDelete, embedded = false }) {
   const [data, setData] = useState(zimmer);
   const [occupiedToday, setOccupiedToday] = useState(false);
   const [modal, setModal] = useState(null);
   const [editingTab, setEditingTab] = useState(null);
+  const [editingSummary, setEditingSummary] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const images = data.images || [];
 
@@ -72,9 +76,43 @@ export default function ZimmerView({ zimmer, onCancel, onUpdated, onDelete, embe
   const openEditor = (tab = 'basic') => setEditingTab(tab);
   const closeEditor = () => setEditingTab(null);
   const handleEditorSave = async (updated) => {
-    setData(updated);
-    onUpdated?.(updated);
-    setEditingTab(null);
+    if (!onSave) {
+      setData(updated);
+      onUpdated?.(updated);
+      setEditingTab(null);
+      return;
+    }
+    try {
+      const saved = await onSave(updated);
+      const next = saved || updated;
+      setData(next);
+      onUpdated?.(next);
+      setEditingTab(null);
+    } catch (err) {
+      console.error(err);
+      alert('שמירת הצימר נכשלה. נסו שוב.');
+    }
+  };
+
+  const handleSaveSummary = async (text, snapshot) => {
+    try {
+      const saved = await api.entities.Zimmer.update(data.id, {
+        info_summary: text,
+        info_summary_snapshot: snapshot,
+      });
+      const updated = {
+        ...data,
+        ...(saved || {}),
+        info_summary: saved?.info_summary ?? text,
+        info_summary_snapshot: saved?.info_summary_snapshot ?? snapshot,
+      };
+      setData(updated);
+      onUpdated?.(updated);
+      setEditingSummary(false);
+    } catch (err) {
+      console.error(err);
+      alert('שמירת סיכום המידע נכשלה. נסו שוב.');
+    }
   };
 
   useEffect(() => {
@@ -402,6 +440,14 @@ export default function ZimmerView({ zimmer, onCancel, onUpdated, onDelete, embe
                 </div>
                 <ZimmerMapView zimmer={data} onEdit={() => openEditor('location')} figmaLayout />
               </section>
+
+              <div className="w-full h-px" style={{ background: '#E8E8E8' }} />
+
+              <InfoSummarySection zimmer={data} isOwner onEdit={() => setEditingSummary(true)} variant="inline" />
+
+              <div className="w-full h-px" style={{ background: '#E8E8E8' }} />
+
+              <ReviewsSection zimmerId={data.id} variant="inline" />
             </div>
           </div>
         </main>
@@ -449,6 +495,10 @@ export default function ZimmerView({ zimmer, onCancel, onUpdated, onDelete, embe
         <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: '#F8F7F4' }}>
           <ZimmerEditor zimmer={data} initialTab={editingTab} onSave={handleEditorSave} onCancel={closeEditor} onDelete={onDelete} />
         </div>
+      )}
+
+      {editingSummary && (
+        <InfoSummaryEditor zimmer={data} onSave={handleSaveSummary} onClose={() => setEditingSummary(false)} />
       )}
 
       {previewOpen && (

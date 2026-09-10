@@ -33,6 +33,7 @@ export default function QuestionsPanel({ ownerId, focusQuestionId }) {
     setSaving(true);
     await api.entities.UnansweredQuestion.update(q.id, {
       status: 'נענתה',
+      answered_by: 'owner',
       owner_answer: answer.trim(),
       save_to_knowledge: true,
       answered_at: new Date().toISOString().split('T')[0],

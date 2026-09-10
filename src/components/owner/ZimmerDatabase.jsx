@@ -20,6 +20,11 @@ export default function ZimmerDatabase({ ownerId }) {
     if (!ownerId) return;
     api.entities.Zimmer.filter({ owner_id: ownerId }).then(data => {
       setZimmers(data);
+      const fromDb = {};
+      for (const z of data) {
+        if (z.knowledge_summary) fromDb[z.id] = z.knowledge_summary;
+      }
+      setSummaries(fromDb);
       setLoading(false);
       // auto-expand first zimmer
       if (data.length > 0) setExpanded({ [data[0].id]: true });
@@ -36,7 +41,12 @@ export default function ZimmerDatabase({ ownerId }) {
         message: 'סכם את מאגר הידע של הצימר',
         clientState: { zimmerId: zimmer.id },
       });
-      setSummaries(prev => ({ ...prev, [zimmer.id]: response?.message?.content || '' }));
+      const text = (response?.message?.content || '').trim();
+      if (!text) return;
+      const saved = await api.entities.Zimmer.update(zimmer.id, { knowledge_summary: text });
+      const next = saved?.knowledge_summary || text;
+      setSummaries(prev => ({ ...prev, [zimmer.id]: next }));
+      setZimmers(prev => prev.map(z => (z.id === zimmer.id ? { ...z, ...saved, knowledge_summary: next } : z)));
     } catch (e) { /* ignore */ }
     setSummarizing(prev => ({ ...prev, [zimmer.id]: false }));
   };
