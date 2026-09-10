@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
 import { MapPin, Navigation, Pencil } from 'lucide-react';
 
-export default function ZimmerMapView({ zimmer, onEdit, editable = true }) {
+export default function ZimmerMapView({ zimmer, onEdit, editable = true, figmaLayout = false }) {
   const [mode, setMode] = useState('loading'); // loading | precise | region | none
   const [lat, setLat] = useState(null);
   const [lng, setLng] = useState(null);
@@ -43,6 +43,57 @@ export default function ZimmerMapView({ zimmer, onEdit, editable = true }) {
     ? `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik${mode === 'precise' ? `&marker=${lat},${lng}` : ''}`
     : null;
 
+  const mapBody = (
+    <>
+      {mode === 'loading' ? (
+        <div className="w-full flex items-center justify-center" style={{ height: 280, borderRadius: 16, background: '#F9FAFB' }}>
+          <div className="w-6 h-6 border-2 border-slate-200 border-t-slate-500 rounded-full animate-spin" />
+        </div>
+      ) : src ? (
+        <div className="relative overflow-hidden w-full" style={{ borderRadius: 16 }}>
+          <iframe
+            title="מפת מיקום"
+            src={src}
+            className="w-full"
+            style={{ height: 280, border: 0, display: 'block' }}
+            loading="lazy"
+          />
+          {mode === 'precise' && zimmer.stay_settings?.nav_link && (
+            <a href={zimmer.stay_settings.nav_link} target="_blank" rel="noreferrer"
+              className="absolute bottom-3 left-3 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-white shadow"
+              style={{ background: '#0B3838' }}>
+              <Navigation size={12} /> ניווט
+            </a>
+          )}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={editable ? onEdit : undefined}
+          className="w-full flex flex-col items-center justify-center"
+          style={{ height: 280, borderRadius: 16, background: '#F9FAFB', border: '1.5px dashed #E5E7EB' }}
+        >
+          <MapPin size={22} style={{ color: '#9CA3AF' }} />
+          <p className="font-simona text-xs mt-2" style={{ color: '#9CA3AF' }}>אין מיקום להצגה עדיין</p>
+        </button>
+      )}
+
+      {!figmaLayout && (zimmer.nearby_landmarks || []).length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-3">
+          {zimmer.nearby_landmarks.map((l, i) => (
+            <span key={i} className="text-xs px-2.5 py-1 rounded-full" style={{ background: '#F9FAFB', border: '1px solid #F0EEE8', color: '#1E293B' }}>
+              {l.name}{l.travel_time_minutes != null && <span style={{ color: '#9CA3AF' }}> · {l.travel_time_minutes} דק</span>}
+            </span>
+          ))}
+        </div>
+      )}
+    </>
+  );
+
+  if (figmaLayout) {
+    return <div className="w-full" dir="rtl">{mapBody}</div>;
+  }
+
   return (
     <section className="rounded-2xl p-6" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }} dir="rtl">
       <div className="flex items-center justify-between mb-4">
@@ -68,43 +119,7 @@ export default function ZimmerMapView({ zimmer, onEdit, editable = true }) {
             : 'מיקום לא צוין. הוסף מיקום או כתובת בעריכה כדי להציג מפה מדויקת.'}
       </p>
 
-      {mode === 'loading' ? (
-        <div className="w-full h-64 rounded-xl flex items-center justify-center" style={{ background: '#F9FAFB' }}>
-          <div className="w-6 h-6 border-2 border-slate-200 border-t-slate-500 rounded-full animate-spin" />
-        </div>
-      ) : src ? (
-        <div className="relative rounded-xl overflow-hidden" style={{ border: '1.5px solid #E5E7EB' }}>
-          <iframe
-            title="מפת מיקום"
-            src={src}
-            className="w-full"
-            style={{ height: 280, border: 0, display: 'block' }}
-            loading="lazy"
-          />
-          {mode === 'precise' && zimmer.stay_settings?.nav_link && (
-            <a href={zimmer.stay_settings.nav_link} target="_blank" rel="noreferrer"
-              className="absolute bottom-3 left-3 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-white shadow"
-              style={{ background: '#1E293B' }}>
-              <Navigation size={12} /> ניווט
-            </a>
-          )}
-        </div>
-      ) : (
-        <div className="w-full h-40 rounded-xl flex flex-col items-center justify-center" style={{ background: '#F9FAFB', border: '1.5px dashed #E5E7EB' }}>
-          <MapPin size={22} style={{ color: '#9CA3AF' }} />
-          <p className="text-xs mt-2" style={{ color: '#9CA3AF' }}>אין מיקום להצגה עדיין</p>
-        </div>
-      )}
-
-      {(zimmer.nearby_landmarks || []).length > 0 && (
-        <div className="flex flex-wrap gap-2 mt-3">
-          {zimmer.nearby_landmarks.map((l, i) => (
-            <span key={i} className="text-xs px-2.5 py-1 rounded-full" style={{ background: '#F9FAFB', border: '1px solid #F0EEE8', color: '#1E293B' }}>
-              {l.name}{l.travel_time_minutes != null && <span style={{ color: '#9CA3AF' }}> · {l.travel_time_minutes} דק</span>}
-            </span>
-          ))}
-        </div>
-      )}
+      {mapBody}
     </section>
   );
 }
