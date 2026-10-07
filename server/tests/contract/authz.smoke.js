@@ -552,6 +552,55 @@ async function main() {
   const ownerView = await store.get('Zimmer', secretZ.id, owner);
   assert(ownerView.data_zones?.length === 1, 'SEC-017 owner sees data_zones');
 
+  // SupplierAutomation — contact_id / zimmer_ids must belong to the owner
+  const otherOwner = { id: 'owner-2', email: 'o2@t.com', role: 'owner' };
+  const myContact = await store.create('Contact', { name: 'my-cleaner', owner_id: owner.id, type: 'ספק' }, { actor: owner });
+  const otherContact = await store.create('Contact', { name: 'other-cleaner', owner_id: otherOwner.id, type: 'ספק' }, { actor: otherOwner });
+  const otherZ = await store.create('Zimmer', { name: 'other-z', owner_id: otherOwner.id }, { actor: otherOwner });
+
+  let foreignContactDenied = false;
+  try {
+    await store.create(
+      'SupplierAutomation',
+      { owner_id: owner.id, contact_id: otherContact.id, message_type: 'checkout_notify' },
+      { actor: owner },
+    );
+  } catch (e) {
+    foreignContactDenied = e.status === 403;
+  }
+  assert(foreignContactDenied, 'SupplierAutomation create with foreign contact → 403');
+
+  const auto = await store.create(
+    'SupplierAutomation',
+    { owner_id: owner.id, contact_id: myContact.id, message_type: 'checkout_notify', zimmer_ids: [z.id] },
+    { actor: owner },
+  );
+  assert(auto.contact_id === myContact.id, 'SupplierAutomation create with own contact + zimmer');
+
+  let foreignContactUpdateDenied = false;
+  try {
+    await store.update('SupplierAutomation', auto.id, { contact_id: otherContact.id }, owner);
+  } catch (e) {
+    foreignContactUpdateDenied = e.status === 403;
+  }
+  assert(foreignContactUpdateDenied, 'SupplierAutomation update to foreign contact → 403');
+
+  let foreignZimmerUpdateDenied = false;
+  try {
+    await store.update('SupplierAutomation', auto.id, { zimmer_ids: [z.id, otherZ.id] }, owner);
+  } catch (e) {
+    foreignZimmerUpdateDenied = e.status === 403;
+  }
+  assert(foreignZimmerUpdateDenied, 'SupplierAutomation update with foreign zimmer → 403');
+
+  const edited = await store.update('SupplierAutomation', auto.id, { time: '08:00', zimmer_ids: [] }, owner);
+  assert(edited.time === '08:00', 'SupplierAutomation owner edit own automation');
+
+  await store.delete('SupplierAutomation', auto.id, owner);
+  await store.delete('Contact', myContact.id, owner);
+  await store.delete('Contact', otherContact.id, otherOwner);
+  await store.delete('Zimmer', otherZ.id, otherOwner);
+
   await store.delete('Zimmer', pendingZ.id, owner);
   await store.delete('Zimmer', secretZ.id, owner);
   await store.delete('Zimmer', z.id, owner);

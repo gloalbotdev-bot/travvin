@@ -5,6 +5,12 @@ import { SERVICE_ACTOR } from './service-role.js';
 import { sendGuestMessage } from './send-guest-message.js';
 import { generateAIRecommendations } from './generate-ai-recommendations.js';
 import { israelNow } from './israel-time.js';
+import {
+  DEFAULT_TEMPLATES,
+  buildStayVars,
+  substituteVars,
+  templateUses,
+} from './stay-message-templates.js';
 
 /**
  * @param {ReturnType<import('./entity-store.js').createEntityStore>} store
@@ -33,6 +39,8 @@ export async function sendStayMessages(store) {
       /* ignore */
     }
     const stay = zimmer?.stay_settings || {};
+    // Scheduling still needs an hour when the owner left the time empty; the guest-facing
+    // text shows "לא הוגדרה" instead (see buildStayVars).
     const checkinTimeStr = stay.checkin_time || '15:00';
     const checkoutTimeStr = stay.checkout_time || '11:00';
     const triggers = Array.isArray(stay.customer_triggers) ? stay.customer_triggers : [];
@@ -87,7 +95,9 @@ export async function sendStayMessages(store) {
       }
       const customText = tcfg.text;
       try {
-        await dispatchStage(store, { b, stay, customerId, stage: stage.category, customText });
+        const guestName = await resolveGuestName(store, b, customerId);
+        const vars = buildStayVars(stay, { ...b, zimmer_name: b.zimmer_name || zimmer?.name }, guestName);
+        await dispatchStage(store, { b, stay, customerId, stage: stage.category, customText, vars });
         results.push({ booking: b.id, stage: stage.category, sent: true });
       } catch (e) {
         results.push({
@@ -152,14 +162,34 @@ export async function sendStayMessages(store) {
   return { ok: true, scanned: bookings.length, results };
 }
 
-async function dispatchStage(store, { b, stay, customerId, stage, customText }) {
+async function resolveGuestName(store, b, customerId) {
+  if (b.guest_name) return b.guest_name;
+  if (!customerId) return '';
+  try {
+    const u = await store.get('User', customerId, SERVICE_ACTOR);
+    return u?.full_name || '';
+  } catch {
+    return '';
+  }
+}
+
+/** Owner text (or the default template) with {{vars}} substituted. */
+function stageText(stage, customText, vars) {
+  const raw = customText && customText.trim() ? customText : DEFAULT_TEMPLATES[stage];
+  return { raw, text: substituteVars(raw, vars) };
+}
+
+/**
+ * @param {ReturnType<import('./entity-store.js').createEntityStore>} store
+ * @param {{ b: any, stay: any, customerId: string, stage: string, customText: string, vars: Record<string, string> }} args
+ */
+export async function dispatchStage(store, { b, stay, customerId, stage, customText, vars }) {
   const s = stay;
   if (stage === 'pre_checkin') {
     const address = s.address || '';
     const navLink = s.nav_link || '';
     const entryCode = s.entry_code || '';
     const keyLocation = s.key_location || '';
-    const checkinTime = s.checkin_time || '15:00';
     const welcome = s.welcome_message || '';
     const metadata = {
       address,
@@ -167,18 +197,21 @@ async function dispatchStage(store, { b, stay, customerId, stage, customText }) 
       instructions: keyLocation,
       key_location: keyLocation,
       entry_code: entryCode,
-      checkin_time: checkinTime,
-      checkout_time: s.checkout_time || '11:00',
+      checkin_time: s.checkin_time || '',
+      checkout_time: s.checkout_time || '',
       phones: [],
     };
-    const lines = [`כתובת: ${address || 'תישלח בהמשך'}`];
-    if (checkinTime) lines.push(`שעת צ'ק-אין: ${checkinTime} · צ'ק-אאוט: ${s.checkout_time || '11:00'}`);
-    if (entryCode) lines.push(`קוד כניסה: ${entryCode}`);
-    if (keyLocation) lines.push(`מיקום מפתח/הוראות: ${keyLocation}`);
-    if (navLink) lines.push(`ניווט: ${navLink}`);
+    const { raw, text } = stageText('pre_checkin', customText, vars);
+    const lines = [];
+    if (!templateUses(raw, 'address')) lines.push(`כתובת: ${address || 'תישלח בהמשך'}`);
+    if (!templateUses(raw, 'check_in', 'checkin_time')) {
+      lines.push(`שעת צ'ק-אין: ${vars.check_in} · צ'ק-אאוט: ${vars.check_out}`);
+    }
+    if (entryCode && !templateUses(raw, 'entry_code')) lines.push(`קוד כניסה: ${entryCode}`);
+    if (keyLocation && !templateUses(raw, 'key_location')) lines.push(`מיקום מפתח/הוראות: ${keyLocation}`);
+    if (navLink && !templateUses(raw, 'nav_link')) lines.push(`ניווט: ${navLink}`);
     if (welcome) lines.push(`\n${welcome}`);
-    const defaultBody = `שלום! החופשה שלך מתקרבת. פרטי ההגעה:\n\n${lines.join('\n')}\n\nנתראה בקרוב!`;
-    const bodyText = customText ? `${customText}\n\n${lines.join('\n')}` : defaultBody;
+    const bodyText = lines.length ? `${text}\n\n${lines.join('\n')}` : text;
     await sendGuestMessage(store, {
       customer_id: customerId,
       booking_id: b.id,
@@ -224,9 +257,7 @@ async function dispatchStage(store, { b, stay, customerId, stage, customText }) 
       booking_id: b.id,
       category: 'checkin_day',
       title: `חופשה נעימה ב-${b.zimmer_name || 'הצימר'}! 🎉`,
-      body:
-        customText ||
-        `בוקר טוב! ברוכים הבאים. מצורפות המלצות AI אישיות לחופשה באזור — מסעדות, אטרקציות, מסלולים ועוד. תהנו!${detailsNote}`,
+      body: stageText('checkin_day', customText, vars).text + detailsNote,
       metadata,
       channels: ['app', 'whatsapp'],
     });
@@ -241,9 +272,7 @@ async function dispatchStage(store, { b, stay, customerId, stage, customText }) 
       owner_id: b.owner_id,
       category: 'checkin',
       title: `צ'ק-אין בוצע — נתחיל את החופשה 🏡`,
-      body:
-        customText ||
-        `ברוכים הבאים ל-${b.zimmer_name || 'הצימר'}! נא לאשר שהכול תקין. במידת בעיה או קושי בכניסה — ניתן לדווח מיד דרך האזור האישי. חופשה נעימה!`,
+      body: stageText('checkin', customText, vars).text,
       channels: ['app', 'whatsapp'],
     });
     return;
@@ -257,22 +286,21 @@ async function dispatchStage(store, { b, stay, customerId, stage, customText }) 
       owner_id: b.owner_id,
       category: 'post_checkin',
       title: `חופשה נעימה — אנחנו כאן לכל שאלה 😊`,
-      body:
-        customText ||
-        `חופשה נעימה! 🌴 אנחנו כאן עבורכם לכל שאלה, בקשה או התייעצות. ניתן לפנות אלינו דרך האזור האישי בכל עת. תהנו מכל רגע!`,
+      body: stageText('post_checkin', customText, vars).text,
       channels: ['app', 'whatsapp'],
     });
     return;
   }
 
   if (stage === 'morning_checkout') {
-    const checkoutTime = s.checkout_time || '11:00';
-    const lines = [`שעת יציאה: ${checkoutTime}`];
-    if (s.key_location) lines.push(`מיקום מפתח/הוראות: ${s.key_location}`);
-    if (s.entry_code) lines.push(`קוד יציאה: ${s.entry_code}`);
-    if (s.nav_link) lines.push(`ניווט החוצה: ${s.nav_link}`);
-    const defaultBody = `בוקר טוב! היום יום העזיבה. הוראות יציאה:\n\n${lines.join('\n')}\n\nנא להשאיר את הצימר מסודר, לצלם לפני היציאה ולבצע צ'ק-אאוט דרך האזור האישי. תודה ונשמח לראותכם שוב!`;
-    const bodyText = customText ? `${customText}\n\n${lines.join('\n')}` : defaultBody;
+    const { raw, text } = stageText('morning_checkout', customText, vars);
+    const lines = [];
+    if (!templateUses(raw, 'check_out', 'checkout_time')) lines.push(`שעת יציאה: ${vars.check_out}`);
+    if (s.key_location && !templateUses(raw, 'key_location')) lines.push(`מיקום מפתח/הוראות: ${s.key_location}`);
+    if (s.entry_code && !templateUses(raw, 'entry_code')) lines.push(`קוד יציאה: ${s.entry_code}`);
+    if (s.nav_link && !templateUses(raw, 'nav_link')) lines.push(`ניווט החוצה: ${s.nav_link}`);
+    let bodyText = lines.length ? `${text}\n\n${lines.join('\n')}` : text;
+    bodyText += `\n\nנא להשאיר את הצימר מסודר, לצלם לפני היציאה ולבצע צ'ק-אאוט דרך האזור האישי. תודה ונשמח לראותכם שוב!`;
     await sendGuestMessage(store, {
       customer_id: customerId,
       booking_id: b.id,
@@ -292,9 +320,7 @@ async function dispatchStage(store, { b, stay, customerId, stage, customText }) 
       booking_id: b.id,
       category: 'pre_checkout',
       title: `תזכורת צ'ק-אאוט — ${b.zimmer_name || 'הצימר'}`,
-      body:
-        customText ||
-        `תזכורת: שעת העזיבה מתקרבת. נא לצלם את הצימר לפני היציאה כדי למנוע אי-הבנות עתידיות. ניתן לבצע צ'ק-אאוט, להשאיר ביקורת, לדווח על תקלה או להעלות תמונות דרך האזור האישי.`,
+      body: stageText('pre_checkout', customText, vars).text,
       channels: ['app', 'whatsapp'],
     });
   }

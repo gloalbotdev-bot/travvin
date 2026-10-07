@@ -25,7 +25,7 @@ import RoleGate from '@/components/auth/RoleGate';
 const PUBLIC_PATHS = ['/', '/welcome', '/admin-login', '/discover'];
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, checkAppState } = useAuth();
   const location = useLocation();
 
   // Public pages — render immediately without auth checks (including the whole /discover area)
@@ -54,6 +54,19 @@ const AuthenticatedApp = () => {
   }
 
   if (authError) {
+    if (authError.type === 'connection') {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6" dir="rtl" style={{ background: '#FAFAFA', fontFamily: 'Heebo, sans-serif' }}>
+          <div className="text-center py-16 px-8 rounded-[23px] bg-white max-w-md w-full" role="alert">
+            <h3 className="font-simpler text-lg mb-2" style={{ color: '#0B3838', fontWeight: 600 }}>בעיית חיבור</h3>
+            <p className="font-simona mb-6 text-sm" style={{ color: '#717171' }}>לא הצלחנו להתחבר לשרת. בדקו את החיבור לאינטרנט ונסו שוב.</p>
+            <button onClick={checkAppState} className="font-simpler text-white px-5 py-2.5 rounded-full text-sm hover:opacity-90" style={{ background: '#0B3838', fontWeight: 600 }}>
+              נסה שוב
+            </button>
+          </div>
+        </div>
+      );
+    }
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {

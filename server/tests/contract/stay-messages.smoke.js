@@ -12,6 +12,13 @@ import { sendGuestMessage } from '../../src/lib/send-guest-message.js';
 import { SERVICE_ACTOR } from '../../src/lib/service-role.js';
 import { listEntityNames } from '../../src/lib/schema-loader.js';
 import { assertSafeHttpsUrl } from '../../src/lib/safe-webhook-url.js';
+import { dispatchStage } from '../../src/lib/send-stay-messages.js';
+import {
+  DEFAULT_TEMPLATES,
+  TIME_NOT_SET,
+  buildStayVars,
+  substituteVars,
+} from '../../src/lib/stay-message-templates.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
@@ -29,7 +36,71 @@ function assert(cond, msg) {
   }
 }
 
+/** In-memory store: captures GuestMessage bodies without touching the DB or WhatsApp. */
+function captureStore() {
+  const created = [];
+  return {
+    created,
+    async get() { return null; },
+    async filter() { return []; },
+    async update(_t, id, data) { return { id, ...data }; },
+    async create(entityType, data) {
+      const row = { id: `fake-${created.length}`, ...data };
+      created.push({ entityType, data: row });
+      return row;
+    },
+  };
+}
+
+async function templateChecks() {
+  const vars = buildStayVars(
+    { checkin_time: '16:00', address: 'הגפן 5' },
+    { zimmer_name: 'בקתה', num_adults: 2 },
+    'דנה',
+  );
+  assert(vars.check_out === TIME_NOT_SET, 'missing checkout time → "לא הוגדרה"');
+  assert(
+    substituteVars('שלום {{username}}, צ\'ק-אין: {{check_in}} ב-{{zimmer_name}} ({{num_guests}})', vars) ===
+      "שלום דנה, צ'ק-אין: 16:00 ב-בקתה (2)",
+    'substituteVars replaces known variables',
+  );
+  assert(substituteVars('היי {{evil}}!', vars) === 'היי!', 'unknown variable dropped, no raw {{}} to guest');
+  const noName = buildStayVars({}, {}, '');
+  assert(
+    substituteVars(DEFAULT_TEMPLATES.post_checkin, noName).startsWith('מקווים'),
+    'empty guest name leaves no dangling comma',
+  );
+  assert(!/אקומודיישן/.test(Object.values(DEFAULT_TEMPLATES).join('')), 'templates do not contain "אקומודיישן"');
+
+  const s1 = captureStore();
+  const stay = { address: 'הגפן 5', entry_code: '1234' };
+  const b = { id: 'b1', zimmer_name: 'בקתה' };
+  await dispatchStage(s1, {
+    b, stay, customerId: 'c1', stage: 'pre_checkin', customText: '',
+    vars: buildStayVars(stay, b, 'דנה'),
+  });
+  const pre = s1.created.find((c) => c.entityType === 'GuestMessage')?.data;
+  assert(pre?.body.startsWith('שלום דנה, מחכים לכם מחר!'), 'pre_checkin uses default template with guest name');
+  assert(pre?.body.includes(`שעת הצ'ק-אין: ${TIME_NOT_SET}`), 'pre_checkin shows "לא הוגדרה" when time unset');
+  assert(!/15:00|11:00/.test(pre?.body || ''), 'pre_checkin never shows fallback hours to guest');
+  assert(pre?.body.includes('קוד כניסה: 1234') && pre?.body.includes('כתובת: הגפן 5'), 'pre_checkin appends detail lines');
+  assert(pre?.metadata?.checkin_time === '', 'pre_checkin metadata has no invented time');
+
+  const s2 = captureStore();
+  await dispatchStage(s2, {
+    b, stay, customerId: 'c1', stage: 'pre_checkin', customText: 'כתובת: {{address}}, קוד {{entry_code}}',
+    vars: buildStayVars(stay, b, 'דנה'),
+  });
+  const custom = s2.created.find((c) => c.entityType === 'GuestMessage')?.data;
+  assert(
+    custom?.body.split('\n')[0] === 'כתובת: הגפן 5, קוד 1234' && !custom.body.includes('קוד כניסה: 1234'),
+    'variables used in owner text are not duplicated in detail lines',
+  );
+}
+
 async function main() {
+  await templateChecks();
+
   const names = listEntityNames();
   assert(names.includes('GuestMessage') && names.includes('AppSetting'), 'new entities registered');
 

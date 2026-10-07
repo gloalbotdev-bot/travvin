@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
 import { Key, MapPin, Clock, DoorOpen, MessageSquareText, Star, Plus, X, Save, Pencil, CalendarClock } from 'lucide-react';
+import { DEFAULT_TEMPLATES, TEMPLATE_VARIABLES, TIME_NOT_SET } from '@/lib/stayMessageTemplates';
 
 const TRIGGER_OPTIONS = [
   { key: 'pre_checkin', label: 'יום לפני ההגעה', desc: 'פרטי הגעה + ניווט', placeholder: 'שלום! החופשה מתקרבת. פרטי ההגעה יצורפו אוטומטית...' },
@@ -98,8 +99,8 @@ export default function OwnerCustomerMessages({ ownerId }) {
                   </button>
                 </div>
                 <div className="flex items-center gap-3 mt-2 text-[11px]" style={{ color: '#9CA3AF' }}>
-                  <span className="flex items-center gap-1"><Clock size={11} /> צ'ק-אין {s.checkin_time || '15:00'}</span>
-                  <span className="flex items-center gap-1"><Clock size={11} /> צ'ק-אאוט {s.checkout_time || '11:00'}</span>
+                  <span className="flex items-center gap-1"><Clock size={11} /> צ'ק-אין {s.checkin_time || TIME_NOT_SET}</span>
+                  <span className="flex items-center gap-1"><Clock size={11} /> צ'ק-אאוט {s.checkout_time || TIME_NOT_SET}</span>
                 </div>
               </div>
             );
@@ -134,9 +135,12 @@ function CustomerMessageForm({ zimmers, editing, onCancel, onSaved }) {
     const s = z?.stay_settings || {};
     setForm({
       address: s.address || '', nav_link: s.nav_link || '', entry_code: s.entry_code || '',
-      key_location: s.key_location || '', checkin_time: s.checkin_time || '15:00', checkout_time: s.checkout_time || '11:00',
+      key_location: s.key_location || '', checkin_time: s.checkin_time || '', checkout_time: s.checkout_time || '',
       welcome_message: s.welcome_message || '', review_request_message: s.review_request_message || '',
-      customer_triggers: Array.isArray(s.customer_triggers) ? s.customer_triggers : [],
+      customer_triggers: TRIGGER_OPTIONS.map(opt => {
+        const t = (Array.isArray(s.customer_triggers) ? s.customer_triggers : []).find(x => x && x.trigger === opt.key);
+        return { trigger: opt.key, enabled: t ? t.enabled !== false : true, text: t?.text || DEFAULT_TEMPLATES[opt.key] || '' };
+      }),
     });
   }, [zimmerId, editing]);
 
@@ -199,6 +203,11 @@ function CustomerMessageForm({ zimmers, editing, onCancel, onSaved }) {
             <input style={inputStyle} type="time" value={form.checkout_time} onChange={e => set('checkout_time', e.target.value)} />
           </Field>
         </div>
+        {(!form.checkin_time || !form.checkout_time) && (
+          <p className="text-[11px] -mt-2" style={{ color: '#9CA3AF' }}>
+            שעה שלא הוגדרה תופיע לאורח כ"{TIME_NOT_SET}". ההודעות שתלויות בשעה יישלחו לפי 15:00 (צ'ק-אין) / 11:00 (צ'ק-אאוט).
+          </p>
+        )}
         <Field icon={DoorOpen} label="קוד כניסה / תיבת מפתח">
           <input style={inputStyle} value={form.entry_code} onChange={e => set('entry_code', e.target.value)} placeholder="קוד דלת / מספר תיבה" />
         </Field>
@@ -218,7 +227,7 @@ function CustomerMessageForm({ zimmers, editing, onCancel, onSaved }) {
           <div className="flex items-center gap-1.5 text-xs font-bold mb-1" style={{ color: '#1A1A1A' }}>
             <CalendarClock size={14} style={{ color: '#EA580C' }} /> תזמון שליחה
           </div>
-          <p className="text-[11px] mb-3" style={{ color: '#9CA3AF' }}>בחרו אילו הודעות אוטומטיות להפעיל וטקסט מותאם (ריק = טקסט ברירת המחדל). ההודעה תישלח במועד שנבחר.</p>
+          <p className="text-[11px] mb-3" style={{ color: '#9CA3AF' }}>בחרו אילו הודעות אוטומטיות להפעיל וערכו את הטקסט. המשתנים בסוגריים מסולסלים יוחלפו אוטומטית בפרטי ההזמנה והצימר בעת השליחה.</p>
           <div className="space-y-2">
             {TRIGGER_OPTIONS.map(opt => {
               const cfg = getTrigger(opt.key);
@@ -242,13 +251,24 @@ function CustomerMessageForm({ zimmers, editing, onCancel, onSaved }) {
                       value={cfg.text}
                       onChange={e => setTrigger(opt.key, { text: e.target.value })}
                       placeholder={opt.placeholder}
+                      aria-label={`טקסט ההודעה: ${opt.label}`}
                       className="mt-2 w-full px-3 py-2 rounded-xl text-xs outline-none resize-none"
-                      style={{ background: '#F8F7F4', border: '1px solid #E8E5E0', color: '#1A1A1A', fontFamily: 'Heebo, sans-serif', minHeight: '56px' }}
+                      style={{ background: '#F8F7F4', border: '1px solid #E8E5E0', color: '#1A1A1A', fontFamily: 'Heebo, sans-serif', minHeight: '72px' }}
                     />
                   )}
                 </div>
               );
             })}
+          </div>
+          <div className="mt-3">
+            <div className="text-[11px] font-semibold mb-1.5" style={{ color: '#6B7280' }}>משתנים זמינים</div>
+            <div className="flex flex-wrap gap-1.5">
+              {TEMPLATE_VARIABLES.map(v => (
+                <span key={v.token} title={v.label} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full" style={{ background: '#fff', color: '#6B7280', border: '1px solid #E8E5E0' }}>
+                  <span dir="ltr">{v.token}</span> · {v.label}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
 

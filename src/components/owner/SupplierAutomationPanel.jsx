@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/api/client';
-import { Truck, Bell, CalendarClock, Droplets, Plus, Trash2, X, Check, MapPin, Sparkles, Clock, CalendarDays } from 'lucide-react';
+import { Truck, Bell, CalendarClock, Droplets, Plus, Trash2, X, Check, MapPin, Sparkles, Clock, CalendarDays, Pencil } from 'lucide-react';
 
 // Supplier automations as first-class records (SupplierAutomation entity).
 // Top: summary of active automations with on/off toggle + delete + schedule label.
@@ -36,6 +36,7 @@ export default function SupplierAutomationPanel({ ownerId }) {
   const [zimmers, setZimmers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingAutomation, setEditingAutomation] = useState(null);
   const [toggling, setToggling] = useState(null);
 
   useEffect(() => { load(); }, [ownerId]);
@@ -151,6 +152,9 @@ export default function SupplierAutomationPanel({ ownerId }) {
                       style={{ width: '36px', height: '20px', background: a.enabled ? '#F97316' : '#E8E5E0' }}>
                       <div className="rounded-full bg-white transition-transform" style={{ width: '16px', height: '16px', transform: a.enabled ? 'translateX(-16px)' : 'translateX(0)' }} />
                     </button>
+                    <button onClick={() => setEditingAutomation(a)} title="עריכה" aria-label="עריכה" className="text-gray-400 hover:text-orange-500 transition-colors">
+                      <Pencil size={14} />
+                    </button>
                     <button onClick={() => remove(a)} title="מחק" className="text-gray-400 hover:text-red-500 transition-colors">
                       <Trash2 size={15} />
                     </button>
@@ -162,27 +166,32 @@ export default function SupplierAutomationPanel({ ownerId }) {
         </div>
       )}
 
-      {showForm && (
+      {(showForm || editingAutomation) && (
         <AutomationForm ownerId={ownerId} contacts={contacts} zimmers={zimmers}
-          onCancel={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />
+          automation={editingAutomation}
+          onCancel={() => { setShowForm(false); setEditingAutomation(null); }}
+          onSaved={() => { setShowForm(false); setEditingAutomation(null); load(); }} />
       )}
     </div>
   );
 }
 
-function AutomationForm({ ownerId, contacts, zimmers, onCancel, onSaved }) {
-  const [contactId, setContactId] = useState('');
-  const [messageType, setMessageType] = useState('');
-  const [frequency, setFrequency] = useState('weekly');
-  const [dayOfWeek, setDayOfWeek] = useState(6);
-  const [time, setTime] = useState('20:00');
-  const [monthDay, setMonthDay] = useState(1);
-  const [zids, setZids] = useState([]);
-  const [allZimmers, setAllZimmers] = useState(false);
-  const [towels, setTowels] = useState(2);
-  const [linens, setLinens] = useState(1);
+function AutomationForm({ ownerId, contacts, zimmers, automation, onCancel, onSaved }) {
+  const a = automation || {};
+  const [contactId, setContactId] = useState(a.contact_id || '');
+  const [messageType, setMessageType] = useState(a.message_type || '');
+  const [frequency, setFrequency] = useState(a.frequency || 'weekly');
+  const [dayOfWeek, setDayOfWeek] = useState(a.day_of_week ?? 6);
+  const [time, setTime] = useState(a.time || '20:00');
+  const [monthDay, setMonthDay] = useState(a.month_day || 1);
+  const [zids, setZids] = useState(Array.isArray(a.zimmer_ids) ? a.zimmer_ids : []);
+  const [allZimmers, setAllZimmers] = useState(automation ? !(a.zimmer_ids || []).length : false);
+  const [towels, setTowels] = useState(a.towels_per_guest ?? 2);
+  const [linens, setLinens] = useState(a.linens_per_guest ?? 1);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  // Skip the type-defaults effect on mount so an edited schedule isn't overwritten.
+  const skipDefaults = useRef(!!automation);
 
   const contact = contacts.find(c => c.id === contactId);
   const category = contact?.category || '';
@@ -197,6 +206,7 @@ function AutomationForm({ ownerId, contacts, zimmers, onCancel, onSaved }) {
 
   // sensible defaults when message type changes
   useEffect(() => {
+    if (skipDefaults.current) { skipDefaults.current = false; return; }
     if (messageType === 'weekly_cleaning') { setFrequency('weekly'); setDayOfWeek(6); setTime('20:00'); }
     else if (messageType === 'daily_laundry') { setFrequency('weekly'); setDayOfWeek(0); setTime('07:00'); }
   }, [messageType]);
@@ -215,8 +225,7 @@ function AutomationForm({ ownerId, contacts, zimmers, onCancel, onSaved }) {
     if (!allZimmers && zids.length === 0) { setErr('בחר לפחות צימר אחד או סמן "כל הצימרים"'); return; }
     setSaving(true);
     try {
-      await api.entities.SupplierAutomation.create({
-        owner_id: ownerId,
+      const payload = {
         contact_id: contactId,
         contact_name: contact.name,
         supplier_category: category,
@@ -226,10 +235,14 @@ function AutomationForm({ ownerId, contacts, zimmers, onCancel, onSaved }) {
         time: isScheduled ? time : null,
         month_day: isScheduled && frequency === 'monthly' ? Number(monthDay) : null,
         zimmer_ids: allZimmers ? [] : zids,
-        enabled: true,
         towels_per_guest: messageType === 'daily_laundry' ? Number(towels) : 2,
         linens_per_guest: messageType === 'daily_laundry' ? Number(linens) : 1,
-      });
+      };
+      if (automation) {
+        await api.entities.SupplierAutomation.update(automation.id, payload);
+      } else {
+        await api.entities.SupplierAutomation.create({ ...payload, owner_id: ownerId, enabled: true });
+      }
       onSaved();
     } catch (e) { setErr('שמירה נכשלה: ' + (e?.message || String(e))); }
     setSaving(false);
@@ -241,7 +254,7 @@ function AutomationForm({ ownerId, contacts, zimmers, onCancel, onSaved }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={onCancel}>
       <div className="w-full max-w-lg rounded-2xl p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-auto" style={{ background: '#fff' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-black" style={{ color: '#1A1A1A' }}>הפעלת הודעה אוטומטית</h3>
+          <h3 className="text-lg font-black" style={{ color: '#1A1A1A' }}>{automation ? 'עריכת הודעה אוטומטית' : 'הפעלת הודעה אוטומטית'}</h3>
           <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
@@ -383,7 +396,7 @@ function AutomationForm({ ownerId, contacts, zimmers, onCancel, onSaved }) {
           <button onClick={save} disabled={saving}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm text-white transition-all hover:opacity-90 disabled:opacity-60"
             style={{ background: '#F97316' }}>
-            <Check size={16} /> {saving ? 'שומר...' : 'הפעל הודעה אוטומטית'}
+            <Check size={16} /> {saving ? 'שומר...' : (automation ? 'שמור שינויים' : 'הפעל הודעה אוטומטית')}
           </button>
           <button onClick={onCancel} type="button" className="px-4 py-2.5 rounded-xl text-sm font-semibold" style={{ background: '#F8F7F4', color: '#6B7280' }}>ביטול</button>
         </div>
