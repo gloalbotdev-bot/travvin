@@ -6,6 +6,31 @@ import { exchangeAuthCodeFromUrlOnce } from '@/lib/authCodeExchange.js';
 
 const AuthContext = createContext();
 
+const AUTH_TIMEOUT_MS = 15000;
+
+// A stalled request must surface as a connection problem, never as "logged out",
+// so the user keeps their session and can retry.
+function withTimeout(promise) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error('Request timed out');
+      err.isTimeout = true;
+      reject(err);
+    }, AUTH_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function isConnectionError(err) {
+  return Boolean(err?.isTimeout) || !err?.status || err.status >= 500;
+}
+
+const CONNECTION_ERROR = {
+  type: 'connection',
+  message: 'Could not reach the server',
+};
+
 async function fetchOwnPublicSettings(token) {
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -41,13 +66,13 @@ export const AuthProvider = ({ children }) => {
   const checkAppState = async () => {
     try {
       setIsLoadingPublicSettings(true);
+      setIsLoadingAuth(true);
       setAuthError(null);
 
-      await exchangeAuthCodeFromUrlOnce();
-      const token = getStoredToken() || appParams.token;
-
       try {
-        const publicSettings = await fetchOwnPublicSettings(token);
+        await withTimeout(exchangeAuthCodeFromUrlOnce());
+        const token = getStoredToken() || appParams.token;
+        const publicSettings = await withTimeout(fetchOwnPublicSettings(token));
         setAppPublicSettings(publicSettings);
         if (token) {
           await checkUserAuth();
@@ -74,7 +99,9 @@ export const AuthProvider = ({ children }) => {
   const handleAppError = (appError) => {
     console.error('App state check failed:', appError);
 
-    if (appError.status === 403 && appError.data?.extra_data?.reason) {
+    if (isConnectionError(appError)) {
+      setAuthError(CONNECTION_ERROR);
+    } else if (appError.status === 403 && appError.data?.extra_data?.reason) {
       const reason = appError.data.extra_data.reason;
       if (reason === 'auth_required') {
         setAuthError({
@@ -105,7 +132,7 @@ export const AuthProvider = ({ children }) => {
   const checkUserAuth = async () => {
     try {
       setIsLoadingAuth(true);
-      const currentUser = await api.auth.me();
+      const currentUser = await withTimeout(api.auth.me());
       setUser(currentUser);
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
@@ -121,6 +148,8 @@ export const AuthProvider = ({ children }) => {
           type: 'auth_required',
           message: 'Authentication required',
         });
+      } else if (isConnectionError(error)) {
+        setAuthError(CONNECTION_ERROR);
       }
     }
   };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
-import { Home, ClipboardList, MessageSquare, CalendarDays, Users, Settings, Database, Star, Bot, Tag, Bell, Key, Video, Plus, BarChart3 } from 'lucide-react';
+import { Home, ClipboardList, MessageSquare, CalendarDays, Users, Settings, Database, Star, Bot, Tag, Bell, Key, Video, Plus, BarChart3, Search, X } from 'lucide-react';
 import OwnerStatistics from '@/pages/OwnerStatistics';
 import AccountSettings from '@/pages/AccountSettings';
 import BookingCreatorChat from '@/components/owner/BookingCreatorChat';
@@ -41,10 +41,27 @@ export default function OwnerPanel() {
   const [focusQuestionId, setFocusQuestionId] = useState(null);
   const [focusChatId, setFocusChatId] = useState(null);
   const [focusReviewId, setFocusReviewId] = useState(null);
+  const [loadError, setLoadError] = useState(false);
+  const [zimmerQuery, setZimmerQuery] = useState('');
 
-  useEffect(() => {
-    api.auth.me().then(u => { setCurrentUser(u); loadZimmers(u.id); });
+  const loadOwner = useCallback(async () => {
+    setLoadError(false);
+    setLoading(true);
+    try {
+      const u = await api.auth.me();
+      setCurrentUser(u);
+      await loadZimmers(u.id);
+    } catch (err) {
+      if (err?.status === 401 || err?.status === 403) {
+        api.auth.redirectToLogin('/owner');
+        return;
+      }
+      setLoading(false);
+      setLoadError(true);
+    }
   }, []);
+
+  useEffect(() => { loadOwner(); }, [loadOwner]);
 
   const openNotificationAction = (actionType, entityId) => {
     if (!actionType || !entityId) { setTab('updates'); return; }
@@ -71,9 +88,12 @@ export default function OwnerPanel() {
 
   const loadZimmers = async (ownerId) => {
     setLoading(true);
-    const data = await api.entities.Zimmer.filter({ owner_id: ownerId });
-    setZimmers(data);
-    setLoading(false);
+    try {
+      const data = await api.entities.Zimmer.filter({ owner_id: ownerId });
+      setZimmers(data);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSave = async (data) => {
@@ -100,6 +120,20 @@ export default function OwnerPanel() {
     loadZimmers(currentUser?.id);
   };
 
+  if (loadError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6" dir="rtl" style={{ background: '#FAFAFA', fontFamily: 'Heebo, sans-serif' }}>
+        <div className="text-center py-16 px-8 rounded-[23px] bg-white max-w-md w-full" role="alert">
+          <h3 className="font-simpler text-lg mb-2" style={{ color: '#0B3838', fontWeight: 600 }}>לא הצלחנו לטעון את הפאנל</h3>
+          <p className="font-simona mb-6 text-sm" style={{ color: '#717171' }}>ייתכן שיש בעיית חיבור. נסו שוב בעוד רגע.</p>
+          <button onClick={loadOwner} className="font-simpler text-white px-5 py-2.5 rounded-full text-sm hover:opacity-90" style={{ background: '#0B3838', fontWeight: 600 }}>
+            נסה שוב
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (usingCreatorChat) return <ZimmerCreatorChat onSave={async (data) => { await handleSave(data); setUsingCreatorChat(false); }} onCancel={() => setUsingCreatorChat(false)} />;
   if (editingZimmer !== null) return <ZimmerEditor zimmer={editingZimmer} onSave={handleSave} onCancel={() => setEditingZimmer(null)} onDelete={handleDelete} />;
 
@@ -120,6 +154,11 @@ export default function OwnerPanel() {
     { id: 'promotions', label: 'מבצעים וקידומים', icon: Tag },
     { id: 'settings', label: 'הגדרות חשבון', icon: Settings },
   ];
+  const normalizedQuery = zimmerQuery.trim().toLowerCase();
+  const filteredZimmers = normalizedQuery
+    ? zimmers.filter(z => [z.name, z.location].filter(Boolean).some(v => String(v).toLowerCase().includes(normalizedQuery)))
+    : zimmers;
+
   const primaryIds = ['home', 'calendar', 'zimmers', 'updates', 'bookings'];
   const primaryNav = primaryIds.map(id => navItems.find(n => n.id === id)).filter(Boolean);
 
@@ -260,11 +299,38 @@ export default function OwnerPanel() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                {zimmers.map(z => (
-                  <ZimmerListCard key={z.id} zimmer={z} onView={() => setViewingZimmer(z)} onEdit={() => setEditingZimmer(z)} onDelete={() => handleDelete(z.id)} />
-                ))}
-              </div>
+              <>
+                <div className="mb-5 relative max-w-md">
+                  <Search size={16} aria-hidden="true" className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ right: 14, color: '#717171' }} />
+                  <input
+                    type="search"
+                    value={zimmerQuery}
+                    onChange={e => setZimmerQuery(e.target.value)}
+                    placeholder="חיפוש צימר לפי שם או מיקום..."
+                    aria-label="חיפוש צימר לפי שם או מיקום"
+                    className="font-simona w-full pr-11 pl-10 py-2.5 rounded-xl text-sm outline-none transition-colors bg-white border-[1.5px] border-[#E4E7E5] focus:border-[#0B3838] [&::-webkit-search-cancel-button]:appearance-none"
+                    style={{ color: '#0B3838' }}
+                  />
+                  {zimmerQuery && (
+                    <button type="button" onClick={() => setZimmerQuery('')} aria-label="נקה חיפוש"
+                      className="absolute top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full p-0.5 hover:opacity-70"
+                      style={{ left: 10, color: '#717171' }}>
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+                {filteredZimmers.length === 0 ? (
+                  <div className="text-center py-16 rounded-[23px] bg-white" role="status">
+                    <p className="font-simona text-sm" style={{ color: '#717171' }}>לא נמצאו צימרים תואמים לחיפוש "{zimmerQuery.trim()}".</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                    {filteredZimmers.map(z => (
+                      <ZimmerListCard key={z.id} zimmer={z} onView={() => setViewingZimmer(z)} onEdit={() => setEditingZimmer(z)} onDelete={() => handleDelete(z.id)} />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

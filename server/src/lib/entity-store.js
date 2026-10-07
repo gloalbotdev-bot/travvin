@@ -124,6 +124,9 @@ export function createEntityStore(prisma, hooks = {}) {
       ) {
         payload.owner_id = user.id;
       }
+      if (entityType === 'SupplierAutomation') {
+        await assertSupplierAutomationRefs(prisma, payload, user);
+      }
       if (entityType === 'Promotion' && user.role !== 'admin' && user.id) {
         const zimmer = await loadZimmerForOwnerCheck(prisma, payload.zimmer_id, user.id);
         if (zimmer && zimmer.owner_id !== user.id) {
@@ -306,6 +309,12 @@ export function createEntityStore(prisma, hooks = {}) {
       if (entityType === 'Promotion') {
         assertCheckOutAfterCheckIn(merged);
       }
+      if (
+        entityType === 'SupplierAutomation' &&
+        (patch.contact_id !== undefined || patch.zimmer_ids !== undefined)
+      ) {
+        await assertSupplierAutomationRefs(prisma, merged, user);
+      }
 
       const row = await prisma.record.update({
         where: { id },
@@ -365,6 +374,40 @@ async function loadZimmerForOwnerCheck(prisma, zimmerId, ownerId) {
     return { owner_id: data.owner_id, name: data.name };
   } catch {
     return null;
+  }
+}
+
+/**
+ * The scheduled sender loads the contact with SERVICE_ACTOR, so a non-admin owner
+ * must not be able to point an automation at another owner's contact or zimmers.
+ */
+async function assertSupplierAutomationRefs(prisma, data, user) {
+  if (user.role === 'admin' || user.id === SERVICE_ACTOR.id) return;
+  const ownerId = data.owner_id;
+  const forbidden = (msg) => {
+    const err = new Error(`Forbidden: ${msg}`);
+    err.status = 403;
+    return err;
+  };
+
+  if (data.contact_id) {
+    const contact = await prisma.record.findFirst({
+      where: { id: String(data.contact_id), entityType: 'Contact' },
+    });
+    if (!contact || contact.data?.owner_id !== ownerId) {
+      throw forbidden('contact does not belong to owner');
+    }
+  }
+
+  const zimmerIds = Array.isArray(data.zimmer_ids) ? data.zimmer_ids.map(String) : [];
+  if (zimmerIds.length) {
+    const rows = await prisma.record.findMany({
+      where: { entityType: 'Zimmer', id: { in: zimmerIds } },
+    });
+    const owned = new Set(rows.filter((r) => r.data?.owner_id === ownerId).map((r) => r.id));
+    if (zimmerIds.some((id) => !owned.has(id))) {
+      throw forbidden('zimmer does not belong to owner');
+    }
   }
 }
 
