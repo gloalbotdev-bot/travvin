@@ -36,7 +36,12 @@ const VIDEO_MIME = new Set([
   'video/webm',
   'video/quicktime', // .mov
 ]);
-const ALLOWED_MIME = new Set([...IMAGE_MIME, ...AUDIO_MIME, ...VIDEO_MIME]);
+const DOC_MIME = new Set([
+  'application/pdf',
+  'text/plain',
+  'text/csv',
+]);
+const ALLOWED_MIME = new Set([...IMAGE_MIME, ...AUDIO_MIME, ...VIDEO_MIME, ...DOC_MIME]);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -71,6 +76,9 @@ function extFor(file) {
     'audio/x-m4a': '.m4a',
     'audio/aac': '.m4a',
     'audio/wav': '.wav',
+    'application/pdf': '.pdf',
+    'text/plain': '.txt',
+    'text/csv': '.csv',
   };
   return map[normalizeMime(file.mimetype)] || '.bin';
 }

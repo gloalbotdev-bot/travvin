@@ -25,6 +25,7 @@ const FALLBACK_MODELS = (
  * @param {string} [opts.model]
  * @param {object} [opts.response_json_schema]
  * @param {boolean} [opts.add_context_from_internet]
+ * @param {Array<{ inlineData: { mimeType: string, data: string } }>} [opts.files]
  * @param {typeof fetch} [opts.fetchImpl]
  */
 export async function invokeGemini({
@@ -32,6 +33,7 @@ export async function invokeGemini({
   model,
   response_json_schema,
   add_context_from_internet = false,
+  files = [],
   fetchImpl = fetch,
 }) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -51,6 +53,7 @@ export async function invokeGemini({
     prompt,
     response_json_schema,
     add_context_from_internet,
+    files,
   });
 
   const JSON_PARSE_ATTEMPTS = 3;
@@ -90,11 +93,13 @@ function buildRequestBody({
   prompt,
   response_json_schema,
   add_context_from_internet,
+  files = [],
 }) {
   let userText = String(prompt || '');
+  const userParts = (text) => [{ text }, ...files];
   /** @type {Record<string, unknown>} */
   const body = {
-    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    contents: [{ role: 'user', parts: userParts(userText) }],
   };
 
   if (add_context_from_internet) {
@@ -111,7 +116,7 @@ function buildRequestBody({
       generationConfig.responseSchema = geminiSchema;
     } else {
       userText = `${userText}\n\nRespond with a single JSON object matching this schema (no markdown):\n${JSON.stringify(response_json_schema)}`;
-      body.contents = [{ role: 'user', parts: [{ text: userText }] }];
+      body.contents = [{ role: 'user', parts: userParts(userText) }];
     }
     body.generationConfig = generationConfig;
   }

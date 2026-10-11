@@ -60,6 +60,8 @@ import {
 
 import { invokeLlm } from '../llm/index.js';
 
+import { loadAttachmentParts } from '../llm/attachments.js';
+
 
 
 const CUSTOMER_PROFILES = new Set(['customer_date_search', 'customer_chat']);
@@ -414,13 +416,23 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
 
 
 
-  const prompt = buildOwnerAssistantPrompt(ctx, req.message);
+  const files = await loadAttachmentParts(req.attachments);
+
+  let prompt = buildOwnerAssistantPrompt(ctx, req.message);
+
+  if (files.length) {
+
+    prompt += `\n\nהמשתמש צירף ${files.length} קבצים להודעה — התייחס לתוכנם בתשובה.`;
+
+  }
 
   const llmRaw = await invokeLlm({
 
     prompt,
 
     response_json_schema: profile.responseJsonSchema,
+
+    files,
 
   });
 

@@ -7,6 +7,9 @@ import BookingsTabs from './BookingsTabs';
 import BookingsTable from './BookingsTable';
 import BookingDetailsModal from './BookingDetailsModal';
 import BookingsAiSidebar from './BookingsAiSidebar';
+import BookingsSnapshotStrip from './BookingsSnapshotStrip';
+import BookingsFilterChips from './BookingsFilterChips';
+import ZimmerSelector from './ZimmerSelector';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import PullIndicator from '@/components/common/PullIndicator';
 import { needsAttention, isUpcoming, isActive, isPast } from './bookingStatus';
@@ -141,17 +144,70 @@ export default function OwnerBookingsPage({ ownerId, zimmers = [], onAddBooking,
 
   const emptyText = bookings.length === 0 ? 'אין הזמנות עדיין' : 'אין הזמנות בקטגוריה/סינון זה';
 
-  return (
-    <div className="flex min-h-[calc(100vh-80px)]" dir="rtl" style={{ background: '#F9F9F9', fontFamily: 'Heebo, sans-serif' }}>
-      {/* AI sidebar */}
-      <BookingsAiSidebar
-        bookings={bookings}
-        zimmers={zimmers}
-        onQuickAction={onQuickAction}
-        onApproveQuick={(b) => setSelectedBooking(b)}
-        onCreatePromo={() => onQuickAction('create_promo')}
-      />
+  const zimmerBookings = zimmerFilter === 'all' ? bookings : bookings.filter(b => b.zimmer_id === zimmerFilter);
 
+  return (
+    <>
+    {/* Desktop (Figma 1776:19750) */}
+    <div className="hidden lg:flex flex-col h-full bg-white" dir="rtl">
+      <BookingsSnapshotStrip bookings={bookings} zimmers={zimmers} zimmerFilter={zimmerFilter} onZimmerFilter={setZimmerFilter} />
+      <div className="flex flex-1 min-h-0">
+        <main className="flex-1 min-w-0 overflow-y-auto">
+          <div className="flex">
+            <div style={{ flex: '147 1 0', minWidth: 24 }} />
+            <div className="flex-shrink-0 min-w-0" style={{ width: 1151, maxWidth: '100%', paddingTop: 52, paddingBottom: 48 }}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="text-right">
+                  <h1 className="font-simpler" style={{ color: '#0B3838', fontSize: 29, fontWeight: 600, lineHeight: 'normal' }}>הזמנות</h1>
+                  <p className="font-simona" style={{ color: '#4B5563', fontSize: 16, fontWeight: 400, lineHeight: 'normal', marginTop: 6.9 }}>
+                    כל ההזמנות במקום אחד — מה שמגיע, מה שקורה עכשיו ומה שדורש טיפול.
+                  </p>
+                </div>
+                {duplicateCancelled > 0 && (
+                  <div className="font-simona flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: '#FAFAFA', color: '#0B3838', border: '1px solid #EFEFEF', fontSize: 13 }}>
+                    <AlertTriangle size={13} /> בוטלו {duplicateCancelled} כפולות
+                  </div>
+                )}
+              </div>
+              <div style={{ marginTop: 48, paddingRight: 3.5 }}>
+                <ZimmerSelector zimmers={zimmers} value={zimmerFilter} onChange={setZimmerFilter} variant="filter" />
+              </div>
+              <div style={{ marginTop: 8, paddingRight: 3.5 }}>
+                <BookingsFilterChips
+                  active={tab}
+                  onChange={setTab}
+                  bookings={zimmerBookings}
+                  search={search}
+                  onSearch={setSearch}
+                  dateRange={dateRange}
+                  onDateRange={setDateRange}
+                />
+              </div>
+              <div className="relative" style={{ height: 41 }}>
+                <div
+                  className="absolute rounded-[29px]"
+                  style={{ width: 114.17, height: 3.11, background: '#E8E8E8', top: 22, left: 514.9 }}
+                  aria-hidden
+                />
+              </div>
+              <BookingsTable bookings={filtered} zimmers={zimmers} onView={setSelectedBooking} emptyText={emptyText} />
+            </div>
+            <div style={{ flex: '109 1 0', minWidth: 24 }} />
+          </div>
+        </main>
+        <BookingsAiSidebar
+          bookings={zimmerBookings}
+          zimmers={zimmers}
+          onQuickAction={onQuickAction}
+          onApproveQuick={(b) => setSelectedBooking(b)}
+          onOpenBooking={(b) => setSelectedBooking(b)}
+          onCreatePromo={() => onQuickAction('create_promo')}
+        />
+      </div>
+    </div>
+
+    {/* Mobile (unchanged) */}
+    <div className="flex lg:hidden min-h-[calc(100vh-80px)]" dir="rtl" style={{ background: '#F9F9F9', fontFamily: 'Heebo, sans-serif' }}>
       {/* Main content */}
       <main ref={mainRef} className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-auto">
         <PullIndicator pull={pull} refreshing={refreshing} />
@@ -179,9 +235,10 @@ export default function OwnerBookingsPage({ ownerId, zimmers = [], onAddBooking,
           <BookingsSummaryCards bookings={bookings} />
           <BookingsFiltersBar zimmers={zimmers} zimmerFilter={zimmerFilter} onZimmerFilter={setZimmerFilter} search={search} onSearch={setSearch} dateRange={dateRange} onDateRange={setDateRange} />
           <BookingsTabs active={tab} onChange={setTab} bookings={bookings} />
-          <BookingsTable bookings={filtered} zimmers={zimmers} onView={setSelectedBooking} onMore={setSelectedBooking} emptyText={emptyText} />
+          <BookingsTable bookings={filtered} zimmers={zimmers} onView={setSelectedBooking} emptyText={emptyText} />
         </div>
       </main>
+    </div>
 
       {selectedBooking && (
         <BookingDetailsModal
@@ -197,7 +254,7 @@ export default function OwnerBookingsPage({ ownerId, zimmers = [], onAddBooking,
           onManualCheckout={handleManualCheckout}
         />
       )}
-    </div>
+    </>
   );
 }
 

@@ -35,6 +35,65 @@ export function statusDisplay(booking) {
   return { label: 'הזמנה מאושרת', bg: '#E8F5E9', color: '#2E7D32', dot: '#4CAF50' };
 }
 
+const HEB_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+const dayMonth = (iso) => { const d = new Date(iso); return `${d.getDate()} ב${HEB_MONTHS[d.getMonth()]}`; };
+const daysFromToday = (iso) => Math.round((startOfDay(iso) - startOfDay(new Date())) / 86400000);
+
+// Desktop status badge + secondary line (Figma 1776:19992).
+export function figmaStatus(booking) {
+  const YELLOW = '#FFFF00';
+  const CYAN = '#D9F3F9';
+  const GRAY = '#EFEFEF';
+  const cancelNote = booking.cancel_request_reason ? 'התקבלה בקשת ביטול' : '';
+
+  if (booking.status === 'חסום' || booking.is_block) return { label: 'חסום', bg: GRAY, sub: booking.block_reason || '' };
+  if (booking.status === 'ממתינה') return { label: 'ממתינה לאישור', bg: YELLOW, sub: cancelNote };
+  if (booking.status === 'נדחתה') return { label: 'בוטלה', bg: GRAY, sub: 'התאריכים חזרו להיות פנויים' };
+  if (booking.checked_out || isPast(booking)) return { label: 'הסתיימה', bg: GRAY, sub: '' };
+  if (isToday(booking.check_in)) {
+    return { label: 'צ’ק אין להיום', bg: YELLOW, sub: cancelNote || (booking.check_in_time ? `מגיעים ב־${booking.check_in_time}` : 'מגיעים היום') };
+  }
+  if (isActive(booking)) {
+    const left = daysFromToday(booking.check_out);
+    const sub = left <= 0 ? 'עוזבים היום' : left === 1 ? 'עוזבים מחר' : `עוזבים ב־${dayMonth(booking.check_out)}`;
+    return { label: 'מתארחים עכשיו', bg: CYAN, sub: cancelNote || sub };
+  }
+  const until = daysFromToday(booking.check_in);
+  const sub = until === 1 ? 'מגיעים מחר' : `מגיעים בעוד ${until} ימים`;
+  return { label: 'מאושרת', bg: GRAY, sub: cancelNote || sub };
+}
+
+// "15–17 באוגוסט" or "30 ביולי – 2 באוגוסט".
+export function formatRangeLong(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return '';
+  const a = new Date(checkIn);
+  const b = new Date(checkOut);
+  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) {
+    return `${a.getDate()}–${b.getDate()} ב${HEB_MONTHS[b.getMonth()]}`;
+  }
+  return `${dayMonth(checkIn)} – ${dayMonth(checkOut)}`;
+}
+
+export function nightsLabel(n) {
+  return n === 1 ? 'לילה אחד' : `${n} לילות`;
+}
+
+export function guestsLabel(n) {
+  return n === 1 ? 'אורח אחד' : `${n} אורחים`;
+}
+
+// True when no approved booking covers the coming Friday→Saturday.
+export function isNextWeekendFree(bookings) {
+  const fri = new Date();
+  fri.setDate(fri.getDate() + ((5 - fri.getDay() + 7) % 7 || 7));
+  const sat = new Date(fri); sat.setDate(sat.getDate() + 1);
+  return !bookings.some(b => b.status === 'אושרה' && new Date(b.check_in) <= fri && new Date(b.check_out) >= sat);
+}
+
+export function bookingNumber(booking) {
+  return String(booking.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase();
+}
+
 // Nights count for "משך שהייה".
 export function nightsBetween(checkIn, checkOut) {
   if (!checkIn || !checkOut) return 0;

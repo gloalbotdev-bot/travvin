@@ -5,8 +5,11 @@ import MessagesList from './messages/MessagesList';
 import MessagesMergedChatWindow from './messages/MessagesMergedChatWindow';
 import MessagesMergedQuestionsWindow from './messages/MessagesMergedQuestionsWindow';
 import MessagesContactPanel from './messages/MessagesContactPanel';
+import ContactAvatar from './messages/ContactAvatar';
 import { buildPhoneLookup, groupChatsByContact, groupQuestionsByContact } from './messages/groupContacts';
 import { fmtMsgTime } from './messages/timeFormat';
+import { useContactBooking } from './messages/useContactBooking';
+import unreadDot from '@/assets/owner/messages/unread-dot.svg';
 
 const SYS_READ_KEY = 'zb_read_sysmsgs_owner';
 const loadSysReadSet = () => { try { return new Set(JSON.parse(localStorage.getItem(SYS_READ_KEY) || '[]')); } catch { return new Set(); } };
@@ -182,6 +185,8 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
   const selectedChatContact = category === 'chats' ? chatContacts.find(c => c.key === selectedKey) : null;
   const selectedQContact = category === 'questions' ? questionContacts.find(c => c.key === selectedKey) : null;
   const selectedSystem = category === 'system' ? systemMsgs.find(m => m.id === selectedKey) : null;
+  const selectedContact = selectedChatContact || selectedQContact || null;
+  const { booking: selectedBooking, loading: loadingBooking } = useContactBooking(selectedContact);
 
   // Fetch zimmer context for the selected contact (all zimmers it touched).
   useEffect(() => {
@@ -231,71 +236,53 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
     return arr;
   }, [category, chatContacts, questionContacts, systemMsgs, subFilter, search]);
 
+  const uniqueZimmerNames = (list) => Array.from(new Set((list || []).map(x => x.zimmer_name).filter(Boolean))).join(', ');
+
   const renderItem = (it) => {
     if (category === 'chats') {
       const unread = chatUnread(it);
       const p = chatPreview(it);
-      const ts = chatLastActivity(it);
       return (
-        <button key={it.key} onClick={() => { it.threads.forEach(t => markChatRead(t.id)); setSelectedKey(it.key); }}
-          className="w-full text-right rounded-2xl p-3 flex items-start gap-3 transition-all"
-          style={{ background: selectedKey === it.key ? '#F8F7F4' : 'transparent' }}>
-          <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: '#075E54' }}>{(it.name || 'ל').slice(0, 1)}</div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-bold text-sm truncate" style={{ color: '#1A1A1A' }}>{it.name}</span>
-              <span className="text-[11px] flex-shrink-0" style={{ color: '#9CA3AF' }}>{fmtMsgTime(ts)}</span>
-            </div>
-            <p className="text-xs truncate" style={{ color: '#9CA3AF' }}>{it.threads.length} צימרים</p>
-            {p && <p className="text-xs truncate mt-0.5" style={{ color: unread ? '#4B5563' : '#9CA3AF' }}>{p.content}</p>}
-          </div>
-          {unread && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1" style={{ background: '#EF4444' }} />}
-        </button>
+        <InboxRow key={it.key}
+          selected={selectedKey === it.key}
+          onClick={() => { it.threads.forEach(t => markChatRead(t.id)); setSelectedKey(it.key); }}
+          avatar={<ContactAvatar name={it.name} />}
+          title={it.name}
+          subtitle={uniqueZimmerNames(it.threads)}
+          preview={p?.content}
+          time={fmtMsgTime(chatLastActivity(it))}
+          unread={unread} />
       );
     }
     if (category === 'questions') {
       const unread = qUnread(it);
       const p = qPreview(it);
-      const ts = qLastActivity(it);
+      const aiAnswered = it.questions.some(q => q.status === 'נענתה' && q.answered_by === 'ai');
+      const ownerAnswered = it.questions.some(q => q.status === 'נענתה' && q.answered_by !== 'ai');
       return (
-        <button key={it.key} onClick={() => setSelectedKey(it.key)}
-          className="w-full text-right rounded-2xl p-3 flex items-start gap-3 transition-all"
-          style={{ background: selectedKey === it.key ? '#F8F7F4' : 'transparent' }}>
-          <div className="w-11 h-11 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: unread ? '#F97316' : '#9CA3AF' }}><MessageCircleQuestion size={18} /></div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-bold text-sm truncate" style={{ color: '#1A1A1A' }}>{it.name}</span>
-              <span className="text-[11px] flex-shrink-0" style={{ color: '#9CA3AF' }}>{fmtMsgTime(ts)}</span>
-            </div>
-            <p className="text-xs truncate" style={{ color: '#9CA3AF' }}>{it.questions.length} שאלות</p>
-            {it.questions.some(q => q.status === 'נענתה' && q.answered_by === 'ai') && (
-              <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-0.5" style={{ background: 'rgba(34,197,94,0.12)', color: '#16A34A' }}>נענה ע"י AI</span>
-            )}
-            {it.questions.some(q => q.status === 'נענתה' && q.answered_by !== 'ai') && (
-              <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-0.5" style={{ background: '#F3F4F6', color: '#6B7280' }}>נענתה ע"י בעלים</span>
-            )}
-            {p && <p className="text-xs truncate mt-0.5" style={{ color: unread ? '#4B5563' : '#9CA3AF' }}>{p.content}</p>}
-          </div>
-          {unread && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1" style={{ background: '#EF4444' }} />}
-        </button>
+        <InboxRow key={it.key}
+          selected={selectedKey === it.key}
+          onClick={() => setSelectedKey(it.key)}
+          avatar={<ContactAvatar name={it.name} />}
+          title={it.name}
+          subtitle={uniqueZimmerNames(it.questions)}
+          preview={p?.content}
+          time={fmtMsgTime(qLastActivity(it))}
+          unread={unread}
+          tags={[aiAnswered && 'נענה ע"י AI', ownerAnswered && 'נענתה ע"י בעלים'].filter(Boolean)} />
       );
     }
     const unRead = !sysReadSet.has(it.id);
     return (
-      <button key={it.id} onClick={() => { markSysRead(it.id); setSelectedKey(it.id); if (onMarkSystemRead) onMarkSystemRead(it.id); }}
-        className="w-full text-right rounded-2xl p-3 flex items-start gap-3 transition-all"
-        style={{ background: selectedKey === it.id ? '#F8F7F4' : 'transparent' }}>
-        <div className="w-11 h-11 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: '#6B7280' }}><Bell size={18} /></div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-bold text-sm truncate" style={{ color: '#1A1A1A' }}>{it.title}</span>
-            <span className="text-[11px] flex-shrink-0" style={{ color: '#9CA3AF' }}>{fmtMsgTime(it.created_date)}</span>
-          </div>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mt-0.5" style={{ background: 'rgba(249,115,22,0.1)', color: '#EA580C' }}>{it.category || 'הודעה'}</span>
-          <p className="text-xs truncate mt-1" style={{ color: '#9CA3AF' }}>{it.body}</p>
-        </div>
-        {unRead && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1" style={{ background: '#EF4444' }} />}
-      </button>
+      <InboxRow key={it.id}
+        selected={selectedKey === it.id}
+        onClick={() => { markSysRead(it.id); setSelectedKey(it.id); if (onMarkSystemRead) onMarkSystemRead(it.id); }}
+        avatar={<ContactAvatar><Bell size={22} /></ContactAvatar>}
+        title={it.title}
+        subtitle={it.category || 'הודעה'}
+        preview={it.body}
+        time={fmtMsgTime(it.created_date)}
+        unread={unRead} />
     );
   };
 
@@ -303,7 +290,7 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
   const onDismissed = async (id) => { await api.entities.UnansweredQuestion.update(id, { status: 'נדחתה' }); load(); };
 
   const listEl = (
-    <div className="h-full min-h-0 rounded-2xl overflow-hidden" style={{ border: '1.5px solid #F0EEE8' }}>
+    <div className="h-full min-h-0 overflow-hidden bg-white lg:border-l lg:border-[#E5E5E5]">
       <MessagesList category={category} onCategory={switchCategory} subFilter={subFilter} onSubFilter={setSubFilter} subFilters={subFilters}
         items={listItems} renderItem={renderItem} search={search} setSearch={setSearch}
         onOpenSettings={() => onNavigate?.('checkin')} counts={counts} totals={totals} />
@@ -311,9 +298,9 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
   );
 
   const centerEl = (
-    <div className="h-full min-h-0 rounded-2xl overflow-hidden" style={{ border: '1.5px solid #F0EEE8' }}>
+    <div className="h-full min-h-0 overflow-hidden bg-white">
       {category === 'chats' && selectedChatContact ? (
-        <MessagesMergedChatWindow key={selectedChatContact.key} contact={selectedChatContact} zimmers={zimmerMap} user={user} />
+        <MessagesMergedChatWindow key={selectedChatContact.key} contact={selectedChatContact} zimmers={zimmerMap} booking={selectedBooking} />
       ) : category === 'questions' && selectedQContact ? (
         <MessagesMergedQuestionsWindow key={selectedQContact.key} contact={selectedQContact} zimmers={zimmerMap} onAnswered={onAnswered} onDismissed={onDismissed} />
       ) : category === 'system' && selectedSystem ? (
@@ -325,11 +312,9 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
   );
 
   const ctxEl = (
-    <div className="h-full min-h-0 rounded-2xl overflow-hidden" style={{ border: '1.5px solid #F0EEE8' }}>
-      {category === 'chats' && selectedChatContact ? (
-        <MessagesContactPanel contact={selectedChatContact} zimmers={zimmerMap} onAddBooking={onAddBooking} />
-      ) : category === 'questions' && selectedQContact ? (
-        <MessagesContactPanel contact={selectedQContact} zimmers={zimmerMap} onAddBooking={onAddBooking} />
+    <div className="h-full min-h-0 overflow-hidden bg-white border-r border-[#E5E5E5]">
+      {selectedContact ? (
+        <MessagesContactPanel contact={selectedContact} zimmers={zimmerMap} booking={selectedBooking} loadingBooking={loadingBooking} onAddBooking={onAddBooking} />
       ) : (
         <MessagesContactPanel contact={null} zimmers={zimmerMap} />
       )}
@@ -337,21 +322,21 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
   );
 
   return (
-    <div dir="rtl" style={{ fontFamily: 'Heebo, sans-serif' }} className="h-[calc(100dvh-130px)] min-h-[540px]">
+    <div dir="rtl" className="font-simona h-full min-h-[540px] bg-white">
       {loading ? (
         <div className="h-full flex items-center justify-center">
-          <div className="w-7 h-7 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
+          <div className="w-7 h-7 border-2 border-[#E5E5E5] border-t-[#0B3838] rounded-full animate-spin" />
         </div>
       ) : isLg ? (
-        <div className="h-full grid gap-3 lg:grid-cols-[300px_1fr_320px] lg:grid-rows-1">
+        <div className="h-full grid grid-rows-1 lg:grid-cols-[300px_1fr_340px] min-[1600px]:grid-cols-[370px_1fr_446px]">
           {listEl}{centerEl}{ctxEl}
         </div>
       ) : (
         <div className="h-full">
           {selectedKey ? (
             <div className="h-full flex flex-col">
-              <div className="px-3 py-2 flex items-center gap-2 bg-white rounded-2xl mb-2" style={{ border: '1.5px solid #F0EEE8' }}>
-                <button onClick={() => setSelectedKey(null)} className="flex items-center gap-1 text-sm font-bold" style={{ color: '#1A1A1A' }}>
+              <div className="px-4 py-3 flex items-center gap-2 bg-white border-b border-[#E5E5E5]">
+                <button onClick={() => setSelectedKey(null)} className="flex items-center gap-1 text-[15px]" style={{ color: '#0B3838', fontWeight: 500 }}>
                   <ArrowRight size={18} /> חזרה לרשימה
                 </button>
               </div>
@@ -364,18 +349,44 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
   );
 }
 
+function InboxRow({ selected, onClick, avatar, title, subtitle, preview, time, unread, tags = [] }) {
+  return (
+    <button type="button" onClick={onClick} aria-current={selected ? 'true' : undefined}
+      className="font-simona w-full text-right rounded-[12px] p-[16px] flex items-start gap-[12px] transition-colors hover:bg-[#FAFAFA] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0B3838]"
+      style={{ background: selected ? '#FAFAFA' : '#fff' }}>
+      {avatar}
+      <div className="flex-1 min-w-0 flex flex-col gap-[2px] items-start leading-normal">
+        <div className="flex items-start gap-[2px] max-w-full">
+          <span className="text-[15px] truncate" style={{ color: '#0B3838', fontWeight: unread ? 700 : 500 }}>{title}</span>
+          {unread && <img src={unreadDot} alt="" width={8} height={8} className="flex-shrink-0" />}
+        </div>
+        {subtitle && <span className="text-[12px] truncate max-w-full" style={{ color: '#6B7280' }}>{subtitle}</span>}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {tags.map(t => (
+              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: '#EFEFEF', color: '#0B3838', fontWeight: 500 }}>{t}</span>
+            ))}
+          </div>
+        )}
+        {preview && <span className="text-[13px] truncate w-full" style={{ color: unread ? '#0B3838' : '#6B7280' }}>{preview}</span>}
+      </div>
+      <span className="text-[11px] whitespace-nowrap flex-shrink-0" style={{ color: unread || selected ? '#6B7280' : '#9CA3AF' }}>{time}</span>
+    </button>
+  );
+}
+
 function SystemDetail({ message, onAction }) {
   const clickable = message.action_type && message.action_entity_id && onAction;
   return (
-    <div className="h-full overflow-y-auto p-5 bg-white" dir="rtl">
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ background: 'rgba(249,115,22,0.1)', color: '#EA580C' }}>{message.category || 'הודעה'}</span>
-        <span className="text-xs" style={{ color: '#9CA3AF' }}>{new Date(message.created_date).toLocaleString('he-IL')}</span>
+    <div className="font-simona h-full overflow-y-auto px-[32px] py-[24px] bg-white" dir="rtl">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <span className="text-[13px] px-[8px] py-[3px] rounded-full" style={{ background: '#FFFF00', color: '#0B3838', fontWeight: 500 }}>{message.category || 'הודעה'}</span>
+        <span className="text-[13px]" style={{ color: '#6B7280' }}>{new Date(message.created_date).toLocaleString('he-IL')}</span>
       </div>
-      <h2 className="text-lg font-black mb-2" style={{ color: '#1A1A1A' }}>{message.title}</h2>
-      {message.body && <p className="text-sm whitespace-pre-wrap" style={{ color: '#4B5563' }}>{message.body}</p>}
+      <h2 className="font-simpler text-[24px] mb-3" style={{ color: '#0B3838', fontWeight: 600 }}>{message.title}</h2>
+      {message.body && <p className="text-[15px] leading-[1.5] whitespace-pre-wrap" style={{ color: '#0B3838' }}>{message.body}</p>}
       {clickable && (
-        <button onClick={() => onAction(message.action_type, message.action_entity_id)} className="mt-4 px-4 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: '#F97316' }}>עבור לפעולה ←</button>
+        <button onClick={() => onAction(message.action_type, message.action_entity_id)} className="font-simpler mt-5 px-6 py-[12px] rounded-[35px] text-[16px] text-white hover:opacity-90" style={{ background: '#0B3838' }}>עבור לפעולה ←</button>
       )}
     </div>
   );
@@ -384,12 +395,12 @@ function SystemDetail({ message, onAction }) {
 function EmptyWindow({ category }) {
   const label = category === 'chats' ? 'שיחה' : category === 'questions' ? 'שאלה' : 'הודעה';
   return (
-    <div className="h-full flex items-center justify-center bg-white" dir="rtl">
+    <div className="font-simona h-full flex items-center justify-center bg-white" dir="rtl">
       <div className="text-center">
-        <div className="w-16 h-16 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: '#F8F7F4' }}>
-          {category === 'chats' ? <MessageCircle size={28} style={{ color: '#D1D5DB' }} /> : <MessageCircleQuestion size={28} style={{ color: '#D1D5DB' }} />}
+        <div className="w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: '#FAFAFA' }}>
+          {category === 'chats' ? <MessageCircle size={28} style={{ color: '#9CA3AF' }} /> : <MessageCircleQuestion size={28} style={{ color: '#9CA3AF' }} />}
         </div>
-        <p className="text-sm" style={{ color: '#9CA3AF' }}>בחר {label} מימין כדי להתחיל</p>
+        <p className="text-[15px]" style={{ color: '#6B7280' }}>בחר {label} מימין כדי להתחיל</p>
       </div>
     </div>
   );

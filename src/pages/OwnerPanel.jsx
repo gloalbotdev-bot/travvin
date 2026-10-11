@@ -29,6 +29,7 @@ export default function OwnerPanel() {
   const [tab, setTab] = useState('home');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [assistantPrompt, setAssistantPrompt] = useState('');
+  const [assistantAttachments, setAssistantAttachments] = useState([]);
   const [zimmers, setZimmers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingZimmer, setEditingZimmer] = useState(null);
@@ -134,7 +135,6 @@ export default function OwnerPanel() {
     );
   }
 
-  if (usingCreatorChat) return <ZimmerCreatorChat onSave={async (data) => { await handleSave(data); setUsingCreatorChat(false); }} onCancel={() => setUsingCreatorChat(false)} />;
   if (editingZimmer !== null) return <ZimmerEditor zimmer={editingZimmer} onSave={handleSave} onCancel={() => setEditingZimmer(null)} onDelete={handleDelete} />;
 
   const navItems = [
@@ -163,7 +163,11 @@ export default function OwnerPanel() {
   const primaryNav = primaryIds.map(id => navItems.find(n => n.id === id)).filter(Boolean);
 
   const handleNav = (id) => { setTab(id); setSidebarOpen(false); };
-  const handleHomeChat = (text) => { setAssistantPrompt(text); setTab('assistant'); };
+  const handleHomeChat = (text, attachments = []) => {
+    setAssistantPrompt(text);
+    setAssistantAttachments(attachments);
+    setTab('assistant');
+  };
   const handleCalendarAI = (iso, zimmerName) => {
     const z = zimmerName ? ` עבור הנכס "${zimmerName}"` : '';
     setAssistantPrompt(`הצעות מבוססות שוק לתאריך ${iso}${z}. אנא הצע המלצות מחיר וזמינות.`);
@@ -178,7 +182,7 @@ export default function OwnerPanel() {
 
   return (
     <div
-      className={`flex flex-col ${tab === 'home' || viewingZimmer ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}
+      className={`flex flex-col ${tab === 'home' || tab === 'updates' || viewingZimmer || usingCreatorChat ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}
       dir="rtl"
       style={{ background: '#FAFAFA', fontFamily: 'Heebo, sans-serif' }}
     >
@@ -186,13 +190,13 @@ export default function OwnerPanel() {
       {showBookingCreator && <BookingCreatorChat onClose={() => setShowBookingCreator(false)} onSaved={() => { setShowBookingCreator(false); setTab('bookings'); }} zimmers={zimmers} ownerId={currentUser?.id} />}
 
       <OwnerTopBar
-        tab={viewingZimmer ? 'zimmers' : tab}
+        tab={viewingZimmer || usingCreatorChat ? 'zimmers' : tab}
         primaryNav={primaryNav}
-        onNav={(id) => { setViewingZimmer(null); handleNav(id); }}
+        onNav={(id) => { setViewingZimmer(null); setUsingCreatorChat(false); handleNav(id); }}
         onAddBooking={() => setShowBookingCreator(true)}
         notifCount={notifCount}
-        onBell={() => { setViewingZimmer(null); setTab('updates'); }}
-        onSpark={() => { setViewingZimmer(null); setTab('assistant'); }}
+        onBell={() => { setViewingZimmer(null); setUsingCreatorChat(false); setTab('updates'); }}
+        onSpark={() => { setViewingZimmer(null); setUsingCreatorChat(false); setTab('assistant'); }}
         onHamburger={() => setSidebarOpen(true)}
       />
 
@@ -200,8 +204,8 @@ export default function OwnerPanel() {
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         navItems={navItems}
-        tab={viewingZimmer ? 'zimmers' : tab}
-        onNav={(id) => { setViewingZimmer(null); handleNav(id); }}
+        tab={viewingZimmer || usingCreatorChat ? 'zimmers' : tab}
+        onNav={(id) => { setViewingZimmer(null); setUsingCreatorChat(false); handleNav(id); }}
         notifCount={notifCount}
         currentUser={currentUser}
         onLogout={() => api.auth.logout('/')}
@@ -216,13 +220,21 @@ export default function OwnerPanel() {
           onUpdated={(updated) => { setViewingZimmer(updated); setZimmers(prev => prev.map(z => z.id === updated.id ? updated : z)); }}
           onDelete={handleDelete}
         />
+      ) : usingCreatorChat ? (
+        <ZimmerCreatorChat
+          embedded
+          onSave={async (data) => { await handleSave(data); setUsingCreatorChat(false); }}
+          onCancel={() => setUsingCreatorChat(false)}
+        />
       ) : (
-      <div className={`flex flex-1 ${tab === 'home' ? 'min-h-0 overflow-hidden' : 'overflow-hidden'}`}>
+      <div className={`flex flex-1 ${tab === 'home' || tab === 'updates' ? 'min-h-0 overflow-hidden' : 'overflow-hidden'}`}>
       <main
         className={`flex-1 min-h-0 ${
           tab === 'home'
             ? 'overflow-hidden p-4 pt-0 sm:p-6 sm:pt-0 lg:p-8 lg:pt-0'
-            : tab === 'assistant' || tab === 'bookings'
+            : tab === 'updates'
+              ? 'overflow-hidden'
+              : tab === 'assistant' || tab === 'bookings'
               ? 'overflow-auto'
               : 'overflow-auto p-4 sm:p-6 lg:p-8'
         }`}
@@ -246,7 +258,8 @@ export default function OwnerPanel() {
           <OwnerInfoAssistant
             ownerId={currentUser?.id}
             initialPrompt={assistantPrompt}
-            onPromptConsumed={() => setAssistantPrompt('')}
+            initialAttachments={assistantAttachments}
+            onPromptConsumed={() => { setAssistantPrompt(''); setAssistantAttachments([]); }}
             onMutated={() => loadZimmers(currentUser?.id)}
             onNavigate={(target) => {
               if (target === 'booking_creator') setShowBookingCreator(true);

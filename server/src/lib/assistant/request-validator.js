@@ -29,10 +29,46 @@ const FORBIDDEN_KEYS = new Set([
 
 const MAX_MESSAGE_LEN = 4000;
 const MAX_CLIENT_STATE_JSON = 8192;
+const MAX_ATTACHMENTS = 5;
+const UPLOAD_PATH_RE = /^\/(?:uploads|api\/upload)\/[A-Za-z0-9._-]+$/;
+
+function attachmentPath(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const raw = value.trim();
+  let pathname = raw;
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      pathname = new URL(raw).pathname;
+    } catch {
+      return null;
+    }
+  }
+  return UPLOAD_PATH_RE.test(pathname) ? pathname : null;
+}
+
+function validateAttachments(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > MAX_ATTACHMENTS) {
+    const err = new Error(`attachments must be an array of up to ${MAX_ATTACHMENTS} upload URLs`);
+    err.status = 400;
+    err.code = 'VALIDATION';
+    throw err;
+  }
+  return value.map((v) => {
+    const p = attachmentPath(v);
+    if (!p) {
+      const err = new Error('attachments must reference app upload storage');
+      err.status = 400;
+      err.code = 'VALIDATION';
+      throw err;
+    }
+    return p;
+  });
+}
 
 /**
  * @param {unknown} body
- * @returns {{ profile: string, message: string, conversationId: string|null, clientState: object|null }}
+ * @returns {{ profile: string, message: string, conversationId: string|null, clientState: object|null, attachments: string[] }}
  */
 export function validateChatRequest(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -102,10 +138,13 @@ export function validateChatRequest(body) {
     clientState = body.clientState;
   }
 
+  const attachments = validateAttachments(body.attachments);
+
   return {
     profile: profile.trim(),
     message: message.trim(),
     conversationId,
     clientState,
+    attachments,
   };
 }

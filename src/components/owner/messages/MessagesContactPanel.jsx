@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { api } from '@/api/client';
-import { MessageCircle, Phone, Home, CalendarCheck, Plus, CheckCircle2, Calendar, Moon, Users, Wallet, LogOut, LogIn } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { MessageCircle, Phone, Home, CalendarCheck } from 'lucide-react';
+import ContactAvatar from './ContactAvatar';
+import iconPin from '@/assets/owner/messages/icon-pin.svg';
+import iconWhatsapp from '@/assets/owner/messages/icon-whatsapp.svg';
 
 const waPhone = (p) => {
   const d = (p || '').replace(/\D/g, '');
@@ -9,52 +11,41 @@ const waPhone = (p) => {
   return d;
 };
 
-const fmtRange = (ci, co) => {
-  if (!ci || !co) return '';
-  const d1 = new Date(ci), d2 = new Date(co);
-  const opts = { day: 'numeric', month: 'long' };
-  return `${d2.toLocaleDateString('he-IL', opts)}-${d1.toLocaleDateString('he-IL', opts)}`;
-};
 const nightsBetween = (ci, co) => {
   if (!ci || !co) return 0;
   return Math.max(1, Math.round((new Date(co) - new Date(ci)) / 86400000));
 };
 
+// "יום ו׳ 28 באוגוסט"
+const fmtStayDay = (d) => {
+  if (!d) return '';
+  const date = new Date(d);
+  if (isNaN(date)) return '';
+  const weekday = date.toLocaleDateString('he-IL', { weekday: 'short' });
+  const month = date.toLocaleDateString('he-IL', { month: 'long' });
+  return `${weekday} ${date.getDate()} ב${month}`;
+};
+
+const isOccupiedNow = (b) => {
+  if (!b?.check_in || !b?.check_out || b.is_block || b.status === 'נדחית') return false;
+  const n = new Date();
+  const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+  return String(b.check_in).slice(0, 10) <= today && today < String(b.check_out).slice(0, 10);
+};
+
+const statusText = (b) => {
+  if (isOccupiedNow(b)) return 'תפוס כרגע';
+  if (b.is_block) return 'תאריך חסום';
+  if (b.status === 'אושרה') return 'הזמנה מאושרת';
+  if (b.status === 'נדחית') return 'נדחתה';
+  return 'ממתינה לאישור';
+};
+
+const PANEL = 'font-simona h-full overflow-y-auto owner-hide-scrollbar flex flex-col gap-[25px] px-[32px] pt-[43px] pb-[37px] bg-white';
+
 // Left panel: booking details card (when a booking is linked) or a contact card.
-export default function MessagesContactPanel({ contact, zimmers = {}, onAddBooking }) {
-  const [booking, setBooking] = useState(null);
-  const [loadingBooking, setLoadingBooking] = useState(false);
-
-  // Pick the first linked booking id from the contact's threads (direct chats),
-  // or fall back to matching a booking by guest name + zimmer (for questions).
-  const bookingId = useMemo(() => {
-    const fromThreads = (contact?.threads || []).find(t => t.booking_id)?.booking_id;
-    if (fromThreads) return { id: fromThreads, via: 'thread' };
-    // Questions have no booking link — resolve by matching customer name + a zimmer they asked about.
-    const q = (contact?.questions || [])[0];
-    if (q && contact?.name && q.zimmer_id) return { via: 'search', zimmerId: q.zimmer_id, guestName: contact.name };
-    return null;
-  }, [contact?.key]);
-
-  useEffect(() => {
-    let alive = true;
-    if (!bookingId) { setBooking(null); return; }
-    setLoadingBooking(true);
-    const fetcher = bookingId.via === 'thread'
-      ? api.entities.BookingRequest.get(bookingId.id)
-      : api.entities.BookingRequest.filter({
-          zimmer_id: bookingId.zimmerId,
-          guest_name: bookingId.guestName,
-          is_block: false,
-        }, '-created_date', 5).then(list => (list || [])[0] || null);
-    fetcher
-      .then(b => { if (alive) setBooking(b); })
-      .catch(() => { if (alive) setBooking(null); })
-      .finally(() => { if (alive) setLoadingBooking(false); });
-    return () => { alive = false; };
-  }, [bookingId]);
-
-  // Resolve the zimmer context (image, name, checkin/checkout times).
+// The booking is resolved by the parent (useContactBooking) so the chat header shares it.
+export default function MessagesContactPanel({ contact, zimmers = {}, booking = null, loadingBooking = false, onAddBooking }) {
   const zimmer = useMemo(() => {
     const zid = booking?.zimmer_id
       || (contact?.threads || []).find(t => t.zimmer_id)?.zimmer_id
@@ -64,83 +55,83 @@ export default function MessagesContactPanel({ contact, zimmers = {}, onAddBooki
 
   if (!contact) {
     return (
-      <div className="h-full flex items-center justify-center p-6 text-center" dir="rtl">
+      <div className="font-simona h-full flex items-center justify-center p-6 text-center bg-white" dir="rtl">
         <div>
-          <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: '#F8F7F4' }}><MessageCircle size={26} style={{ color: '#D1D5DB' }} /></div>
-          <p className="text-sm" style={{ color: '#9CA3AF' }}>פרטים נוספים יופיעו כאן</p>
+          <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: '#FAFAFA' }}><MessageCircle size={26} style={{ color: '#9CA3AF' }} /></div>
+          <p className="text-[15px]" style={{ color: '#6B7280' }}>פרטים נוספים יופיעו כאן</p>
         </div>
       </div>
     );
   }
 
-  // Booking present → render the detailed booking card.
   if (booking && zimmer) {
     const wa = waPhone(contact.phone || booking.guest_phone);
     const nights = nightsBetween(booking.check_in, booking.check_out);
     const img = zimmer.images?.[0];
-    const statusBadge = booking.is_block
-      ? { text: 'תאריך חסום', bg: '#FEF3C7', color: '#92400E' }
-      : booking.status === 'אושרה'
-        ? { text: 'הזמנה מאושרת', bg: '#dcfce7', color: '#166534' }
-        : booking.status === 'נדחית'
-          ? { text: 'נדחתה', bg: '#FEE2E2', color: '#991B1B' }
-          : { text: 'ממתינה לאישור', bg: '#FEF3C7', color: '#92400E' };
     const stay = zimmer.stay_settings || {};
     const checkinTime = stay.checkin_time || '15:00';
     const checkoutTime = stay.checkout_time || '11:00';
 
     return (
-      <div className="h-full overflow-y-auto p-5" dir="rtl" style={{ background: '#fff', borderLeft: '1px solid #f3f4f6' }}>
-        <h3 className="font-bold text-base mb-4" style={{ color: '#111827' }}>פרטי ההזמנה</h3>
+      <div className={PANEL} dir="rtl">
+        <div className="flex items-start justify-between">
+          <h3 className="font-simpler text-[24px] leading-normal" style={{ color: '#0B3838', fontWeight: 600 }}>פרטי ההזמנה</h3>
+          <span className="min-w-[82px] inline-flex items-center justify-center px-[8px] py-[3px] rounded-full text-[13px] leading-normal"
+            style={{ background: '#FFFF00', color: '#0B3838', fontWeight: 500 }}>
+            {statusText(booking)}
+          </span>
+        </div>
 
         {img && (
-          <div className="rounded-xl overflow-hidden mb-3 aspect-[4/3]" style={{ background: '#F8F7F4' }}>
+          <div className="h-[218px] w-full rounded-[16px] overflow-hidden flex-shrink-0" style={{ background: '#FAFAFA' }}>
             <img src={img} alt={zimmer.name} className="w-full h-full object-cover" />
           </div>
         )}
 
-        <div className="flex items-center gap-2 mb-3">
-          <h2 className="text-lg font-black" style={{ color: '#111827' }}>{zimmer.name}</h2>
-        </div>
-        <div className="mb-4">
-          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: statusBadge.bg, color: statusBadge.color }}>
-            <CheckCircle2 size={13} /> {statusBadge.text}
-          </span>
-        </div>
-
-        <button className="w-full py-3 rounded-xl font-bold text-sm text-white mb-2" style={{ background: '#000000' }}>
-          צפייה בהזמנה
-        </button>
-        {wa && (
-          <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer"
-            className="w-full mb-5 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-            style={{ background: '#fff', border: '1px solid #e5e7eb', color: '#374151' }}>
-            <MessageCircle size={16} style={{ color: '#25D366' }} /> פתיחה ב-WhatsApp
-          </a>
-        )}
-
-        <div className="space-y-3 mb-4">
-          <DetailRow icon={<Calendar size={15} />} label="תאריכים" value={fmtRange(booking.check_in, booking.check_out)} />
-          <DetailRow icon={<Moon size={15} />} label="משך שהות" value={`${nights} לילות`} />
-          <DetailRow icon={<Users size={15} />} label="אורחים" value={`${booking.num_guests || 1} אורחים`} />
-          {booking.total_price != null && <DetailRow icon={<Wallet size={15} />} label={'סה"כ לתשלום'} value={`₪${booking.total_price.toLocaleString('he-IL')}`} />}
+        <div className="flex flex-col gap-[4px]">
+          <h2 className="text-[35px] leading-normal" style={{ color: '#0B3838', fontWeight: 700 }}>{zimmer.name}</h2>
+          {zimmer.location && (
+            <div className="flex items-center gap-[10px]">
+              <img src={iconPin} alt="" width={13} height={15} className="flex-shrink-0" />
+              <span className="text-[15px] leading-normal underline" style={{ color: '#717171' }}>{zimmer.location}</span>
+            </div>
+          )}
         </div>
 
-        <div className="pt-4 border-t grid grid-cols-2 gap-2" style={{ borderColor: '#f3f4f6' }}>
-          <div className="pl-2">
-            <div className="flex items-center gap-1 text-xs mb-0.5" style={{ color: '#6b7280' }}><LogIn size={13} /> צ'ק-אין</div>
-            <div className="text-base font-bold" style={{ color: '#111827' }}>{checkinTime}</div>
-          </div>
-          <div className="pr-2 border-r" style={{ borderColor: '#f3f4f6' }}>
-            <div className="flex items-center gap-1 text-xs mb-0.5" style={{ color: '#6b7280' }}><LogOut size={13} /> צ'ק-אאוט</div>
-            <div className="text-base font-bold" style={{ color: '#111827' }}>{checkoutTime}</div>
+        <div className="flex flex-col gap-[12px]">
+          <button type="button" className="font-simpler w-full p-[12px] rounded-[35px] text-[16px] leading-normal text-white hover:opacity-90" style={{ background: '#0B3838' }}>
+            צפייה בהזמנה
+          </button>
+          {wa && (
+            <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer"
+              className="w-full h-[41px] p-[12px] rounded-[35px] flex items-center justify-center gap-[12px] text-[14px] leading-normal hover:bg-[#FAFAFA]"
+              style={{ border: '1px solid rgba(11,56,56,0.21)', color: '#0B3838', fontWeight: 500 }}>
+              <img src={iconWhatsapp} alt="" width={16} height={16} className="flex-shrink-0" /> פתיחה ב-WhatsApp
+            </a>
+          )}
+        </div>
+
+        <div className="h-px w-full flex-shrink-0" style={{ background: '#E5E5E5' }} />
+
+        <div className="h-[119px] rounded-[23px] flex items-center justify-center flex-shrink-0" style={{ background: '#FAFAFA' }}>
+          <div className="w-full max-w-[346px] flex items-start justify-between py-[4px]">
+            <StayCol label="צ׳ק-אין" day={fmtStayDay(booking.check_in)} time={checkinTime} />
+            <div className="w-px h-[68px] self-center flex-shrink-0" style={{ background: '#E5E5E5' }} />
+            <StayCol label="צ׳ק-אאוט" day={fmtStayDay(booking.check_out)} time={checkoutTime} />
           </div>
         </div>
+
+        <div className="flex flex-col gap-[16px]">
+          <DetailRow label="משך שהות" value={`${nights} לילות`} />
+          <DetailRow label="אורחים" value={`${booking.num_guests || 1} אורחים`} />
+          {booking.total_price != null && <DetailRow label={'סה״כ לתשלום'} value={`₪${booking.total_price.toLocaleString('he-IL')}`} strong />}
+        </div>
+
+        <div className="h-px w-full flex-shrink-0" style={{ background: '#E5E5E5' }} />
       </div>
     );
   }
 
-  // No booking linked → contact card with "create booking" CTA.
   const wa = waPhone(contact.phone);
   const zimmerNames = Array.from(new Set(
     (contact.threads || []).map(t => t.zimmer_name).filter(Boolean)
@@ -148,58 +139,70 @@ export default function MessagesContactPanel({ contact, zimmers = {}, onAddBooki
   ));
 
   return (
-    <div className="h-full overflow-y-auto p-5" dir="rtl" style={{ background: '#fff', borderLeft: '1px solid #f3f4f6' }}>
-      <h3 className="font-bold text-base mb-4" style={{ color: '#111827' }}>פרטי לקוח</h3>
+    <div className={PANEL} dir="rtl">
+      <h3 className="font-simpler text-[24px] leading-normal" style={{ color: '#0B3838', fontWeight: 600 }}>פרטי לקוח</h3>
 
-      <div className="w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center text-white text-xl font-bold" style={{ background: '#075E54' }}>
-        {(contact.name || 'ל').slice(0, 1)}
+      <div className="flex flex-col items-center gap-[4px]">
+        <ContactAvatar name={contact.name} />
+        <h2 className="text-[24px] leading-normal mt-2" style={{ color: '#0B3838', fontWeight: 700 }}>{contact.name || 'לקוח'}</h2>
+        {contact.phone && (
+          <div className="flex items-center gap-1.5 text-[15px]" style={{ color: '#717171' }}>
+            <Phone size={13} /> <span dir="ltr">{contact.phone}</span>
+          </div>
+        )}
+        {contact.staysCount > 0 && (
+          <div className="flex items-center gap-1.5 text-[15px]" style={{ color: '#717171' }}>
+            <CalendarCheck size={13} /> {contact.staysCount} שהיות קודמות
+          </div>
+        )}
       </div>
-      <h3 className="font-bold text-sm text-center mb-1" style={{ color: '#111827' }}>{contact.name || 'לקוח'}</h3>
-      {contact.phone && (
-        <div className="flex items-center justify-center gap-1.5 text-xs mb-2" style={{ color: '#6b7280' }}>
-          <Phone size={12} /> <span dir="ltr">{contact.phone}</span>
-        </div>
-      )}
-      {contact.staysCount > 0 && (
-        <div className="flex items-center justify-center gap-1.5 text-xs mb-4" style={{ color: '#6b7280' }}>
-          <CalendarCheck size={12} /> {contact.staysCount} שהיות קודמות
-        </div>
-      )}
 
-      <button onClick={onAddBooking} className="w-full mb-2 py-3 rounded-xl text-sm font-bold text-white" style={{ background: '#000000' }}>
-        צור הזמנה
-      </button>
-      {wa && (
-        <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer"
-          className="w-full mb-4 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-          style={{ background: '#fff', border: '1px solid #e5e7eb', color: '#374151' }}>
-          <MessageCircle size={16} style={{ color: '#25D366' }} /> פתיחה ב-WhatsApp
-        </a>
-      )}
+      <div className="flex flex-col gap-[12px]">
+        <button type="button" onClick={onAddBooking} className="font-simpler w-full p-[12px] rounded-[35px] text-[16px] leading-normal text-white hover:opacity-90" style={{ background: '#0B3838' }}>
+          צור הזמנה
+        </button>
+        {wa && (
+          <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer"
+            className="w-full h-[41px] p-[12px] rounded-[35px] flex items-center justify-center gap-[12px] text-[14px] leading-normal hover:bg-[#FAFAFA]"
+            style={{ border: '1px solid rgba(11,56,56,0.21)', color: '#0B3838', fontWeight: 500 }}>
+            <img src={iconWhatsapp} alt="" width={16} height={16} className="flex-shrink-0" /> פתיחה ב-WhatsApp
+          </a>
+        )}
+      </div>
 
-      {loadingBooking && <div className="text-center text-xs mb-3" style={{ color: '#9CA3AF' }}>טוען הזמנה…</div>}
+      {loadingBooking && <div className="text-center text-[13px]" style={{ color: '#6B7280' }}>טוען הזמנה…</div>}
 
-      <div className="pt-3 border-t" style={{ borderColor: '#f3f4f6' }}>
-        <p className="text-[11px] font-bold mb-2" style={{ color: '#9CA3AF' }}>פנה לגבי הצימרים</p>
-        <div className="space-y-1.5">
-          {zimmerNames.length === 0
-            ? <p className="text-xs" style={{ color: '#9CA3AF' }}>—</p>
-            : zimmerNames.map(n => (
-              <div key={n} className="flex items-center gap-2 text-xs" style={{ color: '#374151' }}>
-                <Home size={12} style={{ color: '#9CA3AF' }} /> {n}
-              </div>
-            ))}
-        </div>
+      <div className="h-px w-full flex-shrink-0" style={{ background: '#E5E5E5' }} />
+
+      <div className="flex flex-col gap-[12px]">
+        <p className="text-[16px] leading-normal" style={{ color: '#6B7280', fontWeight: 500 }}>פנה לגבי הצימרים</p>
+        {zimmerNames.length === 0
+          ? <p className="text-[15px]" style={{ color: '#6B7280' }}>—</p>
+          : zimmerNames.map(n => (
+            <div key={n} className="flex items-center gap-2 text-[15px] leading-[1.5]" style={{ color: '#0B3838' }}>
+              <Home size={14} style={{ color: '#6B7280' }} /> {n}
+            </div>
+          ))}
       </div>
     </div>
   );
 }
 
-function DetailRow({ icon, label, value }) {
+function StayCol({ label, day, time }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="flex items-center gap-1.5 text-xs" style={{ color: '#6b7280' }}>{icon} {label}</span>
-      <span className="text-sm font-semibold" style={{ color: '#111827' }}>{value}</span>
+    <div className="flex-1 min-w-0 flex flex-col items-center gap-[4px] whitespace-nowrap">
+      <span className="text-[12px] leading-normal" style={{ color: '#6B7280' }}>{label}</span>
+      <span className="text-[15px] leading-[1.5]" style={{ color: '#0B3838' }}>{day}</span>
+      <span className="text-[16px] leading-normal" style={{ color: '#0B3838', fontWeight: 500 }}>{time}</span>
+    </div>
+  );
+}
+
+function DetailRow({ label, value, strong = false }) {
+  return (
+    <div className="flex items-start justify-between whitespace-nowrap">
+      <span className="text-[16px] leading-normal" style={{ color: '#6B7280', fontWeight: 500 }}>{label}</span>
+      <span className={strong ? 'text-[16px] leading-normal' : 'text-[15px] leading-[1.5]'} style={{ color: '#0B3838', fontWeight: strong ? 500 : 400 }}>{value}</span>
     </div>
   );
 }

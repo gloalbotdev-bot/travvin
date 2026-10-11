@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/api/client';
-import { Loader2 } from 'lucide-react';
+import { Loader2, FileText, X } from 'lucide-react';
 import MicButton from '@/components/chat/MicButton';
 import heroImg from '@/assets/owner/home/hero.svg';
 import checkV from '@/assets/owner/home/check-v.svg';
@@ -19,6 +19,9 @@ import dividerWavy from '@/assets/owner/home/divider-wavy.svg';
 import chevronSuggestions from '@/assets/owner/home/chevron-suggestions.svg';
 import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
 
+const MAX_ATTACHMENTS = 5;
+const ATTACHMENT_ACCEPT = 'image/*,application/pdf,text/plain,text/csv,audio/*,video/*';
+
 function nextFridayStr() {
   const d = new Date();
   const dow = d.getDay();
@@ -32,8 +35,16 @@ export default function OwnerAssistantHome({ ownerId, zimmers, loading, onChat, 
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSugg, setLoadingSugg] = useState(true);
   const [showSugg, setShowSugg] = useState(true);
+  const [attachments, setAttachments] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const firedRef = useRef(false);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
 
   useEffect(() => {
     if (firedRef.current || !ownerId) return;
@@ -107,11 +118,36 @@ export default function OwnerAssistantHome({ ownerId, zimmers, loading, onChat, 
     return s;
   };
 
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    setUploading(true);
+    setUploadError('');
+    const added = [];
+    for (const file of files) {
+      try {
+        const { file_url } = await api.integrations.Core.UploadFile({ file });
+        added.push({ url: file_url, name: file.name, type: file.type || '' });
+      } catch (err) {
+        setUploadError(`לא הצלחתי להעלות את "${file.name}": ${err?.message || 'שגיאה'}`);
+      }
+    }
+    setAttachments(prev => [...prev, ...added].slice(0, MAX_ATTACHMENTS));
+    setUploading(false);
+    inputRef.current?.focus();
+  };
+
+  const removeAttachment = (url) => setAttachments(prev => prev.filter(a => a.url !== url));
+
   const submit = () => {
-    const t = draft.trim();
-    if (!t) return;
-    onChat(t);
+    const t = draft.trim() || (attachments.length ? 'מצרף קבצים' : '');
+    if (!t || uploading) return;
+    onChat(t, attachments);
     setDraft('');
+    setAttachments([]);
+    setUploadError('');
+    inputRef.current?.focus();
   };
 
   const onSuggestionAction = (s) => {
@@ -213,7 +249,11 @@ export default function OwnerAssistantHome({ ownerId, zimmers, loading, onChat, 
       {/* Chat: label row ABOVE icons row — Figma 1011:210/211 */}
       <div className="mb-10 mx-auto w-full" style={{ maxWidth: 720 }}>
         <div
-          className="rounded-xl bg-white flex flex-col justify-between px-4 pt-3.5 pb-3"
+          className="rounded-xl bg-white flex flex-col justify-between px-4 pt-3.5 pb-3 cursor-text"
+          onClick={e => {
+            if (e.target.closest('button')) return;
+            inputRef.current?.focus();
+          }}
           style={{
             minHeight: 85,
             border: '1.5px solid #E5E5E5',
@@ -223,18 +263,59 @@ export default function OwnerAssistantHome({ ownerId, zimmers, loading, onChat, 
           <p className="font-simona text-right" style={{ color: '#535353', fontSize: 14, fontWeight: 400 }}>
             אפשר לשאול הכל
           </p>
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {attachments.map(a => (
+                <div
+                  key={a.url}
+                  className="relative flex items-center gap-1.5 rounded-lg px-1.5 py-1 max-w-[180px]"
+                  style={{ background: '#F3F3F3', border: '1px solid #E5E5E5' }}
+                >
+                  {a.type.startsWith('image/')
+                    ? <img src={a.url} alt={a.name} className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                    : <FileText size={16} style={{ color: '#0B3838' }} className="flex-shrink-0" />}
+                  <span className="font-simona text-xs truncate" style={{ color: '#535353' }}>{a.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(a.url)}
+                    aria-label={`הסרת ${a.name}`}
+                    className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 hover:opacity-70"
+                  >
+                    <X size={12} style={{ color: '#535353' }} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {uploadError && (
+            <p className="font-simona text-xs mt-1.5" style={{ color: '#D93025' }} role="alert">{uploadError}</p>
+          )}
           <div className="flex items-center gap-2.5 mt-2">
             <button
               type="button"
-              onClick={onAddBooking}
-              title="הוספת הזמנה"
-              className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || attachments.length >= MAX_ATTACHMENTS}
+              title="העלאת קבצים"
+              aria-label="העלאת קבצים"
+              className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 disabled:cursor-default"
               style={{ background: '#E9E9E9' }}
             >
-              <span className="overflow-hidden" style={{ width: 12, height: 12 }}>
-                <img src={iconPlus} alt="" width={12} height={12} className="block w-full h-full" />
-              </span>
+              {uploading
+                ? <Loader2 size={13} className="animate-spin" style={{ color: '#0B3838' }} />
+                : (
+                  <span className="overflow-hidden" style={{ width: 12, height: 12 }}>
+                    <img src={iconPlus} alt="" width={12} height={12} className="block w-full h-full" />
+                  </span>
+                )}
             </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ATTACHMENT_ACCEPT}
+              className="hidden"
+              onChange={handleFileUpload}
+            />
             <div className="relative flex-1 min-w-0">
               <input
                 ref={inputRef}
@@ -259,7 +340,7 @@ export default function OwnerAssistantHome({ ownerId, zimmers, loading, onChat, 
             <button
               type="button"
               onClick={submit}
-              disabled={!draft.trim()}
+              disabled={(!draft.trim() && !attachments.length) || uploading}
               className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-opacity hover:opacity-90 disabled:cursor-default"
               style={{ background: '#0B3838' }}
               title="שלח"

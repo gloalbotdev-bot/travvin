@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { BookOpen, Send, Tag } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import AiReplySuggestion from './AiReplySuggestion';
+import ContactAvatar from './ContactAvatar';
 
 // All of a contact's questions in one scrollable list, each with its own
 // zimmer tag and answer field. Answered questions show the sent answer.
@@ -10,19 +11,16 @@ export default function MessagesMergedQuestionsWindow({ contact, zimmers = {}, o
   const questions = [...(contact.questions || [])].sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
 
   return (
-    <div className="flex flex-col h-full bg-white" dir="rtl">
-      {/* Header */}
-      <div className="px-4 py-3 flex items-center gap-3 border-b" style={{ borderColor: '#F0EEE8' }}>
-        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: '#075E54' }}>
-          {(contact.name || 'ל').slice(0, 1)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-bold text-sm truncate" style={{ color: '#1A1A1A' }}>{contact.name || 'לקוח'}</div>
-          <div className="text-xs truncate" style={{ color: '#9CA3AF' }}>{questions.length} שאלות</div>
+    <div className="font-simona flex flex-col h-full bg-white" dir="rtl">
+      <div className="flex items-center gap-[12px] px-[32px] py-[24px] border-b border-[#E5E5E5] flex-shrink-0">
+        <ContactAvatar name={contact.name} />
+        <div className="flex flex-col gap-[2px] items-start leading-normal min-w-0">
+          <span className="text-[16px] truncate max-w-full" style={{ color: '#0B3838', fontWeight: 500 }}>{contact.name || 'לקוח'}</span>
+          <span className="text-[13px]" style={{ color: '#6B7280' }}>{questions.length} שאלות</span>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto owner-hide-scrollbar p-[32px] flex flex-col gap-[16px]">
         {questions.map(q => (
           <QuestionCard key={q.id} question={q} zimmer={zimmers[q.zimmer_id]} onAnswered={onAnswered} onDismissed={onDismissed} />
         ))}
@@ -80,38 +78,49 @@ ${zones || '(אין מידע נוסף)'}
   };
 
   return (
-    <div className="rounded-2xl p-4" style={{ background: '#fff', border: '1px solid #e0e0e0' }}>
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(67,56,202,0.08)', color: '#4338ca' }}>
-          <Tag size={9} /> {question.zimmer_name}
+    <div className="rounded-[23px] p-[20px] bg-white border border-[#E5E5E5] flex flex-col gap-[12px]">
+      <div className="flex items-center gap-2 flex-wrap">
+        {question.zimmer_name && (
+          <span className="inline-flex items-center h-[28px] px-[12px] rounded-full text-[13px]" style={{ border: '1px solid rgba(11,56,56,0.21)', color: '#0B3838' }}>
+            {question.zimmer_name}
+          </span>
+        )}
+        <span className="text-[13px]" style={{ color: '#6B7280' }}>{new Date(question.created_date).toLocaleDateString('he-IL')}</span>
+        <span className="text-[13px] px-[8px] py-[3px] rounded-full" style={question.status === 'ממתינה'
+          ? { background: '#FFFF00', color: '#0B3838', fontWeight: 500 }
+          : { background: '#EFEFEF', color: '#0B3838', fontWeight: 500 }}>
+          {question.status}
         </span>
-        <span className="text-xs" style={{ color: '#9CA3AF' }}>{new Date(question.created_date).toLocaleDateString('he-IL')}</span>
-        {question.status === 'ממתינה'
-          ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: '#EF4444' }}>ממתינה</span>
-          : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.12)', color: '#16A34A' }}>{question.status}</span>}
       </div>
-      <p className="font-bold text-sm mb-2" style={{ color: '#1A1A1A' }}>❓ {question.question}</p>
+
+      <div className="max-w-[480px] p-[16px] rounded-[16px] rounded-tr-none bg-white border border-[#E5E5E5]">
+        <p className="text-[15px] leading-[1.5] whitespace-pre-wrap" style={{ color: '#0B3838' }}>{question.question}</p>
+      </div>
       {question.customer_search_summary && (
-        <p className="text-xs px-3 py-2 rounded-xl mb-2" style={{ background: '#F8F7F4', color: '#6B7280' }}>🔍 הלקוח חיפש: {question.customer_search_summary}</p>
+        <p className="text-[13px] px-[16px] py-[10px] rounded-[16px]" style={{ background: '#FAFAFA', color: '#6B7280' }}>הלקוח חיפש: {question.customer_search_summary}</p>
       )}
 
       {answered && question.owner_answer ? (
-        <div className="rounded-xl p-3" style={{ background: '#F8F7F4' }}>
-          <p className="text-xs font-bold mb-1" style={{ color: '#16A34A' }}>תשובה שנשלחה</p>
-          <p className="text-sm whitespace-pre-wrap" style={{ color: '#374151' }}>{question.owner_answer}</p>
+        <div className="self-end max-w-[480px] p-[16px] rounded-[16px] rounded-tl-none" style={{ background: '#EFEFEF' }}>
+          <p className="text-[11px] mb-1" style={{ color: '#6B7280' }}>תשובה שנשלחה</p>
+          <p className="text-[15px] leading-[1.5] whitespace-pre-wrap" style={{ color: '#0B3838' }}>{question.owner_answer}</p>
         </div>
       ) : (
         <>
-          <textarea value={answer} onChange={e => setAnswer(e.target.value)} rows={3} placeholder="כתוב את התשובה ללקוח..."
-            className="w-full px-4 py-3 text-sm outline-none resize-none rounded-xl" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A' }} />
-          <div className="flex items-center gap-2 text-xs mt-2" style={{ color: '#6B7280' }}>
-            <BookOpen size={12} style={{ color: '#F97316' }} /> השאלה והתשובה יישמרו כאזור מידע בצימר
+          <textarea value={answer} onChange={e => setAnswer(e.target.value)} rows={3} placeholder="כתיבת תשובה ללקוח..."
+            aria-label="תשובה ללקוח"
+            className="w-full px-[20px] py-[14px] text-[15px] leading-[1.5] outline-none resize-none rounded-[23px] bg-white border border-[#E5E5E5] focus:border-[#0B3838] placeholder:text-[#6B7280]"
+            style={{ color: '#0B3838' }} />
+          <div className="flex items-center gap-2 text-[13px]" style={{ color: '#6B7280' }}>
+            <BookOpen size={13} style={{ color: '#0B3838' }} /> השאלה והתשובה יישמרו כאזור מידע בצימר
           </div>
-          <AiReplySuggestion key={question.id} contextLabel="לפי פרטי הנכס והשאלה" buildPrompt={buildPrompt} onApply={(t) => setAnswer(t)} disabled={saving} />
-          <div className="flex gap-2 pt-1">
-            <button onClick={() => onDismissed?.(question.id)} className="px-4 py-2.5 rounded-xl text-sm font-semibold" style={{ border: '1.5px solid #E8E5E0', color: '#6B7280' }}>דחה</button>
-            <button onClick={submit} disabled={!answer.trim() || saving} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2" style={{ background: '#F97316' }}>
-              <Send size={15} /> {saving ? 'שולח...' : 'שלח תשובה'}
+          <AiReplySuggestion key={question.id} title="תשובה מוצעת" actionLabel="הוסף לתיבה" buildPrompt={buildPrompt} onApply={(t) => setAnswer(t)} disabled={saving} />
+          <div className="flex gap-[12px]">
+            <button type="button" onClick={() => onDismissed?.(question.id)} className="px-[20px] py-[12px] rounded-[35px] text-[14px] hover:bg-[#FAFAFA]"
+              style={{ border: '1px solid rgba(11,56,56,0.21)', color: '#0B3838', fontWeight: 500 }}>דחה</button>
+            <button type="button" onClick={submit} disabled={!answer.trim() || saving}
+              className="font-simpler flex-1 p-[12px] rounded-[35px] text-[16px] text-white disabled:opacity-50 hover:opacity-90" style={{ background: '#0B3838' }}>
+              {saving ? 'שולח...' : 'שלח תשובה'}
             </button>
           </div>
         </>
