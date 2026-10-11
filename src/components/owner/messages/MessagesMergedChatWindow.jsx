@@ -1,18 +1,23 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '@/api/client';
-import { Send, Plus, Tag } from 'lucide-react';
 import { useAutoResize } from '@/hooks/useAutoResize';
 import MicButton from '@/components/chat/MicButton';
 import AiReplySuggestion from './AiReplySuggestion';
+import ContactAvatar from './ContactAvatar';
 import { parseMsgTime } from './groupContacts';
+import { fmtStayRange } from './useContactBooking';
+import travvinAvatar from '@/assets/owner/messages/travvin-avatar.svg';
+import composerPlus from '@/assets/owner/messages/composer-plus.svg';
+import composerMic from '@/assets/owner/messages/composer-mic.svg';
+import composerSend from '@/assets/owner/messages/composer-send.svg';
 
 const fmtTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
 // Merged conversation across all of a contact's DirectChat threads.
 // Messages are interleaved chronologically (thread created-date + msg time),
-// each tagged with its zimmer. New messages go to the thread of the last
-// customer message, or the most recently updated thread if none.
-export default function MessagesMergedChatWindow({ contact, zimmers = {}, user }) {
+// New messages go to the thread of the last customer message, or the most
+// recently updated thread if none.
+export default function MessagesMergedChatWindow({ contact, zimmers = {}, booking = null }) {
   const [threadMessages, setThreadMessages] = useState(() => {
     const m = {};
     (contact?.threads || []).forEach(t => { m[t.id] = t.messages || []; });
@@ -99,79 +104,107 @@ ${hist || '(תחילת שיחה)'}
 החזר JSON בלבד: {"reply":"תוכן התשובה"}`;
   };
 
+  const lastMsg = merged[merged.length - 1];
+  const aiKey = lastMsg && lastMsg.role === 'customer'
+    ? `${contact?.key}|${lastMsg.threadId}|${merged.length}|${lastMsg.content}`
+    : null;
+  const stayRange = fmtStayRange(booking?.check_in, booking?.check_out);
+  const headerZimmer = booking?.zimmer_name || targetThread?.zimmer_name || '';
+  const headerSub = [headerZimmer, stayRange].filter(Boolean).join(' · ');
+
   return (
-    <div className="flex flex-col h-full bg-white" dir="rtl">
-      {/* Header */}
-      <div className="px-4 py-3 flex items-center gap-3 border-b" style={{ borderColor: '#F0EEE8' }}>
-        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: '#075E54' }}>
-          {(contact?.name || 'ל').slice(0, 1)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-bold text-sm truncate" style={{ color: '#1A1A1A' }}>{contact?.name || 'לקוח'}</div>
-          <div className="text-xs truncate" style={{ color: '#9CA3AF' }}>
-            {(contact?.threads || []).length} צימרים · {targetThread?.zimmer_name || ''}
+    <div className="font-simona flex flex-col h-full bg-white" dir="rtl">
+      <div className="flex items-center justify-between px-[32px] py-[24px] border-b border-[#E5E5E5] flex-shrink-0">
+        <div className="flex items-center gap-[12px] min-w-0">
+          <ContactAvatar name={contact?.name} />
+          <div className="flex flex-col gap-[2px] items-start leading-normal min-w-0">
+            <span className="text-[16px] truncate max-w-full" style={{ color: '#0B3838', fontWeight: 500 }}>{contact?.name || 'לקוח'}</span>
+            {headerSub && <span className="text-[13px] truncate max-w-full" style={{ color: '#6B7280' }}>{headerSub}</span>}
           </div>
+        </div>
+        <div className="relative w-[28px] h-[20px] flex-shrink-0" aria-hidden="true">
+          {[0.43, 8.66, 16.89].map(top => (
+            <span key={top} className="absolute left-0 rounded-full" style={{ top, width: 3.385, height: 3.385, background: '#0B3838' }} />
+          ))}
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2" style={{ background: '#FAFAFA' }}>
+      <div className="flex-1 min-h-0 overflow-y-auto owner-hide-scrollbar p-[32px] flex flex-col gap-[11px]">
         {merged.length === 0 && (
-          <div className="text-center text-sm text-gray-400 mt-8">אין הודעות עדיין — שלח את ההודעה הראשונה 👋</div>
+          <div className="text-center text-[15px] mt-8" style={{ color: '#6B7280' }}>אין הודעות עדיין — שלח את ההודעה הראשונה 👋</div>
         )}
-        {merged.map((m, i) => {
-          const mine = m.role === 'owner';
-          const senderName = mine ? (user?.full_name || 'בעלים') : (contact?.name || 'לקוח');
-          return (
-            <div key={i} className={`flex ${mine ? 'justify-start' : 'justify-end'}`}>
-              <div className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl shadow-sm ${mine ? 'rounded-bl-sm' : 'bg-white border rounded-br-sm'}`}
-                style={mine ? { background: '#F3F4F6', color: '#1F2937' } : { borderColor: '#E5E7EB', color: '#1F2937' }}>
-                <div className="flex items-center gap-1 mb-1">
-                  <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(7,94,84,0.1)', color: '#075E54' }}>
-                    {senderName}
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(67,56,202,0.08)', color: '#4338ca' }}>
-                    <Tag size={9} /> {m.zimmerName || 'צימר'}
-                  </span>
-                </div>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
-                <span className="text-[10px] block text-left mt-0.5" style={{ color: '#9CA3AF' }}>
-                  {m.time}{mine && <span style={{ color: '#3B82F6' }}> ✓✓</span>}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+        {merged.map((m, i) => (m.role === 'owner'
+          ? <OwnerBubble key={i} content={m.content} time={m.time} />
+          : <GuestBubble key={i} content={m.content} time={m.time} />
+        ))}
         {sending && (
-          <div className="flex justify-start">
-            <div className="rounded-2xl rounded-bl-sm px-4 py-3" style={{ background: '#F3F4F6' }}>
+          <div className="flex items-start justify-end gap-[8px] w-full">
+            <div className="rounded-[16px] rounded-tl-none p-[16px]" style={{ background: '#EFEFEF' }}>
               <div className="flex gap-1 h-4 items-center">
-                {[0, 150, 300].map(d => <div key={d} className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: d + 'ms' }} />)}
+                {[0, 150, 300].map(d => <div key={d} className="w-2 h-2 rounded-full animate-bounce" style={{ background: '#6B7280', animationDelay: d + 'ms' }} />)}
               </div>
             </div>
+            <img src={travvinAvatar} alt="" width={36} height={36} className="flex-shrink-0" />
           </div>
         )}
         <div ref={endRef} />
       </div>
 
-      <AiReplySuggestion
-        key={contact?.key}
-        contextLabel="לפי פרטי הנכס והשיחה"
-        buildPrompt={buildPrompt}
-        onApply={(t) => { setInput(p => p ? p.replace(/\s+$/, '') + ' ' + t : t); resize(); inputRef.current?.focus(); }}
-        disabled={sending}
-      />
+      <div className="flex-shrink-0 px-4 lg:px-0">
+        <div className="mx-auto w-full max-w-[950px] flex flex-col gap-[23px] pt-[17px] pb-[16px] px-[16px] lg:px-[34px] rounded-t-[29px]"
+          style={{ background: 'rgba(255,255,255,0.35)', boxShadow: '0px 4px 10.2px 0px rgba(0,0,0,0.09)' }}>
+          <AiReplySuggestion
+            key={contact?.key}
+            autoKey={aiKey}
+            buildPrompt={buildPrompt}
+            onApply={(t) => { setInput(p => p ? p.replace(/\s+$/, '') + ' ' + t : t); resize(); inputRef.current?.focus(); }}
+            disabled={sending}
+          />
 
-      {/* Input */}
-      <div className="px-3 pb-3 pt-1 flex items-end gap-2 border-t" style={{ borderColor: '#F0EEE8', background: '#fff' }}>
-        <button className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#F3F4F6', color: '#6B7280' }} title="צרף"><Plus size={20} /></button>
-        <div className="flex-1 rounded-full px-4 py-2.5 flex items-center min-h-[44px]" style={{ background: '#F3F4F6' }}>
-          <textarea ref={inputRef} value={input} onChange={e => { setInput(e.target.value); resize(); }} onKeyDown={onKey} rows={1}
-            placeholder={`כתיבת הודעה${targetThread ? ` · ${targetThread.zimmer_name}` : ''}...`} className="w-full bg-transparent outline-none resize-none text-sm text-gray-800 leading-5 overflow-y-auto max-h-32" style={{ direction: 'rtl' }} />
+          <div className="bg-white border border-[#E5E5E5] rounded-[23px] min-h-[73px] flex items-center gap-[16px] px-[20px] lg:px-[32px] pt-[20px] pb-[24px]"
+            style={{ filter: 'drop-shadow(0px 4px 10.55px rgba(0,0,0,0.07))' }}>
+            <button type="button" className="flex-shrink-0 rounded-full" title="צרף" aria-label="צרף">
+              <img src={composerPlus} alt="" width={29} height={29} className="block" />
+            </button>
+            <textarea ref={inputRef} value={input} onChange={e => { setInput(e.target.value); resize(); }} onKeyDown={onKey} rows={1}
+              aria-label="כתיבת הודעה"
+              placeholder="כתיבת הודעה..."
+              className="flex-1 min-w-0 bg-transparent outline-none resize-none text-[18px] leading-[21px] overflow-y-auto max-h-32 placeholder:text-[#0B3838]"
+              style={{ color: '#0B3838', direction: 'rtl' }} />
+            <div className="flex items-center gap-[20px] flex-shrink-0">
+              <MicButton compact tone="ghost" iconSrc={composerMic} iconWidth={16} iconHeight={21} disabled={sending}
+                onText={t => setInput(p => p ? p.replace(/\s+$/, '') + ' ' + t : t)} />
+              <button type="button" onClick={send} disabled={!input.trim() || sending} aria-label="שליחת הודעה" title="שליחת הודעה"
+                className="rounded-full disabled:opacity-50">
+                <img src={composerSend} alt="" width={29} height={29} className="block" />
+              </button>
+            </div>
+          </div>
         </div>
-        <MicButton tone="light" disabled={sending} onText={t => setInput(p => p ? p.replace(/\s+$/, '') + ' ' + t : t)} />
-        <button onClick={send} disabled={!input.trim() || sending} className="w-11 h-11 rounded-full flex items-center justify-center text-white flex-shrink-0 disabled:opacity-50" style={{ background: '#16A34A' }}><Send size={20} /></button>
       </div>
+    </div>
+  );
+}
+
+function GuestBubble({ content, time }) {
+  return (
+    <div className="flex items-start justify-start w-full">
+      <div className="max-w-[480px] p-[16px] rounded-[16px] rounded-tr-none bg-white border border-[#E5E5E5] flex flex-col items-start">
+        <p className="text-[15px] leading-[1.5] whitespace-pre-wrap text-right" style={{ color: '#0B3838' }}>{content}</p>
+        {time && <span className="text-[11px] leading-normal self-end" style={{ color: '#6B7280' }}>{time}</span>}
+      </div>
+    </div>
+  );
+}
+
+function OwnerBubble({ content, time }) {
+  return (
+    <div className="flex items-start justify-end gap-[8px] w-full">
+      <div className="max-w-[480px] p-[16px] rounded-[16px] rounded-tl-none flex flex-col items-start" style={{ background: '#EFEFEF' }}>
+        <p className="text-[15px] leading-[1.5] whitespace-pre-wrap text-right" style={{ color: '#0B3838' }}>{content}</p>
+        {time && <span className="text-[11px] leading-normal self-end" style={{ color: '#6B7280' }}>{time}</span>}
+      </div>
+      <img src={travvinAvatar} alt="" width={36} height={36} className="flex-shrink-0" />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 /**
  * InvokeLLM facade — same contract as Base44 Core.InvokeLLM.
  * Provider: Gemini only (single GEMINI_API_KEY) — decisions.md §5.
- * { prompt, response_json_schema?, add_context_from_internet?, model? }
+ * { prompt, response_json_schema?, add_context_from_internet?, model?, files? }
  * → string (no schema) | object (with schema)
  */
 import { invokeGemini } from './gemini.js';
@@ -27,6 +27,7 @@ export async function invokeLlm(payload = {}, deps = {}) {
     model: payload.model,
     response_json_schema: payload.response_json_schema,
     add_context_from_internet: payload.add_context_from_internet === true,
+    files: Array.isArray(payload.files) ? payload.files : [],
     fetchImpl: deps.fetchImpl,
   });
 }

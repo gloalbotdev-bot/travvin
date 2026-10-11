@@ -5,39 +5,31 @@ import { getBookingTotal, formatILS } from '@/lib/bookingPrice';
 import { Eye } from 'lucide-react';
 
 // Desktop table + mobile card list (Figma table with responsive collapse).
-export default function BookingsTable({ bookings, zimmers, onView, onMore, emptyText }) {
+export default function BookingsTable({ bookings, zimmers, onView, emptyText }) {
   const zimmerMap = React.useMemo(() => Object.fromEntries(zimmers.map(z => [z.id, z])), [zimmers]);
 
   if (bookings.length === 0) {
     return (
-      <div className="bg-white rounded-2xl p-12 text-center" style={{ border: '1px solid #ECEFF1' }}>
-        <p className="text-sm" style={{ color: '#9e9e9e' }}>{emptyText || 'אין הזמנות בקטגוריה זו'}</p>
-      </div>
+      <>
+        <div className="lg:hidden bg-white rounded-2xl p-12 text-center" style={{ border: '1px solid #ECEFF1' }}>
+          <p className="text-sm" style={{ color: '#9e9e9e' }}>{emptyText || 'אין הזמנות בקטגוריה זו'}</p>
+        </div>
+        <div className="hidden lg:block text-center font-simona" style={{ width: 1145, maxWidth: '100%', padding: '48px 0', background: '#FAFAFA', borderRadius: 23 }}>
+          <p style={{ color: '#717171', fontSize: 16 }}>{emptyText || 'אין הזמנות בקטגוריה זו'}</p>
+        </div>
+      </>
     );
   }
 
   return (
     <>
-      {/* Desktop table */}
-      <div className="hidden lg:block bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #ECEFF1' }} dir="rtl">
-        <table className="w-full">
-          <thead>
-            <tr style={{ borderBottom: '1.5px solid #ECEFF1', background: '#FAFBFC' }}>
-              <th className="text-right py-3 pr-4 text-xs font-bold uppercase" style={{ color: '#9e9e9e' }}>פרטי הזמנה</th>
-              <th className="text-right py-3 text-xs font-bold uppercase" style={{ color: '#9e9e9e' }}>תאריכים</th>
-              <th className="text-right py-3 text-xs font-bold uppercase" style={{ color: '#9e9e9e' }}>משך שהייה</th>
-              <th className="text-right py-3 text-xs font-bold uppercase" style={{ color: '#9e9e9e' }}>אורחים</th>
-              <th className="text-right py-3 text-xs font-bold uppercase" style={{ color: '#9e9e9e' }}>סטטוס</th>
-              <th className="text-right py-3 text-xs font-bold uppercase" style={{ color: '#9e9e9e' }}>סה"כ לתשלום</th>
-              <th className="py-3 pl-4"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map(b => (
-              <BookingRow key={b.id} booking={b} zimmer={zimmerMap[b.zimmer_id]} onView={onView} onMore={onMore} />
-            ))}
-          </tbody>
-        </table>
+      {/* Desktop card rows (Figma 1776:19980) */}
+      <div className="hidden lg:block overflow-x-auto" style={{ margin: '-16px', padding: 16 }} dir="rtl">
+        <div className="flex flex-col" style={{ gap: 16, width: 1145, marginRight: 6 }}>
+          {bookings.map(b => (
+            <BookingRow key={b.id} booking={b} zimmer={zimmerMap[b.zimmer_id]} onView={onView} />
+          ))}
+        </div>
       </div>
 
       {/* Mobile cards */}

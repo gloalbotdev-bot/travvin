@@ -1,10 +1,12 @@
-import React from 'react';
-import { Search, Settings, MessageCircleQuestion, MessageCircle, Bell } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { X } from 'lucide-react';
+import iconSearch from '@/assets/owner/messages/icon-search.svg';
+import iconSettings from '@/assets/owner/messages/icon-settings.svg';
 
 const CATS = [
-  { id: 'questions', label: 'שאלות לקוחות', icon: MessageCircleQuestion },
-  { id: 'chats', label: "צ'אטים ישירים", icon: MessageCircle },
-  { id: 'system', label: 'הודעות מערכת', icon: Bell },
+  { id: 'questions', label: 'שאלות לקוחות' },
+  { id: 'chats', label: "צ'אטים ישירים" },
+  { id: 'system', label: 'הודעות מערכת' },
 ];
 
 const CAT_LABEL = {
@@ -13,60 +15,99 @@ const CAT_LABEL = {
   system: 'הודעות מערכת',
 };
 
+const CHIP_BASE = 'font-simona inline-flex items-center justify-center gap-1.5 h-[28px] px-[12px] rounded-full text-[13px] whitespace-nowrap transition-colors';
+const chipStyle = (active) => active
+  ? { background: '#0B3838', color: '#fff', fontWeight: 500 }
+  : { border: '1px solid rgba(11,56,56,0.21)', color: '#0B3838', fontWeight: 400 };
+
+function Chip({ active, onClick, children }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={active} className={CHIP_BASE} style={chipStyle(active)}>
+      {children}
+    </button>
+  );
+}
+
 export default function MessagesList({ category, onCategory, subFilter, onSubFilter, subFilters, items, renderItem, search, setSearch, onOpenSettings, counts, totals }) {
+  const [searchOpen, setSearchOpen] = useState(!!search);
+  const searchRef = useRef(null);
+  useEffect(() => { if (searchOpen) searchRef.current?.focus(); }, [searchOpen]);
+
+  const toggleSearch = () => {
+    if (searchOpen) setSearch('');
+    setSearchOpen(o => !o);
+  };
+
   const otherHints = CATS
     .filter((c) => c.id !== category && (totals?.[c.id] || 0) > 0)
     .map((c) => ({ id: c.id, label: CAT_LABEL[c.id], n: totals[c.id] }));
 
   return (
-    <div className="h-full flex flex-col bg-white" dir="rtl">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-        <h2 className="text-lg font-black" style={{ color: '#1A1A1A' }}>הודעות</h2>
-        <button onClick={onOpenSettings} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#F8F7F4' }} title="הגדרות הודעות אוטומטיות">
-          <Settings size={18} style={{ color: '#6B7280' }} />
-        </button>
-      </div>
-      {/* Search */}
-      <div className="px-4 pb-3">
-        <div className="relative">
-          <Search size={16} className="absolute top-1/2 -translate-y-1/2 right-3" style={{ color: '#9CA3AF' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="חיפוש בשיחות"
-            className="w-full pr-9 pl-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: '#F8F7F4', border: '1.5px solid #F0EEE8', color: '#1A1A1A' }} />
+    <div className="h-full flex flex-col bg-white pt-[42px] px-[20px] min-[1600px]:pr-[36px] min-[1600px]:pl-[24px] pb-[32px] gap-[20px]" dir="rtl">
+      <div className="flex items-center justify-between">
+        <h2 className="font-simpler text-[24px] leading-normal" style={{ color: '#0B3838', fontWeight: 600 }}>הודעות</h2>
+        <div className="flex items-center gap-[8px]">
+          <button type="button" onClick={toggleSearch} aria-label="חיפוש בשיחות" aria-expanded={searchOpen} className="rounded-full">
+            <img src={iconSearch} alt="" width={31} height={30} className="block" />
+          </button>
+          <button type="button" onClick={onOpenSettings} aria-label="הגדרות הודעות אוטומטיות" title="הגדרות הודעות אוטומטיות" className="rounded-full">
+            <img src={iconSettings} alt="" width={31} height={30} className="block" />
+          </button>
         </div>
       </div>
-      {/* Category pills */}
-      <div className="px-4 pb-2 flex gap-2 flex-wrap">
-        {CATS.map(c => {
-          const active = category === c.id;
-          const cnt = counts?.[c.id] || 0;
-          return (
-            <button key={c.id} onClick={() => onCategory(c.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-              style={active ? { background: '#1A1A1A', color: '#fff' } : { background: '#F8F7F4', color: '#6B7280' }}>
-              <c.icon size={13} /> {c.label}
-              {cnt > 0 && <span className="text-[10px] font-bold rounded-full px-1.5 py-0.5" style={active ? { background: '#fff', color: '#1A1A1A' } : { background: '#EF4444', color: '#fff' }}>{cnt > 99 ? '99+' : cnt}</span>}
+
+      {searchOpen && (
+        <div className="relative -mt-[8px]">
+          <input
+            ref={searchRef}
+            type="search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Escape') toggleSearch(); }}
+            placeholder="חיפוש בשיחות"
+            aria-label="חיפוש בשיחות"
+            className="font-simona w-full h-[36px] pr-[14px] pl-[34px] rounded-full text-[13px] outline-none bg-white focus:border-[#0B3838] [&::-webkit-search-cancel-button]:appearance-none"
+            style={{ border: '1px solid rgba(11,56,56,0.21)', color: '#0B3838' }}
+          />
+          {search && (
+            <button type="button" onClick={() => setSearch('')} aria-label="נקה חיפוש"
+              className="absolute top-1/2 -translate-y-1/2 left-[10px] p-0.5 rounded-full hover:opacity-70" style={{ color: '#6B7280' }}>
+              <X size={14} />
             </button>
-          );
-        })}
-      </div>
-      {/* Sub filters */}
-      {subFilters && subFilters.length > 0 && (
-        <div className="px-4 pb-3 flex gap-2 flex-wrap">
-          {subFilters.map(f => (
-            <button key={f.id} onClick={() => onSubFilter(f.id)}
-              className="px-3 py-1 rounded-full text-[11px] font-semibold transition-all"
-              style={subFilter === f.id ? { background: '#EAEBFF', color: '#4338CA' } : { background: '#fff', color: '#9CA3AF', border: '1px solid #F0EEE8' }}>
-              {f.label}
-            </button>
-          ))}
+          )}
         </div>
       )}
-      {/* List */}
-      <div className="flex-1 overflow-y-auto px-2 pb-3">
+
+      <div className="flex flex-col gap-[8px]">
+        <div className="flex flex-wrap gap-[8px]">
+          {CATS.map(c => {
+            const active = category === c.id;
+            const cnt = counts?.[c.id] || 0;
+            return (
+              <Chip key={c.id} active={active} onClick={() => onCategory(c.id)}>
+                {c.label}
+                {cnt > 0 && (
+                  <span className="text-[10px] leading-none rounded-full px-1.5 py-[3px]" style={active ? { background: '#FFFF00', color: '#0B3838', fontWeight: 700 } : { background: '#0B3838', color: '#fff', fontWeight: 700 }}>
+                    {cnt > 99 ? '99+' : cnt}
+                  </span>
+                )}
+              </Chip>
+            );
+          })}
+        </div>
+        {subFilters && subFilters.length > 0 && (
+          <div className="flex flex-wrap gap-[8px]">
+            {subFilters.map(f => (
+              <Chip key={f.id} active={subFilter === f.id} onClick={() => onSubFilter(f.id)}>{f.label}</Chip>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto owner-hide-scrollbar flex flex-col gap-[4px]">
         {items.length === 0 ? (
           <div className="text-center py-12 px-4 space-y-3">
-            <p className="text-sm" style={{ color: '#9CA3AF' }}>אין הודעות בקטגוריה זו</p>
+            <p className="font-simona text-[13px]" style={{ color: '#6B7280' }}>אין הודעות בקטגוריה זו</p>
             {otherHints.length > 0 && (
               <div className="space-y-2">
                 {otherHints.map((h) => (
@@ -74,8 +115,8 @@ export default function MessagesList({ category, onCategory, subFilter, onSubFil
                     key={h.id}
                     type="button"
                     onClick={() => onCategory(h.id)}
-                    className="block w-full text-sm font-semibold px-3 py-2 rounded-xl transition-all"
-                    style={{ background: '#F8F7F4', color: '#EA580C' }}
+                    className="font-simona block w-full text-[13px] px-3 py-2 rounded-[12px] transition-colors hover:bg-[#EFEFEF]"
+                    style={{ background: '#FAFAFA', color: '#0B3838', fontWeight: 500 }}
                   >
                     יש {h.n} ב«{h.label}» — לחצי כאן
                   </button>

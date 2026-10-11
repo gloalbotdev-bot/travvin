@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '@/api/client';
-import { Send, ExternalLink, Sparkles, Check, X, Eye, Pencil, AlertTriangle } from 'lucide-react';
+import { Send, ExternalLink, Sparkles, Check, X, Eye, Pencil, AlertTriangle, FileText } from 'lucide-react';
 import { bookingErrorMessage } from '@/lib/bookingErrors';
 import { buildOwnerRecentTurns, applyOwnerAssistantResponse } from '@/lib/assistantOwner';
 import { useAutoResize } from '@/hooks/useAutoResize';
@@ -50,7 +50,30 @@ const ZIMMER_FIELDS = [
   'seasonal_pricing', 'images', 'info_summary'
 ]; // server whitelists the same set (M15 #8ב)
 
-export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated, initialPrompt, onPromptConsumed }) {
+function MessageAttachments({ attachments }) {
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {attachments.map(a => (
+        <a
+          key={a.url}
+          href={a.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 max-w-[200px]"
+          style={{ background: 'rgba(255,255,255,0.2)' }}
+          title={a.name}
+        >
+          {a.type?.startsWith('image/')
+            ? <img src={a.url} alt={a.name} className="w-12 h-12 rounded object-cover flex-shrink-0" />
+            : <FileText size={16} className="flex-shrink-0" />}
+          <span className="text-xs truncate">{a.name}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated, initialPrompt, initialAttachments, onPromptConsumed }) {
   const [mode, setMode] = useState('info'); // 'info' | 'edit' — matches Base44 OwnerAgentChat
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -91,7 +114,7 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated, ini
   useEffect(() => {
     if (!context || !initialPrompt?.trim() || sentInitialRef.current) return;
     sentInitialRef.current = true;
-    handleSend(initialPrompt.trim());
+    handleSend(initialPrompt.trim(), initialAttachments || []);
     onPromptConsumed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when context ready
   }, [context, initialPrompt]);
@@ -189,14 +212,14 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated, ini
     }
   };
 
-  const handleSend = async (rawText) => {
+  const handleSend = async (rawText, attachments = []) => {
     const text = (rawText ?? input).trim();
     if (!text || !context || sendingRef.current) return;
     sendingRef.current = true;
     setChatStarted(true);
     setInput('');
     const activeMode = modeRef.current;
-    addMsg('user', 'text', text);
+    addMsg('user', 'text', text, attachments.length ? { attachments } : {});
     setIsTyping(true);
     setPendingOp(null);
     try {
@@ -209,6 +232,7 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated, ini
           ownerId,
           recentTurns: buildOwnerRecentTurns(history),
         },
+        ...(attachments.length ? { attachments: attachments.map(a => a.url) } : {}),
       });
       setIsTyping(false);
 
@@ -333,6 +357,7 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated, ini
                 }
               >
                 {msg.content}
+                {msg.attachments?.length > 0 && <MessageAttachments attachments={msg.attachments} />}
               </div>
               {msg.role === 'bot' && msg.actions?.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-2">
