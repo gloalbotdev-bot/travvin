@@ -3,12 +3,18 @@ import { api } from '@/api/client';
 import { Sliders } from 'lucide-react';
 import ManualBookingForm from '@/components/owner/ManualBookingForm';
 import OwnerCalendarActionsSidebar from '@/components/owner/OwnerCalendarActionsSidebar';
-import CalendarDayPopover from '@/components/owner/CalendarDayPopover';
+import CalendarDayPopover, { DRAWER_WIDTH } from '@/components/owner/CalendarDayPopover';
 import CalendarQuickActions from '@/components/owner/CalendarQuickActions';
 import CalendarReservationBar from '@/components/owner/CalendarReservationBar';
-import iconChevron from '@/assets/owner/home/icon-chevron.svg';
-import chevronMonth from '@/assets/owner/calendar/chevron-month.svg';
-import underlineToday from '@/assets/owner/calendar/underline-today.svg';
+import monthChevron from '@/assets/owner/calendar/month-chevron.svg';
+import selectChevron from '@/assets/owner/calendar/select-chevron.svg';
+import iconAddPlus from '@/assets/owner/calendar/add-plus.svg';
+import cellLogo from '@/assets/owner/calendar/cell-logo.svg';
+import cellPlus from '@/assets/owner/calendar/cell-plus.svg';
+import iconBlocked from '@/assets/owner/calendar/blocked.svg';
+
+const INK = '#0B3838';
+const QUICK_WIDTH = 320;
 
 const HEB_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 const HEB_DAYS = ['יום א’', 'יום ב’', 'יום ג’', 'יום ד’', 'יום ה’', 'יום ו’', 'שבת'];
@@ -101,7 +107,7 @@ function cellWidth(span) {
   return `calc(${span} * ((100% - ${6 * CELL_GAP}px) / 7) + ${(span - 1) * CELL_GAP}px)`;
 }
 
-export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZimmerUpdated, onOpenAI }) {
+export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZimmerUpdated, onOpenAI, onOpenBooking }) {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('month');
@@ -114,6 +120,7 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
   const [popover, setPopover] = useState(null);
   const [showQuick, setShowQuick] = useState(false);
   const [command, setCommand] = useState(null);
+  const [daySelected, setDaySelected] = useState(false);
 
   const load = useCallback(() => {
     if (!ownerId) return;
@@ -163,7 +170,10 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
       const e = `${end.getDate()} ${HEB_MONTHS[end.getMonth()]}`;
       return `${s} – ${e} ${start.getFullYear()}`;
     }
-    if (view === 'month') return `${HEB_MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+    if (view === 'month') {
+      const sameYear = anchor.getFullYear() === new Date().getFullYear();
+      return sameYear ? HEB_MONTHS[anchor.getMonth()] : `${HEB_MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+    }
     return `${anchor.getFullYear()}`;
   };
 
@@ -172,36 +182,30 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
   const openPopover = (iso, e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setSelectedDate(iso);
-    setPopover({ iso, rect });
+    setDaySelected(true);
+    setPopover({ iso, rect, mode: 'day' });
     setShowQuick(true);
   };
+
+  const openBarDrawer = (booking, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDaySelected(false);
+    setShowQuick(false);
+    setPopover({ iso: booking.check_in, rect, mode: 'bar', booking });
+  };
+
+  const closePopups = () => { setPopover(null); setShowQuick(false); };
+
+  useEffect(() => {
+    if (!popover) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') { setPopover(null); setShowQuick(false); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [popover]);
 
   const deleteBlock = async (b) => {
     if (!confirm('לבטל את החסימה?')) return;
     try { await api.entities.BookingRequest.delete(b.id); } catch {}
-    setPopover(null);
-    load();
-  };
-
-  const blockDay = async ({ zimmerId, reason }) => {
-    const z = zimmers.find((x) => x.id === zimmerId);
-    const ci = popover.iso;
-    const co = toISO(new Date(new Date(ci + 'T00:00:00').getTime() + 86400000));
-    try {
-      await api.entities.BookingRequest.create({
-        zimmer_id: zimmerId,
-        zimmer_name: z?.name || '',
-        owner_id: ownerId,
-        guest_name: reason || 'חסום',
-        guest_phone: '',
-        check_in: ci,
-        check_out: co,
-        status: 'חסום',
-        is_block: true,
-        block_reason: reason || 'חסום',
-        num_guests: null,
-      });
-    } catch {}
     setPopover(null);
     load();
   };
@@ -299,16 +303,16 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
 
     return (
       <div>
-        {/* Day headers — Figma: underline + ~30px gap before cells (Day Headers y=235 → row y=305) */}
+        {/* Day headers — Figma: 40px row + underline, 30px gap before cells (Day Headers y=235 → row y=305) */}
         <div
           className="grid grid-cols-7"
-          style={{ gap: CELL_GAP, borderBottom: '1px solid #EFEFEF', marginBottom: 30 }}
+          style={{ gap: CELL_GAP, borderBottom: '1px solid #E5E7EB', marginBottom: 30 }}
         >
           {HEB_DAYS.map((d) => (
             <div
               key={d}
-              className="font-simona text-center py-3"
-              style={{ color: '#0B3838', fontSize: 13, fontWeight: 600 }}
+              className="font-simona flex items-center justify-center"
+              style={{ height: 40, color: INK, fontSize: 13, fontWeight: 600 }}
             >
               {d}
             </div>
@@ -325,34 +329,37 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
                 return (
                   <div
                     key={`empty-${i}`}
-                    style={{ height: CELL_H, borderRadius: 12, border: '0.5px solid #E5E7EB', background: '#FAFAFA', opacity: 0.5 }}
+                    style={{ height: CELL_H, borderRadius: 12, border: '1px solid #E5E7EB', background: '#FAFAFA', opacity: 0.5 }}
                   />
                 );
               }
               const iso = toISO(date);
               const isToday = iso === todayISO();
+              const isSelected = daySelected && iso === selectedDate;
               const dayBookings = bookingsOn(iso);
               const block = dayBookings.find((b) => b.is_block || b.status === 'חסום');
               const price = block ? null : priceOnDay(iso);
+              const todayPill = isToday && !block;
 
-              // Figma: today = border #0B3838; blocked = bg #F2F2F2 + «חסום»; else light border
-              let border = '0.5px solid #E5E7EB';
+              // Figma 1776:18757 / 1776:18460: today + selected = ink border; blocked = #F2F2F2 + icon + «חסום»
+              let border = '1px solid #E5E7EB';
               let background = '#fff';
               if (block) {
                 border = '1px solid #EFEFEF';
                 background = '#F2F2F2';
-              } else if (isToday) {
-                border = '1px solid #0B3838';
               }
+              if (isToday || isSelected) border = `1px solid ${INK}`;
 
               return (
                 <div
                   key={iso}
                   role="button"
                   tabIndex={0}
+                  aria-pressed={isSelected}
+                  aria-label={`${date.getDate()} ב${HEB_MONTHS[date.getMonth()]}${block ? ', חסום' : ''}`}
                   onClick={(e) => openPopover(iso, e)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPopover(iso, e); } }}
-                  className="relative flex flex-col cursor-pointer transition-opacity hover:opacity-95"
+                  className={`group relative flex flex-col cursor-pointer overflow-hidden ${block ? '' : 'hover:!border-[#0B3838] focus-visible:!border-[#0B3838]'}`}
                   style={{
                     height: CELL_H,
                     borderRadius: 12,
@@ -361,18 +368,31 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
                     padding: 12,
                   }}
                 >
-                  <div className="flex justify-end w-full">
+                  {isSelected && (
+                    <img
+                      src={cellLogo}
+                      alt=""
+                      aria-hidden
+                      width={54}
+                      height={58}
+                      className="owner-logo-roll absolute pointer-events-none"
+                      style={{ left: 'calc(50% - 31.5px)', top: 'calc(50% - 29px)' }}
+                    />
+                  )}
+
+                  <div className="relative flex justify-start w-full">
                     <span
                       className="font-simona inline-flex items-center justify-center"
                       style={{
-                        minWidth: isToday && !block ? 27 : undefined,
-                        height: isToday && !block ? 21 : undefined,
-                        borderRadius: isToday && !block ? 999 : 0,
-                        background: isToday && !block ? '#0B3838' : 'transparent',
-                        color: block ? '#717171' : isToday ? '#EFEFEF' : '#0B3838',
-                        fontSize: 15,
-                        fontWeight: isToday && !block ? 500 : 400,
-                        paddingInline: isToday && !block ? 8 : 0,
+                        minWidth: todayPill ? 27 : undefined,
+                        height: todayPill ? 21 : undefined,
+                        borderRadius: todayPill ? 18 : 0,
+                        background: todayPill ? '#FFFF00' : 'transparent',
+                        color: block ? '#717171' : INK,
+                        fontSize: todayPill ? 16 : 15,
+                        fontWeight: todayPill ? 500 : 400,
+                        paddingInline: todayPill ? 6 : 0,
+                        lineHeight: 'normal',
                       }}
                     >
                       {date.getDate()}
@@ -380,22 +400,33 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
                   </div>
 
                   {block && (
-                    <div className="flex-1 flex items-center justify-center w-full">
-                      <span
-                        className="font-simona"
-                        style={{ color: '#4F4F4F', fontSize: 15, fontWeight: 400, opacity: 0.4 }}
-                      >
+                    <div className="relative flex-1 flex items-center justify-center w-full" style={{ gap: 5 }}>
+                      <img src={iconBlocked} alt="" width={12} height={12} className="block flex-shrink-0" />
+                      <span className="font-simona" style={{ color: '#4F4F4F', fontSize: 15, fontWeight: 400 }}>
                         חסום
                       </span>
                     </div>
                   )}
 
                   {!block && price && (
-                    <div className="mt-auto">
-                      <span className="font-simona block text-right truncate" style={{ color: '#0B3838', fontSize: 14, fontWeight: 400 }}>
+                    <div className="relative mt-auto">
+                      <span className={`font-simona block truncate ${isSelected ? 'text-left' : 'text-right group-hover:text-left group-focus-visible:text-left'}`} style={{ color: INK, fontSize: 14, fontWeight: 400 }}>
                         {price}
                       </span>
                     </div>
+                  )}
+
+                  {/* Figma 33:1153 (hover) / 33:1158 (click): + button; logo only on click */}
+                  {(isSelected || !block) && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); closePopups(); openManual(iso); }}
+                      aria-label="הוספת הזמנה לתאריך"
+                      className={`absolute z-[1] transition-transform hover:scale-105 ${isSelected ? '' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 focus-visible:opacity-100'}`}
+                      style={{ right: 19, bottom: 12 }}
+                    >
+                      <img src={cellPlus} alt="" width={32} height={32} className="block" />
+                    </button>
                   )}
                 </div>
               );
@@ -421,9 +452,7 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
                   textColor={c.text}
                   onClick={(e) => {
                     e.stopPropagation();
-                    const iso = b.check_in;
-                    const fake = { currentTarget: e.currentTarget, ...e };
-                    openPopover(iso, fake);
+                    openBarDrawer(b, e);
                   }}
                   style={{
                     top,
@@ -456,8 +485,8 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
                   minWidth: 27,
                   height: 21,
                   borderRadius: 999,
-                  background: toISO(d) === todayISO() ? '#0B3838' : 'transparent',
-                  color: toISO(d) === todayISO() ? '#fff' : '#0B3838',
+                  background: toISO(d) === todayISO() ? '#FFFF00' : 'transparent',
+                  color: INK,
                   fontSize: 15,
                   paddingInline: 8,
                 }}
@@ -487,15 +516,16 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
                 style={{
                   minHeight: 150,
                   borderRadius: 12,
-                  border: block ? '1px solid #EFEFEF' : isToday ? '1px solid #0B3838' : '0.5px solid #E5E7EB',
+                  border: isToday || (daySelected && iso === selectedDate) ? `1px solid ${INK}` : block ? '1px solid #EFEFEF' : '1px solid #E5E7EB',
                   background: block ? '#F2F2F2' : '#fff',
                   padding: 12,
                   gap: 6,
                 }}
               >
                 {block ? (
-                  <div className="flex-1 flex items-center justify-center">
-                    <span className="font-simona" style={{ color: '#4F4F4F', fontSize: 15, opacity: 0.4 }}>חסום</span>
+                  <div className="flex-1 flex items-center justify-center" style={{ gap: 5 }}>
+                    <img src={iconBlocked} alt="" width={12} height={12} className="block flex-shrink-0" />
+                    <span className="font-simona" style={{ color: '#4F4F4F', fontSize: 15 }}>חסום</span>
                   </div>
                 ) : (
                   regular.map((b) => {
@@ -567,17 +597,23 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
       onZimmerSaved={onZimmerUpdated}
       command={command}
       onCommandConsumed={() => setCommand(null)}
+      monthLabel={HEB_MONTHS[anchor.getMonth()]}
+      monthDate={anchor}
+      zimmerFilter={zimmerFilter}
+      daySelected={daySelected}
+      onCloseDay={() => { setDaySelected(false); closePopups(); }}
     />
   );
 
-  // Figma 1011:1010 — sidebar on visual LEFT, calendar on RIGHT (LTR layout shell)
+  // Figma 1776:18757 — sidebar on visual LEFT (divider 1776:18936), calendar on RIGHT (LTR layout shell)
   return (
-    <div className="flex gap-4 h-full font-simona" style={{ minHeight: 0 }} dir="ltr">
-      {/* Desktop actions sidebar — left, narrower, white, radius 23, no shadow */}
-      <div className="hidden lg:block flex-shrink-0 self-stretch" style={{ width: 422 }}>
-        <div className="h-full overflow-hidden" style={{ background: '#FFFFFF', borderRadius: 23 }} dir="rtl">
-          {sidebar}
-        </div>
+    <div className="flex gap-4 lg:gap-0 h-full font-simona bg-white" style={{ minHeight: 0 }} dir="ltr">
+      <div
+        className="hidden lg:block relative z-10 flex-shrink-0 self-stretch"
+        style={{ width: 'clamp(340px, 23.13vw, 444px)', borderRight: '1px solid #E8E8E8' }}
+        dir="rtl"
+      >
+        {React.cloneElement(sidebar, { showPills: true })}
       </div>
 
       {/* Mobile drawer */}
@@ -597,39 +633,34 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
 
       {/* Calendar card */}
       <div
-        className="flex-1 min-w-0 flex flex-col overflow-hidden"
-        style={{ background: '#fff', borderRadius: 23 }}
+        className="flex-1 min-w-0 flex flex-col overflow-hidden lg:pl-[clamp(16px,1.77vw,34px)] lg:pr-[clamp(12px,0.99vw,19px)]"
+        style={{ background: '#fff' }}
         dir="rtl"
       >
-        {/* Header chrome — Figma: month title on right, views on left */}
-        <div className="flex-shrink-0 px-4 sm:px-6 pt-6 sm:pt-8 pb-4">
+        {/* Header — Figma 1776:18757: right = month · היום · views, left = property select · הוספה */}
+        <div className="flex-shrink-0 px-4 sm:px-6 lg:px-0 pt-6 sm:pt-8 lg:pt-[clamp(32px,3.46vw,66.5px)] pb-4 lg:pb-[clamp(24px,2.43vw,46.6px)] lg:pr-[clamp(8px,1.2vw,23px)]">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            {/* Month title — Figma 1011:1182: one down-chevron to the LEFT of title */}
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center flex-wrap min-w-0" style={{ gap: 16 }}>
               <button
                 type="button"
                 onClick={() => setShowActions(true)}
                 className="lg:hidden font-simona flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm flex-shrink-0"
-                style={{ background: '#0B3838', color: '#fff', fontWeight: 500 }}
+                style={{ background: INK, color: '#fff', fontWeight: 500 }}
               >
                 <Sliders size={14} /> פעולות
               </button>
               <label
                 className="relative inline-flex items-center min-w-0 cursor-pointer transition-opacity hover:opacity-80"
-                style={{ gap: 16 }}
-                dir="ltr"
+                style={{ gap: 16, marginLeft: 'clamp(8px, 1.51vw, 29px)' }}
                 title="בחירת חודש"
               >
-                <span className="flex-shrink-0 overflow-hidden pointer-events-none" style={{ width: 20, height: 20 }}>
-                  <img src={chevronMonth} alt="" width={20} height={20} className="block w-full h-full" />
-                </span>
                 <h2
                   className="font-simpler whitespace-nowrap truncate pointer-events-none"
-                  style={{ color: '#0B3838', fontSize: 29, fontWeight: 600, lineHeight: 'normal' }}
-                  dir="rtl"
+                  style={{ color: INK, fontSize: 29, fontWeight: 600, lineHeight: 'normal' }}
                 >
                   {title()}
                 </h2>
+                <img src={monthChevron} alt="" width={20} height={20} className="block flex-shrink-0 pointer-events-none" />
                 <select
                   aria-label="בחירת חודש"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -661,20 +692,61 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
                     ))}
                 </select>
               </label>
+
+              <button
+                type="button"
+                onClick={goToday}
+                className="font-simona flex items-center justify-center flex-shrink-0 transition-opacity hover:opacity-80"
+                style={{ width: 83, height: 41, borderRadius: 35, border: '1px solid rgba(11,56,56,0.21)', color: INK, fontSize: 14, background: 'transparent' }}
+              >
+                היום
+              </button>
+
+              {/* LTR order שנה · שבוע · חודש → selected חודש sits rightmost */}
+              <div
+                className="flex items-center flex-shrink-0"
+                dir="ltr"
+                role="group"
+                aria-label="תצוגת יומן"
+                style={{ height: 41, background: '#F9F9F9', borderRadius: 99, padding: 4 }}
+              >
+                {VIEWS.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setView(v.id)}
+                    aria-pressed={view === v.id}
+                    className="font-simona h-full flex items-center transition-all"
+                    style={{
+                      padding: '0 20px',
+                      borderRadius: 99,
+                      fontSize: 14,
+                      fontWeight: view === v.id ? 700 : 400,
+                      color: INK,
+                      background: view === v.id ? '#fff' : 'transparent',
+                      boxShadow: view === v.id ? '0px 2px 4px rgba(0,0,0,0.05)' : 'none',
+                    }}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="flex justify-start lg:justify-center">
+            <div className="flex items-center flex-shrink-0" style={{ gap: 7 }}>
               <label className="relative inline-flex items-center" style={{ maxWidth: '100%' }}>
                 <select
                   value={zimmerFilter}
                   onChange={(e) => setZimmerFilter(e.target.value)}
+                  aria-label="בחירת נכס"
                   className="font-simona appearance-none outline-none cursor-pointer"
                   style={{
+                    height: 41,
                     background: '#fff',
                     border: '1px solid #E8E8E8',
                     borderRadius: 99,
-                    padding: '10px 20px 10px 40px',
-                    color: '#0B3838',
+                    padding: '0 20px 0 44px',
+                    color: INK,
                     fontSize: 14,
                     fontWeight: 400,
                     minWidth: 155,
@@ -683,107 +755,91 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
                   <option value="all">כל הנכסים ({zimmers.length})</option>
                   {zimmers.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
                 </select>
-                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2" style={{ width: 16, height: 16 }}>
-                  <img src={iconChevron} alt="" width={6} height={12} className="block mx-auto" style={{ width: 8, height: 12, transform: 'rotate(-90deg)' }} />
-                </span>
+                <img
+                  src={selectChevron}
+                  alt=""
+                  width={16}
+                  height={16}
+                  className="pointer-events-none absolute top-1/2 -translate-y-1/2 block"
+                  style={{ left: 20 }}
+                />
               </label>
-            </div>
-
-            {/* Figma LTR order: שנה → שבוע → חודש then היום to the right — no box on היום */}
-            <div className="flex items-center flex-wrap" style={{ gap: 16 }} dir="ltr">
-              <div
-                className="flex items-center"
-                style={{ background: '#F9F9F9', borderRadius: 99, padding: 4 }}
-              >
-                {VIEWS.map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => setView(v.id)}
-                    className="font-simona transition-all"
-                    style={{
-                      padding: '8px 20px',
-                      borderRadius: 99,
-                      fontSize: 14,
-                      fontWeight: view === v.id ? 700 : 400,
-                      color: '#0B3838',
-                      background: view === v.id ? '#fff' : 'transparent',
-                      boxShadow: view === v.id ? '0px 2px 2px rgba(0,0,0,0.05)' : 'none',
-                    }}
-                  >
-                    {v.label}
-                  </button>
-                ))}
-              </div>
-
               <button
                 type="button"
-                onClick={goToday}
-                className="font-simona flex flex-col items-center transition-opacity hover:opacity-80"
-                style={{
-                  color: '#0B3838',
-                  fontSize: 18,
-                  fontWeight: 500,
-                  background: 'transparent',
-                  border: 'none',
-                  padding: '8px 20px',
-                  gap: 1,
-                }}
+                onClick={() => openManual(selectedDate)}
+                className="font-simpler flex items-center justify-center flex-shrink-0 transition-opacity hover:opacity-90"
+                style={{ width: 131, height: 41, gap: 12, padding: 12, borderRadius: 35, background: INK, color: '#EFEFEF', fontSize: 16, fontWeight: 600 }}
               >
-                היום
-                <img
-                  src={underlineToday}
-                  alt=""
-                  aria-hidden
-                  width={34}
-                  height={5}
-                  className="block"
-                  style={{ width: 34, height: 5 }}
-                />
+                <img src={iconAddPlus} alt="" width={14} height={14} className="block" style={{ width: 14, height: 14 }} />
+                הוספה
               </button>
             </div>
           </div>
         </div>
 
         {/* Grid */}
-        <div className="flex-1 overflow-auto owner-hide-scrollbar px-4 sm:px-6 pb-6 sm:pb-8">
+        <div className="flex-1 overflow-auto owner-hide-scrollbar px-4 sm:px-6 lg:px-0 pb-6 sm:pb-8">
           {view === 'week' && renderWeekGrid()}
           {view === 'month' && renderMonthGrid(anchor.getFullYear(), anchor.getMonth())}
           {view === 'year' && renderYearGrid()}
         </div>
       </div>
 
-      {popover && (
-        <CalendarDayPopover
-          iso={popover.iso}
-          bookings={bookingsOn(popover.iso)}
-          zimmers={zimmers}
-          anchorRect={popover.rect}
-          zimmerFilter={zimmerFilter}
-          onClose={() => { setPopover(null); setShowQuick(false); }}
-          onAddBooking={(d) => { setPopover(null); setShowQuick(false); openManual(d); }}
-          onDeleteBlock={deleteBlock}
-          onBlockDay={blockDay}
-        />
-      )}
+      {popover && (() => {
+        const rect = popover.rect;
+        const clampLeft = (l, w) => Math.max(12, Math.min(l, window.innerWidth - w - 12));
+        const clampTop = (t) => Math.max(12, Math.min(t, window.innerHeight - 380));
 
-      {popover && showQuick && (
-        <CalendarQuickActions
-          iso={popover.iso}
-          zimmers={zimmers}
-          bookings={bookings}
-          anchorRect={popover.rect}
-          popoverLeft={(() => {
-            if (!popover.rect) return 80;
-            let l = popover.rect.left;
-            if (l + 320 > window.innerWidth - 12) l = window.innerWidth - 320 - 12;
-            if (l < 12) l = 12;
-            return l;
-          })()}
-          onClose={() => setShowQuick(false)}
-          onAction={quickAction}
-        />
-      )}
+        // Figma prototype: reservation bar → Side Drawer at (+51.3, +41.5) from the bar, dissolve 0.3s.
+        if (popover.mode === 'bar') {
+          return (
+            <>
+              <div className="fixed inset-0 z-[54]" onClick={closePopups} aria-hidden />
+              <CalendarDayPopover
+                className="owner-dissolve"
+                bookings={[popover.booking]}
+                zimmers={zimmers}
+                left={clampLeft(rect.left + 51.3, DRAWER_WIDTH)}
+                top={clampTop(rect.top + 41.5)}
+                onDeleteBlock={deleteBlock}
+                onOpenBooking={(b) => { closePopups(); onOpenBooking?.(b); }}
+              />
+            </>
+          );
+        }
+
+        // Figma prototype: date cell → ActionPopup at (-181.2, +70.5) from the cell.
+        const blocks = bookingsOn(popover.iso).filter((b) => b.is_block || b.status === 'חסום');
+        const quickLeft = clampLeft(rect.left - 181.2, QUICK_WIDTH);
+        const quickTop = rect.top + 70.5;
+        const blockLeft = quickLeft - 8 - DRAWER_WIDTH >= 12 ? quickLeft - 8 - DRAWER_WIDTH : quickLeft + QUICK_WIDTH + 8;
+        return (
+          <>
+            <div className="fixed inset-0 z-[54]" onClick={closePopups} aria-hidden />
+            {blocks.length > 0 && (
+              <CalendarDayPopover
+                bookings={blocks}
+                zimmers={zimmers}
+                left={clampLeft(blockLeft, DRAWER_WIDTH)}
+                top={clampTop(quickTop)}
+                onDeleteBlock={deleteBlock}
+              />
+            )}
+            {showQuick && (
+              <CalendarQuickActions
+                iso={popover.iso}
+                zimmers={zimmers}
+                bookings={bookings}
+                anchorRect={rect}
+                popoverLeft={quickLeft}
+                popoverTop={quickTop}
+                onClose={closePopups}
+                onAction={quickAction}
+              />
+            )}
+          </>
+        );
+      })()}
 
       {showManual && (
         <ManualBookingForm

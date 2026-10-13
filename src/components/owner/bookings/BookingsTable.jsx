@@ -25,7 +25,7 @@ export default function BookingsTable({ bookings, zimmers, onView, emptyText }) 
     <>
       {/* Desktop card rows (Figma 1776:19980) */}
       <div className="hidden lg:block overflow-x-auto" style={{ margin: '-16px', padding: 16 }} dir="rtl">
-        <div className="flex flex-col" style={{ gap: 16, width: 1145, marginRight: 6 }}>
+        <div className="flex flex-col" style={{ gap: 16, width: 'calc(100% - 6px)', maxWidth: 1145, marginRight: 6 }}>
           {bookings.map(b => (
             <BookingRow key={b.id} booking={b} zimmer={zimmerMap[b.zimmer_id]} onView={onView} />
           ))}

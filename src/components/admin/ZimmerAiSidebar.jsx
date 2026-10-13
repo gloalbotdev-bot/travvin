@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/api/client';
 import { Check } from 'lucide-react';
 import ZimmerInlineChat from '@/components/admin/ZimmerInlineChat';
@@ -17,6 +17,18 @@ import iconMic from '@/assets/owner/home/icon-mic.svg';
 import iconSend from '@/assets/owner/home/icon-send.svg';
 import iconPlus from '@/assets/owner/home/icon-plus.svg';
 import iconSparkles from '@/assets/owner/home/btn-ai-sparkles.svg';
+import CustomScrollThumb from '@/components/common/CustomScrollThumb';
+import iconAlert from '@/assets/owner/today/alert.svg';
+import iconCtaChevron from '@/assets/owner/bookings/sidebar-chevron.svg';
+import iconChecklistDown from '@/assets/owner/properties/checklist-down.svg';
+import iconSendYellow from '@/assets/owner/calendar/send-yellow.svg';
+import iconExpand from '@/assets/owner/calendar/expand.svg';
+import iconChecklistDone from '@/assets/owner/properties/checklist-done.svg';
+import iconChecklistItemChevron from '@/assets/owner/properties/checklist-item-chevron.svg';
+import iconChecklistFootChevron from '@/assets/owner/properties/checklist-foot-chevron.svg';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const INK = '#0B3838';
 
 const nextFridayStr = () => {
   const d = new Date();
@@ -71,19 +83,10 @@ function FigmaSwitch({ checked, onCheckedChange }) {
   );
 }
 
-export default function ZimmerAiSidebar({ zimmer, onAddBooking, onBlockDate, onUpdatePrice, onOpenCheckin, onFillMissing }) {
-  const [draft, setDraft] = useState('');
-  const [showMissing, setShowMissing] = useState(true);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatPrompt, setChatPrompt] = useState('');
+/** Property suggestions (questions / missing info / next weekend). `kind` lets the Figma card route its CTA. */
+function useZimmerSuggestions(zimmer, missing, onEmpty) {
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSugg, setLoadingSugg] = useState(true);
-
-  const items = buildItems(zimmer);
-  const done = items.filter(c => c.done).length;
-  const pct = Math.round((done / items.length) * 100);
-  const missing = items.filter(c => !c.done);
-  const autoOn = (zimmer.stay_settings?.customer_triggers || []).some(t => t.enabled);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,38 +101,333 @@ export default function ZimmerAiSidebar({ zimmer, onAddBooking, onBlockDate, onU
         const list = [];
         if (questions.length > 0) {
           list.push({
+            kind: 'chat',
             title: 'לקוחות שואלים על הנכס',
             body: 'שאלה חוזרת: ' + (questions[0].question || '').slice(0, 70),
+            cta: 'לנסח תשובה עם Travvin',
           });
         } else if (missing.length > 0 && /חני/.test(missing.map(m => m.label).join(' '))) {
           list.push({
+            kind: 'parking',
             title: 'הרבה לקוחות שואלים על חניה — כדאי להוסיף מידע לנכס?',
             body: 'כדאי להוסיף מידע לנכס על חניה מקורה / חניה פרטית.',
+            cta: 'להוסיף מידע על חניה',
           });
         } else if (missing.length > 0) {
           list.push({
+            kind: 'missing',
             title: 'מידע חסר בנכס',
             body: `כדאי להוסיף פרטים על ${missing[0].label.toLowerCase()} ועוד ${Math.max(0, missing.length - 1)} פריטים.`,
+            cta: 'להשלים את המידע',
           });
         } else {
-          list.push({ title: 'הנכס מלא במידע', body: 'כל הפריטים החיוניים מולאו. כדאי לרענן תמונות מדי פעם.' });
+          list.push({ kind: 'chat', title: 'הנכס מלא במידע', body: 'כל הפריטים החיוניים מולאו. כדאי לרענן תמונות מדי פעם.', cta: 'לשאול את Travvin' });
         }
         if (freeWeekend) {
           list.push({
+            kind: 'price',
             title: 'הסופ״ש הקרוב פנוי',
             body: 'אפשר להציע הנחה קטנה כדי להגדיל סיכוי לסגירה.',
+            cta: 'לעדכן מחיר לסופ״ש',
           });
         } else {
-          list.push({ title: 'תפוסה גבוהה', body: 'הסופ"ש הקרוב תפוס. כדאי לבדוק תאריכים פנויים אחרים למבצע.' });
+          list.push({ kind: 'chat', title: 'תפוסה גבוהה', body: 'הסופ"ש הקרוב תפוס. כדאי לבדוק תאריכים פנויים אחרים למבצע.', cta: 'לבדוק תאריכים פנויים' });
         }
         if (!cancelled) setSuggestions(list.slice(0, 2));
       } catch {
-        if (!cancelled) setSuggestions([]);
+        if (!cancelled) { setSuggestions([]); onEmpty?.(); }
       }
       if (!cancelled) setLoadingSugg(false);
     })();
     return () => { cancelled = true; };
   }, [zimmer.id]);
+
+  return { suggestions, loadingSugg };
+}
+
+/* Figma 1776:19049 (Frame 112) — owner property sidebar: orb, checklist, Travvin suggestions, input bar. */
+function ZimmerAiSidebarFigma({ zimmer, onAddBooking, onUpdatePrice, onFillMissing, onEmpty }) {
+  const [draft, setDraft] = useState('');
+  const [showMissing, setShowMissing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatPrompt, setChatPrompt] = useState('');
+  const scrollRef = useRef(null);
+
+  const items = buildItems(zimmer);
+  const done = items.filter(c => c.done).length;
+  const pct = Math.round((done / items.length) * 100);
+  const missing = items.filter(c => !c.done);
+  const { suggestions, loadingSugg } = useZimmerSuggestions(zimmer, missing, onEmpty);
+  const shown = expanded ? suggestions : suggestions.slice(0, 1);
+
+  const openChat = (prompt) => {
+    setChatPrompt(prompt);
+    setChatOpen(true);
+  };
+
+  const submit = () => {
+    const t = draft.trim();
+    if (!t) return;
+    openChat(t);
+    setDraft('');
+  };
+
+  const runSuggestion = (s) => {
+    if (s.kind === 'parking') onFillMissing?.(items.findIndex(it => /חני/.test(it.label)));
+    else if (s.kind === 'missing') onFillMissing?.(items.findIndex(it => !it.done));
+    else if (s.kind === 'price') onUpdatePrice?.();
+    else openChat(s.title);
+  };
+
+  return (
+    <div dir="rtl" className="relative flex flex-col h-full min-h-0 bg-white">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto owner-hide-scrollbar" style={{ padding: '20px clamp(16px, 8.2%, 42px) 24px' }}>
+        <div className="flex justify-center">
+          <OwnerAiIcon variant="orb" size={76.7} />
+        </div>
+
+        <div className="flex items-center justify-center" style={{ gap: 9, marginTop: 23 }}>
+          <span className="rounded-full flex-shrink-0" style={{ width: 8, height: 8, background: INK, opacity: 0.6 }} />
+          <p className="font-simpler" style={{ color: INK, fontSize: 16, fontWeight: 400, lineHeight: 'normal' }}>הצעות של Travvin</p>
+          <span className="rounded-full flex-shrink-0" style={{ width: 8, height: 8, background: INK, opacity: 0.6 }} />
+        </div>
+
+        {/* Checklist card — Figma 956:585 (collapsed, default) / 956:583 (expanded), smart animate 0.3s ease-out */}
+        <div className="w-full flex flex-col" style={{ marginTop: 15, minHeight: 151, background: '#FAFAFA', borderRadius: 23, padding: `42px clamp(20px, 1.93vw, 37px) ${showMissing ? 25 : 24}px`, gap: 14 }}>
+          <button
+            type="button"
+            onClick={() => setShowMissing(v => !v)}
+            aria-expanded={showMissing}
+            className="w-full flex items-center justify-between text-right"
+            style={{ gap: 12 }}
+          >
+            <span className="flex flex-col min-w-0" style={{ gap: showMissing ? 4 : 2 }}>
+              <span className="font-simpler" style={{ color: INK, fontSize: 18, fontWeight: 600, lineHeight: 'normal' }}>{pct}% מהמידע הושלם</span>
+              <span className="font-simona transition-colors duration-300 ease-out" style={{ color: showMissing ? '#717171' : INK, fontSize: showMissing ? 14 : 15, lineHeight: 'normal' }}>
+                {missing.length === 0 ? 'כל הפריטים החשובים הושלמו' : missing.length === 1 ? 'פריט חשוב אחד עדיין חסר' : `${missing.length} פריטים חשובים עדיין חסרים`}
+              </span>
+            </span>
+            <img
+              src={iconChecklistDown}
+              alt=""
+              width={16}
+              height={16}
+              className="block flex-shrink-0 transition-transform duration-300 ease-out"
+              style={{ transform: showMissing ? 'rotate(180deg)' : 'none' }}
+            />
+          </button>
+          <div className="w-full flex flex-col" style={{ gap: 6 }}>
+            <span className="font-simona self-end" style={{ color: INK, fontSize: 12, fontWeight: 700 }}>{pct}%</span>
+            <div className="w-full overflow-hidden" style={{ height: 5, borderRadius: 999, background: '#E4E7E5' }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: INK }} />
+            </div>
+          </div>
+          <AnimatePresence initial={false}>
+            {showMissing && (
+              <motion.div
+                key="checklist"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="w-full overflow-hidden"
+              >
+                <div className="w-full flex flex-col" style={{ gap: 12, marginTop: -2 }}>
+                  <div className="w-full" style={{ height: 1, background: '#E4E7E5' }} />
+                  <ul className="w-full flex flex-col" style={{ gap: 8 }}>
+                    {items.map((it, i) => (
+                      <li key={it.label}>
+                        <button
+                          type="button"
+                          disabled={it.done}
+                          onClick={() => onFillMissing?.(i)}
+                          className="w-full flex items-center text-right enabled:cursor-pointer"
+                          style={{ minHeight: 64, padding: '8px clamp(10px, 0.83vw, 16px)', gap: 'clamp(8px, 0.63vw, 12px)', background: '#FAFAFA', border: '1px solid #EFEFEF' }}
+                        >
+                          {it.done ? (
+                            <img src={iconChecklistDone} alt="הושלם" width={27.5} height={25.3} className="block flex-shrink-0" style={{ width: 27.5, height: 25.3, marginInlineEnd: 0.5 }} />
+                          ) : (
+                            <span className="flex-shrink-0 rounded-full flex items-center justify-center font-simpler" style={{ width: 28, height: 28, background: '#EFEFEF', color: INK, fontSize: 12, fontWeight: 700 }}>
+                              {i + 1}
+                            </span>
+                          )}
+                          <span className="flex-1 min-w-0 flex flex-col" style={{ gap: 4 }}>
+                            <span className="font-simpler block" style={{ color: INK, fontSize: 16, fontWeight: it.done ? 400 : 600, opacity: it.done ? 0.72 : 1, lineHeight: 'normal' }}>{it.label}</span>
+                            {!it.done && it.status && <span className="font-simona block" style={{ color: '#71807D', fontSize: 12, lineHeight: 'normal' }}>{it.status}</span>}
+                          </span>
+                          {it.done
+                            ? <span className="flex-shrink-0" style={{ width: 16 }} aria-hidden />
+                            : <img src={iconChecklistItemChevron} alt="" width={16} height={16} className="block flex-shrink-0" />}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {missing.length > 0 && (
+                    <div className="w-full flex flex-col" style={{ paddingTop: 6, gap: 12 }}>
+                      <div className="w-full" style={{ height: 1, background: 'rgba(0,0,0,0.17)' }} />
+                      <button
+                        type="button"
+                        onClick={() => onFillMissing?.(items.findIndex(it => !it.done))}
+                        className="flex items-center justify-between transition-opacity hover:opacity-80"
+                        style={{ height: 22, paddingInline: 19.5 }}
+                      >
+                        <span className="font-simona" style={{ color: INK, fontSize: 18, fontWeight: 500, lineHeight: 'normal' }}>השלם הכל</span>
+                        <img src={iconChecklistFootChevron} alt="" width={8} height={14} className="block flex-shrink-0" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Suggestion cards */}
+        <div className="w-full flex flex-col" style={{ gap: 20, marginTop: 20 }}>
+          {loadingSugg ? (
+            <div className="flex items-center justify-center py-6 w-full">
+              <div className="w-5 h-5 border-2 border-[#E4E7E5] border-t-[#0B3838] rounded-full animate-spin" />
+            </div>
+          ) : (
+            shown.map((s, i) => (
+              <div key={i} className="w-full flex flex-col items-center" style={{ background: '#FAFAFA', borderRadius: 23, padding: '32px 37px 22px', gap: 24 }}>
+                <div className="w-full flex flex-col text-right" style={{ gap: 7, color: INK }}>
+                  <span className="flex items-center" style={{ gap: 5 }}>
+                    <img src={iconAlert} alt="" width={14} height={14} className="block flex-shrink-0" style={{ width: 13.9, height: 13.9 }} />
+                    <span className="font-simona" style={{ fontSize: 17, lineHeight: 'normal' }}>שמתי לב למשהו</span>
+                  </span>
+                  <p className="font-simpler" style={{ fontSize: 22, fontWeight: 600, lineHeight: 'normal' }}>{s.title}</p>
+                  <p className="font-simona" style={{ fontSize: 16, lineHeight: 'normal' }}>{s.body}</p>
+                </div>
+                <div className="w-full flex flex-col" style={{ gap: 12 }}>
+                  <div className="w-full" style={{ height: 1, background: 'rgba(0,0,0,0.2)' }} />
+                  <button
+                    type="button"
+                    onClick={() => runSuggestion(s)}
+                    className="w-full flex items-center justify-between transition-opacity hover:opacity-80"
+                  >
+                    <span className="font-simona" style={{ color: INK, fontSize: 18, fontWeight: 500 }}>{s.cta}</span>
+                    <img src={iconCtaChevron} alt="" width={8} height={14} className="block flex-shrink-0" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {!loadingSugg && suggestions.length > 1 && (
+          <div className="flex justify-center" style={{ marginTop: 24 }}>
+            <button
+              type="button"
+              onClick={() => setExpanded(v => !v)}
+              aria-expanded={expanded}
+              className="relative transition-opacity hover:opacity-80"
+              style={{ width: 85.2, height: 28.9 }}
+            >
+              <img src={iconExpand} alt="" width={86} height={29} className="absolute inset-0 block" />
+              <span className="absolute font-simona" style={{ right: 7.3, top: 6, color: INK, fontSize: 13, lineHeight: 'normal' }} dir="ltr">Expand</span>
+            </button>
+          </div>
+        )}
+
+        {chatOpen && (
+          <div className="w-full" style={{ marginTop: 20 }}>
+            <ZimmerInlineChat
+              zimmer={zimmer}
+              initialPrompt={chatPrompt}
+              onClose={() => { setChatOpen(false); setChatPrompt(''); }}
+            />
+          </div>
+        )}
+      </div>
+
+      <CustomScrollThumb
+        targetRef={scrollRef}
+        className="hidden lg:block"
+        width={10.1}
+        height={34.4}
+        radius={30}
+        style={{ right: 16, top: 20, bottom: 150 }}
+      />
+
+      {!chatOpen && (
+        <div className="relative flex-shrink-0" style={{ padding: '16px clamp(16px, 8.2%, 42px) 24px' }}>
+          <div
+            className="absolute inset-x-0 pointer-events-none"
+            style={{ bottom: '100%', height: 48, background: 'linear-gradient(to top, #FFFFFF, rgba(255,255,255,0))' }}
+            aria-hidden
+          />
+          <div
+            className="flex flex-col justify-center bg-white"
+            style={{ minHeight: 86, gap: 14, padding: '12px 16px', border: '1px solid #E5E5E5', borderRadius: 23, filter: 'drop-shadow(0px 4px 10.55px rgba(0,0,0,0.07))' }}
+          >
+            <input
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
+              placeholder="מה תרצי לדעת או לשנות בנכס?"
+              aria-label="מה תרצי לדעת או לשנות בנכס?"
+              className="font-simona w-full bg-transparent outline-none text-right placeholder:text-[#0B3838]"
+              style={{ color: INK, fontSize: 17 }}
+            />
+            <div className="flex items-center justify-between" dir="ltr">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={submit}
+                  disabled={!draft.trim()}
+                  className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-40"
+                  style={{ background: INK }}
+                  title="שלח"
+                  aria-label="שלח"
+                >
+                  <img src={iconSendYellow} alt="" width={29} height={29} className="block" />
+                </button>
+                <MicButton
+                  tone="ghost"
+                  compact
+                  size={14}
+                  iconWidth={14}
+                  iconHeight={19}
+                  iconSrc={iconMic}
+                  onText={t => setDraft(p => (p ? p.replace(/\s+$/, '') + ' ' + t : t))}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={onAddBooking}
+                title="הוספת הזמנה"
+                aria-label="הוספת הזמנה"
+                className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105"
+                style={{ background: '#E9E9E9' }}
+              >
+                <img src={iconPlus} alt="" width={12} height={12} className="block" style={{ width: 12, height: 12 }} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ZimmerAiSidebar(props) {
+  return props.variant === 'figma' ? <ZimmerAiSidebarFigma {...props} /> : <ZimmerAiSidebarLegacy {...props} />;
+}
+
+function ZimmerAiSidebarLegacy({ zimmer, onAddBooking, onBlockDate, onUpdatePrice, onOpenCheckin, onFillMissing, onEmpty }) {
+  const [draft, setDraft] = useState('');
+  const [showMissing, setShowMissing] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatPrompt, setChatPrompt] = useState('');
+
+  const items = buildItems(zimmer);
+  const done = items.filter(c => c.done).length;
+  const pct = Math.round((done / items.length) * 100);
+  const missing = items.filter(c => !c.done);
+  const autoOn = (zimmer.stay_settings?.customer_triggers || []).some(t => t.enabled);
+  const { suggestions, loadingSugg } = useZimmerSuggestions(zimmer, missing, onEmpty);
 
   const submit = () => {
     const t = draft.trim();

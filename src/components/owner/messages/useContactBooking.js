@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { api } from '@/api/client';
 
 // Resolves the booking linked to a contact: the first thread with a booking_id,
-// or (for questions, which have no booking link) a booking matched by guest name + zimmer.
+// or (threads without a link / questions) a booking matched by guest name + zimmer.
 export function useContactBooking(contact) {
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -10,8 +10,9 @@ export function useContactBooking(contact) {
   const ref = useMemo(() => {
     const fromThreads = (contact?.threads || []).find(t => t.booking_id)?.booking_id;
     if (fromThreads) return { id: fromThreads, via: 'thread' };
-    const q = (contact?.questions || [])[0];
-    if (q && contact?.name && q.zimmer_id) return { via: 'search', zimmerId: q.zimmer_id, guestName: contact.name };
+    const zimmerId = (contact?.threads || []).find(t => t.zimmer_id)?.zimmer_id
+      || (contact?.questions || []).find(q => q.zimmer_id)?.zimmer_id;
+    if (contact?.name && zimmerId) return { via: 'search', zimmerId, guestName: contact.name };
     return null;
   }, [contact?.key]);
 

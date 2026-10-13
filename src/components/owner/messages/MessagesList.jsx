@@ -43,7 +43,7 @@ export default function MessagesList({ category, onCategory, subFilter, onSubFil
     .map((c) => ({ id: c.id, label: CAT_LABEL[c.id], n: totals[c.id] }));
 
   return (
-    <div className="h-full flex flex-col bg-white pt-[42px] px-[20px] min-[1600px]:pr-[36px] min-[1600px]:pl-[24px] pb-[32px] gap-[20px]" dir="rtl">
+    <div className="h-full flex flex-col bg-white pt-[42px] px-[20px] lg:pr-[clamp(20px,1.875vw,36px)] lg:pl-[clamp(20px,1.25vw,24px)] pb-[32px] gap-[20px]" dir="rtl">
       <div className="flex items-center justify-between">
         <h2 className="font-simpler text-[24px] leading-normal" style={{ color: '#0B3838', fontWeight: 600 }}>הודעות</h2>
         <div className="flex items-center gap-[8px]">

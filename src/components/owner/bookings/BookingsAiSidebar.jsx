@@ -15,7 +15,7 @@ import iconMic from '@/assets/owner/home/icon-mic.svg';
 
 const TEXT = '#0B3838';
 
-function PropertyThumb({ src }) {
+export function PropertyThumb({ src }) {
   const box = { width: 91.19, height: 91.19, borderRadius: 13.68 };
   return src ? (
     <img src={src} alt="" className="block object-cover flex-shrink-0" style={{ ...box, border: '1.14px solid #E5E7EB' }} />
@@ -26,7 +26,7 @@ function PropertyThumb({ src }) {
   );
 }
 
-function GuestCircle({ size, border }) {
+export function GuestCircle({ size, border }) {
   return (
     <div className="flex items-center justify-center rounded-full overflow-hidden flex-shrink-0" style={{ width: size, height: size, background: '#EFEFEF', border }}>
       <img src={iconUserRound} alt="" width={23} height={23} className="block" style={{ width: 23, height: 23 }} />
@@ -80,12 +80,12 @@ function AttentionCard({ card }) {
           <p className="font-simona" style={{ color: TEXT, fontSize: L.bodySize, fontWeight: 400, lineHeight: 1.379, marginTop: 3 }} dir="auto">{card.body}</p>
         </div>
       </div>
-      <div style={{ width: 427, height: 1, background: 'rgba(0,0,0,0.17)', marginTop: L.divider }} aria-hidden />
+      <div style={{ width: '100%', maxWidth: 427, height: 1, background: 'rgba(0,0,0,0.17)', marginTop: L.divider }} aria-hidden />
       <button
         type="button"
         onClick={card.onAction}
         className="flex items-center justify-between text-right transition-opacity hover:opacity-80"
-        style={{ width: L.actionWidth, marginTop: L.actionTop, gap: 12 }}
+        style={{ width: L.actionWidth, maxWidth: 'calc(100% - 24px)', marginTop: L.actionTop, gap: 12 }}
       >
         <span className="flex items-center" style={{ gap: L.iconGap }}>
           <img src={iconChat} alt="" width={28} height={29} className="block flex-shrink-0" style={{ width: 28, height: 29 }} />
@@ -171,9 +171,9 @@ export default function BookingsAiSidebar({ bookings, zimmers, onQuickAction, on
   };
 
   return (
-    <aside className="relative flex flex-col flex-shrink-0 h-full bg-white" style={{ width: 513, borderRight: '1px solid #E3E3E3' }} dir="rtl">
-      <div className="flex-1 min-h-0 overflow-y-auto owner-sidebar-scroll" style={{ paddingLeft: 32, paddingRight: 52 }}>
-        <div className="flex flex-col items-center" style={{ width: 428, paddingTop: 30, paddingBottom: 150 }}>
+    <aside className="relative flex flex-col flex-shrink-0 h-full bg-white" style={{ width: 'clamp(440px, 26.72vw, 513px)', borderRight: '1px solid #E3E3E3' }} dir="rtl">
+      <div className="flex-1 min-h-0 overflow-y-auto owner-sidebar-scroll" style={{ paddingLeft: 32, paddingRight: 'clamp(24px, 2.71vw, 52px)' }}>
+        <div className="flex flex-col items-center" style={{ width: '100%', maxWidth: 428, paddingTop: 30, paddingBottom: 150 }}>
           <OwnerAiIcon size={77} />
           <div className="flex items-center" style={{ gap: 9, marginTop: 22.4 }}>
             <span className="rounded-full" style={{ width: 8, height: 8, background: TEXT, opacity: 0.6 }} aria-hidden />
@@ -191,7 +191,7 @@ export default function BookingsAiSidebar({ bookings, zimmers, onQuickAction, on
       </div>
 
       {/* Bottom: fade + chat + input */}
-      <div className="absolute bottom-0 pointer-events-none" style={{ left: 32, width: 428, paddingBottom: 32 }}>
+      <div className="absolute bottom-0 pointer-events-none" style={{ left: 32, right: 'clamp(24px, 2.71vw, 52px)', maxWidth: 428, paddingBottom: 32 }}>
         <div
           className="absolute inset-x-0 bottom-0"
           style={{ height: 133, background: 'linear-gradient(to top, #FFFFFF 77%, rgba(255,255,255,0))', left: -32, right: -52 }}
