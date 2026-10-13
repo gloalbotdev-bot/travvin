@@ -11,6 +11,8 @@ import ReviewsSection from '@/components/reviews/ReviewsSection';
 import ManualBookingForm from '@/components/owner/ManualBookingForm';
 import BlockDateForm from '@/components/owner/BlockDateForm';
 import CustomerPreviewModal from '@/components/admin/CustomerPreviewModal';
+import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
+import iconCloseSidebar from '@/assets/owner/properties/icon-close-sidebar.svg';
 
 import iconBack from '@/assets/owner/properties/icon-back.svg';
 import iconPin from '@/assets/owner/properties/icon-pin.svg';
@@ -70,6 +72,7 @@ export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDele
   const [editingTab, setEditingTab] = useState(null);
   const [editingSummary, setEditingSummary] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(true);
   const images = data.images || [];
 
   const MISSING_TAB = ['basic', 'settings', 'basic', 'location', 'rooms', 'rooms', 'basic'];
@@ -165,18 +168,19 @@ export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDele
       <div className={`flex w-full ${embedded ? 'flex-1 min-h-0 overflow-hidden' : 'max-w-[1920px] mx-auto'} flex-col lg:flex-row`}>
         {/* Main property card — RIGHT in RTL */}
         <main
-          className={`flex-1 min-w-0 min-h-0 ${embedded ? 'overflow-auto owner-hide-scrollbar p-3 sm:p-4 lg:p-5 lg:pl-3' : 'px-4 sm:px-6 py-6'}`}
+          className={`flex-1 min-w-0 min-h-0 ${embedded ? 'overflow-auto owner-hide-scrollbar p-3 sm:p-4 lg:p-0 lg:pr-[clamp(16px,2.19vw,42px)]' : 'px-4 sm:px-6 py-6'}`}
         >
+          {/* Figma 1776:19050 — main card; content 1776:19054 is 1167 wide */}
           <div
             className="relative bg-white mx-auto w-full"
-            style={{ borderRadius: 23, maxWidth: 1366 }}
+            style={{ borderRadius: 23, maxWidth: aiOpen || !embedded ? 1366 : 1167 + 160 }}
           >
-            {/* Back — top of card, visual right */}
+            {/* Figma 1776:19051 — back circle */}
             <button
               type="button"
               onClick={onCancel}
-              className="absolute z-10 flex items-center justify-center transition-opacity hover:opacity-70"
-              style={{ top: 24, right: 24, width: 37, height: 37 }}
+              className="absolute z-10 flex items-center justify-center transition-opacity hover:opacity-70 top-6 right-6 lg:top-[85px] lg:right-[2px]"
+              style={{ width: 37, height: 37 }}
               aria-label="חזרה לנכסים"
             >
               <span className="overflow-hidden block" style={{ width: 37, height: 37 }}>
@@ -192,7 +196,7 @@ export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDele
             </button>
 
             {/* More top padding so title sits below back; tighter right so title sits further right */}
-            <div className="flex flex-col gap-8 pl-6 sm:pl-10 lg:pl-14 pr-6 sm:pr-8 lg:pr-8 pt-[72px] pb-10 items-stretch">
+            <div className="flex flex-col gap-8 pl-6 sm:pl-10 lg:pl-[clamp(24px,4.17vw,80px)] pr-6 sm:pr-8 lg:pr-[clamp(48px,6.2vw,119px)] pt-[72px] lg:pt-[85px] pb-10 items-stretch">
               {/* Header — Figma 1011:1227 */}
               <div className="flex flex-col gap-[38px] w-full">
                 <div className="flex flex-col gap-[13px] w-full">
@@ -273,12 +277,12 @@ export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDele
                     className="font-simona flex items-center justify-center gap-[9px] transition-opacity hover:opacity-80 shrink-0"
                     style={{
                       background: '#FAFAFA',
-                      borderRadius: 17,
-                      padding: '7px 29px',
+                      borderRadius: 37,
+                      width: 185,
+                      height: 41,
                       color: '#0B3838',
                       fontSize: 14,
                       fontWeight: 500,
-                      minHeight: 45,
                     }}
                   >
                     <span className="overflow-hidden shrink-0" style={{ width: 16, height: 16 }}>
@@ -314,35 +318,6 @@ export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDele
                       </div>
                     )}
                   </div>
-
-                  <div
-                    className="pointer-events-none absolute inset-x-0 bottom-0"
-                    style={{
-                      height: 142,
-                      background: 'linear-gradient(to top, #FFFFFF 0%, rgba(217,217,217,0) 100%)',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => openEditor('basic')}
-                    className="font-simpler text-white transition-opacity hover:opacity-90"
-                    style={{
-                      position: 'absolute',
-                      /* Center on the 16px gutter between left stack and right main (gap-4) */
-                      left: 'calc(100% - min(521px, 48%) - 8px)',
-                      bottom: 0,
-                      transform: 'translateX(-50%)',
-                      background: '#0B3838',
-                      borderRadius: 123,
-                      width: 171,
-                      height: 52,
-                      fontSize: 20,
-                      fontWeight: 600,
-                      zIndex: 2,
-                    }}
-                  >
-                    עריכה
-                  </button>
                 </div>
               )}
 
@@ -449,24 +424,134 @@ export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDele
 
               <ReviewsSection zimmerId={data.id} variant="inline" />
             </div>
+
+            {/* Figma 1776:19160 — fade (142 high) + edit button (171×52, 50 above the bottom), pinned to the screen bottom */}
+            {images.length > 0 && <div aria-hidden style={{ height: 142 }} />}
+            {images.length > 0 && (
+              <div className="sticky bottom-0 z-[2] h-0">
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0"
+                  style={{ height: 142, borderRadius: '0 0 23px 23px', background: 'linear-gradient(to top, #FFFFFF 0%, rgba(217,217,217,0) 100%)' }}
+                />
+                <div className="absolute inset-x-0 pl-6 sm:pl-10 lg:pl-[clamp(24px,4.17vw,80px)] pr-6 sm:pr-8 lg:pr-[clamp(48px,6.2vw,119px)]" style={{ bottom: 50 }}>
+                  <div className="relative" style={{ height: 52 }}>
+                    <button
+                      type="button"
+                      onClick={() => openEditor('basic')}
+                      className="font-simpler text-white transition-opacity hover:opacity-90"
+                      style={{
+                        position: 'absolute',
+                        /* Center on the 16px gutter between left stack and right main (gap-4) */
+                        left: 'calc(100% - min(521px, 48%) - 8px)',
+                        top: 0,
+                        transform: 'translateX(-50%)',
+                        background: '#0B3838',
+                        borderRadius: 123,
+                        width: 171,
+                        height: 52,
+                        fontSize: 20,
+                        fontWeight: 600,
+                      }}
+                    >
+                      עריכה
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </main>
 
+        {embedded && !aiOpen ? (
+          /* Figma 1776:19261 — closed sidebar: Travvin pill (1776:19417) + bubble (1776:19430) */
+          <aside className="hidden lg:block relative flex-shrink-0 z-20 border-r border-[#F0EEE8]" style={{ width: 117 }}>
+            <button
+              type="button"
+              onClick={() => setAiOpen(true)}
+              aria-label="פתיחת ההצעות של Travvin"
+              className="absolute transition-transform hover:scale-[1.03]"
+              style={{
+                left: 25,
+                top: 'min(612px, calc(100% - 170px))',
+                width: 74,
+                height: 146,
+                borderRadius: 56.8,
+                background: 'rgba(243,243,243,0.38)',
+                border: '0.835px solid rgba(86,86,86,0.23)',
+                boxShadow: '0px 6.68px 17px rgba(0,0,0,0.09)',
+              }}
+            >
+              {/* Figma 1776:19429 — label on top (61×16 at 6.5,30.88) */}
+              <span
+                className="font-simpler absolute text-center"
+                style={{ left: 6.5, top: 30.88, width: 61, color: '#0B3838', fontSize: 16, fontWeight: 400, lineHeight: '16px' }}
+                dir="ltr"
+              >
+                Travvin
+              </span>
+              {/* Figma 1776:19422 — orb below (63.5×64.8 at 5.25,76.54) */}
+              <span className="absolute block" style={{ left: 5.25, top: 76.54, width: 64, height: 64 }}>
+                <OwnerAiIcon variant="orb" size={64} className="block" />
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAiOpen(true)}
+              className="absolute font-simona flex items-center justify-center whitespace-nowrap"
+              style={{
+                left: 107,
+                top: 'calc(min(612px, calc(100% - 170px)) + 80px)',
+                width: 158,
+                height: 42,
+                background: '#0B3838',
+                color: '#FFFFFF',
+                fontSize: 14,
+                borderRadius: '24px 24px 24px 0',
+              }}
+            >
+              רוצה לשאול משהו?
+            </button>
+          </aside>
+        ) : (
         <aside
-          className={`w-full lg:w-[460px] flex-shrink-0 ${embedded ? 'overflow-auto owner-hide-scrollbar border-r border-[#F0EEE8]' : ''}`}
+          className={`relative w-full flex-shrink-0 ${embedded ? 'lg:w-[clamp(380px,26.67vw,512px)] lg:h-full flex flex-col overflow-hidden border-r border-[#E3E3E3]' : 'lg:w-[460px]'}`}
           style={embedded ? { maxHeight: '100%' } : undefined}
         >
-          <div className={`${embedded ? 'p-4 lg:p-6 lg:pt-8' : 'px-4 pb-8'}`}>
+          {embedded && (
+            /* Figma 1776:19049 — close sidebar */
+            <button
+              type="button"
+              onClick={() => setAiOpen(false)}
+              aria-label="סגירת ההצעות"
+              className="hidden lg:block absolute z-10 transition-opacity hover:opacity-70"
+              style={{ left: 41, top: 26.8, width: 28.9, height: 28.9 }}
+            >
+              <img src={iconCloseSidebar} alt="" width={29} height={29} className="block w-full h-full" />
+            </button>
+          )}
+          {embedded ? (
             <ZimmerAiSidebar
+              variant="figma"
               zimmer={data}
               onAddBooking={() => setModal('booking')}
-              onBlockDate={() => setModal('block')}
               onUpdatePrice={() => openEditor('price')}
-              onOpenCheckin={() => openEditor('settings')}
               onFillMissing={(i) => openEditor(MISSING_TAB[i] || 'basic')}
+              onEmpty={() => setAiOpen(false)}
             />
-          </div>
+          ) : (
+            <div className="px-4 pb-8">
+              <ZimmerAiSidebar
+                zimmer={data}
+                onAddBooking={() => setModal('booking')}
+                onBlockDate={() => setModal('block')}
+                onUpdatePrice={() => openEditor('price')}
+                onOpenCheckin={() => openEditor('settings')}
+                onFillMissing={(i) => openEditor(MISSING_TAB[i] || 'basic')}
+              />
+            </div>
+          )}
         </aside>
+        )}
       </div>
 
       {modal === 'booking' && (

@@ -1,26 +1,17 @@
 /**
- * Owner home (assistant) — Figma Desktop:
- * https://www.figma.com/design/3rRfXaZ752TAyPABkfCjSJ/?node-id=1011-59
+ * Owner AI assistant — landing state (before a conversation starts). Figma Desktop:
+ * https://www.figma.com/design/3rRfXaZ752TAyPABkfCjSJ/?node-id=1776-18070
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/api/client';
-import { Loader2, FileText, X } from 'lucide-react';
-import MicButton from '@/components/chat/MicButton';
-import heroImg from '@/assets/owner/home/hero.svg';
-import checkV from '@/assets/owner/home/check-v.svg';
+import { Loader2 } from 'lucide-react';
 import iconAddBooking from '@/assets/owner/home/icon-add-booking.svg';
 import iconBlockDate from '@/assets/owner/home/icon-block-date.svg';
 import iconUpdatePrice from '@/assets/owner/home/icon-update-price.svg';
-import iconPlus from '@/assets/owner/home/icon-plus.svg';
-import iconSend from '@/assets/owner/home/icon-send.svg';
-import iconMic from '@/assets/owner/home/icon-mic.svg';
-import checkedBubbleOval from '@/assets/owner/home/checked-bubble-oval.svg';
-import dividerWavy from '@/assets/owner/home/divider-wavy.svg';
-import chevronSuggestions from '@/assets/owner/home/chevron-suggestions.svg';
+import suggestionSpark from '@/assets/owner/assistant/suggestion-spark.svg';
+import googleCalendarIcon from '@/assets/owner/assistant/google-calendar.png';
 import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
-
-const MAX_ATTACHMENTS = 5;
-const ATTACHMENT_ACCEPT = 'image/*,application/pdf,text/plain,text/csv,audio/*,video/*';
+import OwnerHomeComposer from '@/components/owner/OwnerHomeComposer';
 
 function nextFridayStr() {
   const d = new Date();
@@ -30,21 +21,46 @@ function nextFridayStr() {
   return d.toISOString().slice(0, 10);
 }
 
-export default function OwnerAssistantHome({ ownerId, zimmers, loading, onChat, onQuickAction, onNavigate, onAddBooking }) {
-  const [draft, setDraft] = useState('');
+const INK = '#0B3838';
+
+/** Figma 1776:18142 — 723×86 #F2F2F2 r23; icon right, title/body, underlined link left. */
+function SuggestionRow({ icon, title, body, actionLabel, onAction }) {
+  return (
+    <div
+      className="w-full flex items-center"
+      style={{
+        background: '#F2F2F2',
+        borderRadius: 23,
+        minHeight: 86.45,
+        padding: '21px 22px 21px 25px',
+        gap: 27,
+      }}
+    >
+      <span className="flex-shrink-0 flex items-center justify-center" style={{ width: 29.2, height: 31.4 }}>
+        {icon}
+      </span>
+      <div className="flex-1 min-w-0 text-right">
+        <p className="font-simona" style={{ color: INK, fontSize: 19, fontWeight: 500, lineHeight: 'normal' }}>{title}</p>
+        {body && (
+          <p className="font-simona" style={{ color: INK, fontSize: 14, fontWeight: 400, lineHeight: 'normal', marginTop: 4 }}>{body}</p>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onAction}
+        className="font-simona flex-shrink-0 whitespace-nowrap transition-opacity hover:opacity-70"
+        style={{ color: INK, fontSize: 14, fontWeight: 400, textDecoration: 'underline', textUnderlineOffset: 3 }}
+      >
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
+export default function OwnerAssistantHome({ ownerId, zimmers, onChat, onQuickAction, onNavigate }) {
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSugg, setLoadingSugg] = useState(true);
-  const [showSugg, setShowSugg] = useState(true);
-  const [attachments, setAttachments] = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState('');
   const firedRef = useRef(false);
-  const inputRef = useRef(null);
-  const fileInputRef = useRef(null);
-
-  useEffect(() => {
-    inputRef.current?.focus({ preventScroll: true });
-  }, []);
 
   useEffect(() => {
     if (firedRef.current || !ownerId) return;
@@ -118,43 +134,12 @@ export default function OwnerAssistantHome({ ownerId, zimmers, loading, onChat, 
     return s;
   };
 
-  const handleFileUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (!files.length) return;
-    setUploading(true);
-    setUploadError('');
-    const added = [];
-    for (const file of files) {
-      try {
-        const { file_url } = await api.integrations.Core.UploadFile({ file });
-        added.push({ url: file_url, name: file.name, type: file.type || '' });
-      } catch (err) {
-        setUploadError(`לא הצלחתי להעלות את "${file.name}": ${err?.message || 'שגיאה'}`);
-      }
-    }
-    setAttachments(prev => [...prev, ...added].slice(0, MAX_ATTACHMENTS));
-    setUploading(false);
-    inputRef.current?.focus();
-  };
-
-  const removeAttachment = (url) => setAttachments(prev => prev.filter(a => a.url !== url));
-
-  const submit = () => {
-    const t = draft.trim() || (attachments.length ? 'מצרף קבצים' : '');
-    if (!t || uploading) return;
-    onChat(t, attachments);
-    setDraft('');
-    setAttachments([]);
-    setUploadError('');
-    inputRef.current?.focus();
-  };
-
   const onSuggestionAction = (s) => {
     if (s.action_type === 'add_info') onNavigate('zimmers');
     else if (s.action_type === 'create_offer') onNavigate('promotions');
   };
 
+  /* Figma 1776:18131 / 18134 / 18137 — sizes include the stroke padding baked into the SVG files */
   const quickActions = [
     { type: 'add_booking', label: 'הוספת הזמנה', iconSrc: iconAddBooking, iconW: 17, iconH: 18 },
     { type: 'block_date', label: 'חסום תאריך', iconSrc: iconBlockDate, iconW: 14, iconH: 17 },
@@ -162,271 +147,89 @@ export default function OwnerAssistantHome({ ownerId, zimmers, loading, onChat, 
   ];
 
   return (
-    <div dir="rtl" className="max-w-3xl mx-auto w-full">
-      <div className="flex justify-center pt-2 pb-2">
-        <div className="relative" style={{ width: 270, height: 270, maxWidth: '100%' }}>
-          <img src={heroImg} alt="" width={270} height={270} className="block w-full h-full object-contain" />
-          {/* Figma 1011:954 over hero 1011:251 — oval @ (0,84) 117×85 within 270×270 */}
-          <div
-            className="absolute pointer-events-none"
-            style={{ left: 0, top: 84, width: 117, height: 85 }}
-            aria-hidden
-          >
-            <img
-              src={checkedBubbleOval}
-              alt=""
-              width={117}
-              height={85}
-              className="absolute inset-0 block w-full h-full"
-              draggable={false}
-            />
-            <span
-              dir="ltr"
-              style={{
-                position: 'absolute',
-                /* Figma 1011:955 — unrotated origin relative to oval AABB (0,84) */
-                left: 16.39,
-                top: 32.09,
-                width: 72,
-                height: 34,
-                color: '#0B3838',
-                fontFamily: 'Caveat, cursive',
-                fontSize: 27.741,
-                fontWeight: 400,
-                lineHeight: 1.23,
-                letterSpacing: '-0.832px',
-                textTransform: 'lowercase',
-                transform: 'rotate(-13.64deg)',
-                transformOrigin: 'top left',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              checked.
-            </span>
-          </div>
-        </div>
+    <div dir="rtl" className="w-full flex flex-col items-center px-4" style={{ paddingTop: 86, paddingBottom: 48 }}>
+      {/* Figma 1776:18070 — orb 178 inside a 220 glow ring */}
+      <div className="relative flex items-center justify-center flex-shrink-0" style={{ width: 220, height: 220 }} aria-hidden>
+        <span
+          className="absolute inset-0 rounded-full"
+          style={{
+            background: 'radial-gradient(circle, rgba(255,255,255,0) 62%, rgba(235,235,235,0.56) 100%)',
+            filter: 'blur(6px)',
+          }}
+        />
+        <OwnerAiIcon variant="orb" size={178} asteriskTone="light" className="relative" />
       </div>
 
-      {/* Title: V between נסמן and על — Figma 1011:248 */}
-      <div className="text-center mb-3">
-        <h1
-          className="font-simpler inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 leading-none"
-          style={{ color: '#0F4D4D', fontSize: 'clamp(36px, 5vw, 60px)', fontWeight: 600 }}
-        >
-          <span>בואו נסמן</span>
-          <span className="inline-block overflow-hidden shrink-0 self-center" style={{ width: 56, height: 52 }}>
-            <img src={checkV} alt="" width={56} height={52} className="block w-full h-full" />
-          </span>
-          <span>על היום</span>
-        </h1>
-        <p
-          className="font-simona mx-auto mt-3"
-          style={{ color: '#0B3838', fontSize: 17, fontWeight: 400, lineHeight: 'normal', textAlign: 'center', maxWidth: 330 }}
-        >
-          היי, אני כאן כדי לעזור לך לנהל את הנכסים שלך.
-          <br />
-          שאל אותי כל דבר שקשור.
-        </p>
+      <h1
+        className="font-simpler text-center"
+        style={{ color: INK, fontSize: 32, fontWeight: 400, lineHeight: 'normal', marginTop: 47.7 }}
+      >
+        אני כאן, מה נעשה?
+      </h1>
+
+      <div className="w-full flex justify-center" style={{ marginTop: 44.2 }}>
+        <OwnerHomeComposer
+          autoFocus
+          onSubmit={onChat}
+          placeholder="איך אפשר לעזור היום? שאלי אותי משהו או תני לי משימה"
+        />
       </div>
 
-      <div className="flex flex-wrap justify-center gap-3 mb-5">
+      <div className="flex flex-wrap justify-center" style={{ gap: 18.6, marginTop: 33.7 }}>
         {quickActions.map(({ type, label, iconSrc, iconW, iconH }) => (
           <button
             key={type}
             type="button"
             onClick={() => onQuickAction(type)}
-            className="font-simona flex items-center gap-2 h-8 px-7 rounded-full transition-all hover:shadow-sm"
-            style={{ background: '#FAFAFA', color: '#0B3838', fontSize: 14, fontWeight: 400 }}
+            className="font-simona flex items-center justify-center transition-shadow hover:shadow-sm"
+            style={{
+              width: 132.4,
+              height: 31.35,
+              borderRadius: 17.4,
+              background: '#FAFAFA',
+              color: INK,
+              fontSize: 14,
+              fontWeight: 400,
+              gap: 8.3,
+            }}
           >
-            <span className="shrink-0 overflow-visible flex items-center justify-center" style={{ width: iconW, height: iconH }}>
-              <img src={iconSrc} alt="" width={iconW} height={iconH} className="block" style={{ width: iconW, height: iconH }} />
-            </span>
             {label}
+            <img src={iconSrc} alt="" className="block flex-shrink-0" style={{ width: iconW, height: iconH }} />
           </button>
         ))}
       </div>
 
-      {/* Chat: label row ABOVE icons row — Figma 1011:210/211 */}
-      <div className="mb-10 mx-auto w-full" style={{ maxWidth: 720 }}>
-        <div
-          className="rounded-xl bg-white flex flex-col justify-between px-4 pt-3.5 pb-3 cursor-text"
-          onClick={e => {
-            if (e.target.closest('button')) return;
-            inputRef.current?.focus();
-          }}
-          style={{
-            minHeight: 85,
-            border: '1.5px solid #E5E5E5',
-            boxShadow: '0px 0px 3.9px 0px rgba(0,0,0,0.14)',
-          }}
-        >
-          <p className="font-simona text-right" style={{ color: '#535353', fontSize: 14, fontWeight: 400 }}>
-            אפשר לשאול הכל
-          </p>
-          {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
-              {attachments.map(a => (
-                <div
-                  key={a.url}
-                  className="relative flex items-center gap-1.5 rounded-lg px-1.5 py-1 max-w-[180px]"
-                  style={{ background: '#F3F3F3', border: '1px solid #E5E5E5' }}
-                >
-                  {a.type.startsWith('image/')
-                    ? <img src={a.url} alt={a.name} className="w-8 h-8 rounded object-cover flex-shrink-0" />
-                    : <FileText size={16} style={{ color: '#0B3838' }} className="flex-shrink-0" />}
-                  <span className="font-simona text-xs truncate" style={{ color: '#535353' }}>{a.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeAttachment(a.url)}
-                    aria-label={`הסרת ${a.name}`}
-                    className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 hover:opacity-70"
-                  >
-                    <X size={12} style={{ color: '#535353' }} />
-                  </button>
-                </div>
-              ))}
+      <section className="w-full flex flex-col items-center" style={{ maxWidth: 723, marginTop: 72.6 }}>
+        <h2 className="font-simona" style={{ color: 'rgba(0,0,0,0.58)', fontSize: 20, fontWeight: 400, lineHeight: 'normal' }}>
+          הצעות לשיפור
+        </h2>
+        <div className="w-full flex flex-col" style={{ gap: 17.6, marginTop: 20 }}>
+          {loadingSugg ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 size={18} className="animate-spin" style={{ color: '#9CA3AF' }} />
             </div>
-          )}
-          {uploadError && (
-            <p className="font-simona text-xs mt-1.5" style={{ color: '#D93025' }} role="alert">{uploadError}</p>
-          )}
-          <div className="flex items-center gap-2.5 mt-2">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading || attachments.length >= MAX_ATTACHMENTS}
-              title="העלאת קבצים"
-              aria-label="העלאת קבצים"
-              className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 disabled:cursor-default"
-              style={{ background: '#E9E9E9' }}
-            >
-              {uploading
-                ? <Loader2 size={13} className="animate-spin" style={{ color: '#0B3838' }} />
-                : (
-                  <span className="overflow-hidden" style={{ width: 12, height: 12 }}>
-                    <img src={iconPlus} alt="" width={12} height={12} className="block w-full h-full" />
-                  </span>
-                )}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={ATTACHMENT_ACCEPT}
-              className="hidden"
-              onChange={handleFileUpload}
-            />
-            <div className="relative flex-1 min-w-0">
-              <input
-                ref={inputRef}
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-                placeholder=""
-                className="font-simona w-full bg-transparent outline-none min-w-0"
-                style={{ color: '#0B3838', fontSize: 14 }}
-                aria-label="שאל את העוזר"
+          ) : (
+            suggestions.map((s, i) => (
+              <SuggestionRow
+                key={i}
+                icon={<img src={suggestionSpark} alt="" className="block" style={{ width: 25.8, height: 24.7 }} />}
+                title={s.title}
+                body={s.body}
+                actionLabel={s.action_label}
+                onAction={() => onSuggestionAction(s)}
               />
-            </div>
-            <MicButton
-              tone="ghost"
-              compact
-              size={14}
-              iconWidth={14}
-              iconHeight={19}
-              iconSrc={iconMic}
-              onText={t => setDraft(p => (p ? p.replace(/\s+$/, '') + ' ' + t : t))}
-            />
-            <button
-              type="button"
-              onClick={submit}
-              disabled={(!draft.trim() && !attachments.length) || uploading}
-              className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-opacity hover:opacity-90 disabled:cursor-default"
-              style={{ background: '#0B3838' }}
-              title="שלח"
-            >
-              <img src={iconSend} alt="" width={8} height={12} className="block" style={{ width: 8, height: 12 }} />
-            </button>
-          </div>
+            ))
+          )}
+          {/* Figma 1776:18154 — Google Calendar row */}
+          <SuggestionRow
+            icon={<img src={googleCalendarIcon} alt="" className="block" style={{ width: 29.2, height: 31.4 }} />}
+            title="לנהל את היום שלך יחד עם Google Calendar"
+            body="לחיבור את Google Calendar"
+            actionLabel="לחיבור"
+            onAction={() => onNavigate('settings')}
+          />
         </div>
-      </div>
-
-      {/* Suggestions — Figma chevron + wavy divider */}
-      <div className="max-w-xl mx-auto">
-        <button
-          type="button"
-          onClick={() => setShowSugg(s => !s)}
-          className="flex flex-col items-center w-full mb-5"
-        >
-          <span
-            className="mb-2 flex items-center justify-center"
-            style={{
-              width: 32,
-              height: 8,
-              transform: showSugg ? 'none' : 'rotate(180deg)',
-              transition: 'transform 0.2s',
-            }}
-          >
-            <img
-              src={chevronSuggestions}
-              alt=""
-              width={32}
-              height={8}
-              className="block w-full h-full"
-            />
-          </span>
-          <span className="font-simpler" style={{ color: '#0B3838', fontSize: 20, fontWeight: 400 }}>
-            הצעות לשיפור
-          </span>
-        </button>
-
-        {showSugg && (
-          <div>
-            {loadingSugg ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 size={18} className="animate-spin" style={{ color: '#9CA3AF' }} />
-              </div>
-            ) : suggestions.length === 0 ? (
-              <p className="font-simona text-sm text-center py-4" style={{ color: '#9CA3AF' }}>אין הצעות כרגע.</p>
-            ) : (
-              suggestions.map((s, i) => (
-                <React.Fragment key={i}>
-                  {i > 0 && (
-                    <div className="flex justify-center py-4">
-                      <img
-                        src={dividerWavy}
-                        alt=""
-                        width={134}
-                        height={3}
-                        className="block"
-                        style={{ width: 134, height: 3 }}
-                      />
-                    </div>
-                  )}
-                  <div
-                    className="rounded-[10px] px-5 py-4 flex items-center gap-3"
-                    style={{ background: '#F5F5F5', minHeight: 86 }}
-                  >
-                    <OwnerAiIcon size={40} className="flex-shrink-0" />
-                    <div className="flex-1 min-w-0 text-right">
-                      <p className="font-simona mb-0.5 leading-snug" style={{ color: '#0B3838', fontSize: 19, fontWeight: 400 }}>{s.title}</p>
-                      <p className="font-simona leading-relaxed" style={{ color: '#0B3838', fontSize: 14, fontWeight: 400 }}>{s.body}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onSuggestionAction(s)}
-                      className="font-simona flex-shrink-0 transition-all hover:opacity-70 whitespace-nowrap"
-                      style={{ color: '#0B3838', fontSize: 14, fontWeight: 400, textDecoration: 'underline', textUnderlineOffset: 3 }}
-                    >
-                      {s.action_label}
-                    </button>
-                  </div>
-                </React.Fragment>
-              ))
-            )}
-          </div>
-        )}
-      </div>
+      </section>
     </div>
   );
 }

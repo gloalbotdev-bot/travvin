@@ -149,10 +149,11 @@ export default function OwnerBookingsPage({ ownerId, zimmers = [], onAddBooking,
   return (
     <>
     {/* Desktop (Figma 1776:19750) */}
-    <div className="hidden lg:flex flex-col h-full bg-white" dir="rtl">
+    {/* Viewport-high (below the 81px top bar) so the AI sidebar input stays on screen while the list scrolls. */}
+    <div className="hidden lg:flex flex-col bg-white" style={{ height: 'calc(100dvh - 81px)' }} dir="rtl">
       <BookingsSnapshotStrip bookings={bookings} zimmers={zimmers} zimmerFilter={zimmerFilter} onZimmerFilter={setZimmerFilter} />
       <div className="flex flex-1 min-h-0">
-        <main className="flex-1 min-w-0 overflow-y-auto">
+        <main className="flex-1 min-w-0 overflow-y-auto owner-hide-scrollbar">
           <div className="flex">
             <div style={{ flex: '147 1 0', minWidth: 24 }} />
             <div className="flex-shrink-0 min-w-0" style={{ width: 1151, maxWidth: '100%', paddingTop: 52, paddingBottom: 48 }}>

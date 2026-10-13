@@ -5,6 +5,7 @@ import { bookingErrorMessage } from '@/lib/bookingErrors';
 import { buildOwnerRecentTurns, applyOwnerAssistantResponse } from '@/lib/assistantOwner';
 import { useAutoResize } from '@/hooks/useAutoResize';
 import MicButton from '@/components/chat/MicButton';
+import OwnerAssistantHome from '@/components/owner/OwnerAssistantHome';
 
 const formatTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
@@ -73,7 +74,7 @@ function MessageAttachments({ attachments }) {
   );
 }
 
-export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated, initialPrompt, initialAttachments, onPromptConsumed }) {
+export default function OwnerInfoAssistant({ ownerId, zimmers, onNavigate, onQuickAction, onMutated, initialPrompt, initialAttachments, onPromptConsumed }) {
   const [mode, setMode] = useState('info'); // 'info' | 'edit' — matches Base44 OwnerAgentChat
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -110,6 +111,13 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated, ini
   useEffect(() => {
     if (context && !isTyping) textareaRef.current?.focus();
   }, [context, isTyping]);
+
+  // Figma frame 108 scrolls without a visible bar.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('owner-hide-scrollbar');
+    return () => root.classList.remove('owner-hide-scrollbar');
+  }, []);
 
   useEffect(() => {
     if (!context || !initialPrompt?.trim() || sentInitialRef.current) return;
@@ -285,6 +293,20 @@ export default function OwnerInfoAssistant({ ownerId, onNavigate, onMutated, ini
     : { bg: 'rgba(59,130,246,0.06)', border: 'rgba(59,130,246,0.30)', color: '#3B82F6', icon: Eye, label: 'מצב מידע', hint: 'קריאה בלבד — העוזר רק מציג נתונים ועונה על שאלות, בלי לבצע שינויים.' };
   const ModeIcon = modeConfig.icon;
   const showQuick = !chatStarted && messages.length <= 1 && !isTyping && !pendingOp;
+
+  if (!chatStarted && !initialPrompt?.trim()) {
+    return (
+      <div dir="rtl" style={{ background: '#FCFCFC', minHeight: 'calc(100dvh - 81px)' }}>
+        <OwnerAssistantHome
+          ownerId={ownerId}
+          zimmers={zimmers || []}
+          onChat={(text, attachments) => handleSend(text, attachments)}
+          onQuickAction={onQuickAction || (() => {})}
+          onNavigate={onNavigate}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full" dir="rtl" style={{ background: '#F8F7F4', height: 'calc(100vh - 64px)' }}>

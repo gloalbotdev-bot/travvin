@@ -21,8 +21,7 @@ import OwnerCheckinSettings from '@/components/owner/OwnerCheckinSettings';
 import OwnerVideos from '@/components/owner/OwnerVideos';
 import OwnerTopBar from '@/components/owner/OwnerTopBar';
 import OwnerHamburger from '@/components/owner/OwnerHamburger';
-import OwnerAssistantHome from '@/components/owner/OwnerAssistantHome';
-import OwnerDashboardSidebar from '@/components/owner/OwnerDashboardSidebar';
+import OwnerTodayHome from '@/components/owner/OwnerTodayHome';
 import { useOwnerSystemUnread } from '@/hooks/useOwnerSystemUnread';
 
 export default function OwnerPanel() {
@@ -182,7 +181,7 @@ export default function OwnerPanel() {
 
   return (
     <div
-      className={`flex flex-col ${tab === 'home' || tab === 'updates' || viewingZimmer || usingCreatorChat ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}
+      className={`flex flex-col ${tab === 'home' || tab === 'updates' || tab === 'calendar' || viewingZimmer || usingCreatorChat ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}
       dir="rtl"
       style={{ background: '#FAFAFA', fontFamily: 'Heebo, sans-serif' }}
     >
@@ -227,36 +226,36 @@ export default function OwnerPanel() {
           onCancel={() => setUsingCreatorChat(false)}
         />
       ) : (
-      <div className={`flex flex-1 ${tab === 'home' || tab === 'updates' ? 'min-h-0 overflow-hidden' : 'overflow-hidden'}`}>
+      <div className={`flex flex-1 ${tab === 'home' || tab === 'updates' || tab === 'calendar' ? 'min-h-0 overflow-hidden' : 'overflow-hidden'}`}>
       <main
         className={`flex-1 min-h-0 ${
           tab === 'home'
-            ? 'overflow-hidden p-4 pt-0 sm:p-6 sm:pt-0 lg:p-8 lg:pt-0'
+            ? 'overflow-hidden bg-white'
             : tab === 'updates'
               ? 'overflow-hidden'
+              : tab === 'calendar'
+              ? 'overflow-hidden bg-white p-4 sm:p-6 lg:p-0'
               : tab === 'assistant' || tab === 'bookings'
               ? 'overflow-auto'
               : 'overflow-auto p-4 sm:p-6 lg:p-8'
         }`}
       >
         {tab === 'home' && (
-          <div className="h-full rounded-[23px] bg-white overflow-auto owner-hide-scrollbar">
-            <div className="p-6 lg:p-8">
-              <OwnerAssistantHome
-                ownerId={currentUser?.id}
-                zimmers={zimmers}
-                loading={loading}
-                onChat={handleHomeChat}
-                onQuickAction={handleQuickAction}
-                onNavigate={(t) => setTab(t)}
-                onAddBooking={() => setShowBookingCreator(true)}
-              />
-            </div>
-          </div>
+          <OwnerTodayHome
+            ownerId={currentUser?.id}
+            zimmers={zimmers}
+            currentUser={currentUser}
+            onAction={openNotificationAction}
+            onNavigate={(t) => setTab(t)}
+            onEditZimmer={(z) => setEditingZimmer(z)}
+            onChat={handleHomeChat}
+          />
         )}
         {tab === 'assistant' && (
           <OwnerInfoAssistant
             ownerId={currentUser?.id}
+            zimmers={zimmers}
+            onQuickAction={handleQuickAction}
             initialPrompt={assistantPrompt}
             initialAttachments={assistantAttachments}
             onPromptConsumed={() => { setAssistantPrompt(''); setAssistantAttachments([]); }}
@@ -268,7 +267,7 @@ export default function OwnerPanel() {
             }}
           />
         )}
-        {tab === 'calendar' && <OwnerCalendar ownerId={currentUser?.id} zimmers={zimmers} onAddBookingText={() => setShowBookingCreator(true)} onZimmerUpdated={() => loadZimmers(currentUser?.id)} onOpenAI={handleCalendarAI} />}
+        {tab === 'calendar' && <OwnerCalendar ownerId={currentUser?.id} zimmers={zimmers} onAddBookingText={() => setShowBookingCreator(true)} onZimmerUpdated={() => loadZimmers(currentUser?.id)} onOpenAI={handleCalendarAI} onOpenBooking={(b) => openNotificationAction('approve_booking', b.id)} />}
         {tab === 'contacts' && <ContactsBook ownerId={currentUser?.id} />}
         {tab === 'checkin' && <OwnerCheckinSettings ownerId={currentUser?.id} />}
         {tab === 'database' && <ZimmerDatabase ownerId={currentUser?.id} />}
@@ -348,14 +347,6 @@ export default function OwnerPanel() {
           </div>
         )}
       </main>
-        {tab === 'home' && (
-          <aside
-            className="hidden lg:flex flex-col flex-shrink-0 self-stretch min-h-0 h-full overflow-hidden"
-            style={{ width: 460, borderRight: '1px solid #F0EEE8' }}
-          >
-            <OwnerDashboardSidebar ownerId={currentUser?.id} zimmers={zimmers} currentUser={currentUser} tab={tab} onAction={openNotificationAction} onNavigate={(t) => setTab(t)} onEditZimmer={(z) => setEditingZimmer(z)} />
-          </aside>
-        )}
       </div>
       )}
     </div>

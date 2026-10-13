@@ -1,22 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { Loader2, TrendingUp, Sparkles } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 const HEB_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+const INK = '#0B3838';
 
-/**
- * Concise, date-specific AI price summary shown inline when the "הצעות AI"
- * block in the calendar Quick Actions menu is expanded. Does NOT open the
- * personal assistant — that's the footer "פתח עם AI".
- */
-export default function CalendarDayAiSummary({ iso, zimmers, bookings }) {
+/** Date-specific AI price advice: { summary, recommendations[{ zimmer_name, recommended_price, reason }] }. */
+export function useDayPriceAdvice(iso, zimmers, bookings) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
   const run = async () => {
     if (!iso || !zimmers.length) return;
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setData(null);
     try {
       const dayBookings = (bookings || []).filter(
         (b) => b.check_in <= iso && b.check_out > iso && b.status !== 'נדחית' && !b.is_block
@@ -59,13 +56,20 @@ export default function CalendarDayAiSummary({ iso, zimmers, bookings }) {
     setLoading(false);
   };
 
-  useEffect(() => { run(); /* eslint-disable-next-line */ }, [iso]);
+  useEffect(() => { run(); }, [iso, zimmers.length]);
+
+  return { loading, data, error, retry: run };
+}
+
+/** Concise date-specific price summary shown inline in the calendar day popup. */
+export default function CalendarDayAiSummary({ iso, zimmers, bookings }) {
+  const { loading, data, error } = useDayPriceAdvice(iso, zimmers, bookings);
 
   return (
-    <div dir="rtl" className="px-3.5 py-3" style={{ fontFamily: 'Heebo, sans-serif' }}>
+    <div dir="rtl" className="font-simona" style={{ padding: '4px 12px 8px', color: INK }}>
       {loading && (
-        <div className="flex items-center gap-2 text-xs" style={{ color: '#6B7280' }}>
-          <Loader2 size={14} className="animate-spin" style={{ color: '#F97316' }} />
+        <div className="flex items-center gap-2" style={{ fontSize: 14, opacity: 0.7 }}>
+          <Loader2 size={14} className="animate-spin" />
           מנתח מחירים לתאריך…
         </div>
       )}
@@ -73,25 +77,15 @@ export default function CalendarDayAiSummary({ iso, zimmers, bookings }) {
       {error && <p className="text-xs text-red-500">{error}</p>}
 
       {!loading && !error && data && (
-        <div className="space-y-2.5 max-h-52 overflow-y-auto pr-0.5">
-          {data.summary && (
-            <p className="text-xs leading-relaxed" style={{ color: '#062319' }}>{data.summary}</p>
-          )}
+        <div className="flex flex-col max-h-52 overflow-y-auto" style={{ gap: 10 }}>
+          {data.summary && <p style={{ fontSize: 14, lineHeight: 1.4 }}>{data.summary}</p>}
           {(data.recommendations || []).map((r, i) => (
-            <div key={i} className="flex items-start gap-2 rounded-xl p-2.5" style={{ background: '#F8F7F4', border: '1px solid #F0EEE8' }}>
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(249,115,22,0.1)' }}>
-                <TrendingUp size={13} style={{ color: '#EA580C' }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold" style={{ color: '#062319' }}>{r.zimmer_name}</p>
-                <p className="text-sm font-black mt-0.5" style={{ color: '#EA580C' }}>₪{r.recommended_price}<span className="text-[10px] font-medium" style={{ color: '#9CA3AF' }}> /לילה</span></p>
-                {r.reason && <p className="text-[11px] mt-0.5 leading-snug" style={{ color: '#6B7280' }}>{r.reason}</p>}
-              </div>
+            <div key={i} className="flex flex-col" style={{ background: '#FAFAFA', borderRadius: 12, padding: '10px 12px', gap: 2 }}>
+              <p style={{ fontSize: 14, fontWeight: 500 }}>{r.zimmer_name}</p>
+              <p className="font-simpler" style={{ fontSize: 18, fontWeight: 600 }}>₪{r.recommended_price}<span className="font-simona" style={{ fontSize: 12, fontWeight: 400, opacity: 0.7 }}> /לילה</span></p>
+              {r.reason && <p style={{ fontSize: 13, opacity: 0.7, lineHeight: 1.35 }}>{r.reason}</p>}
             </div>
           ))}
-          <div className="flex items-center gap-1.5 pt-1 text-[10px]" style={{ color: '#9CA3AF' }}>
-            <Sparkles size={10} /> סיכום מתומצת · לניתוח מלא פתח עם AI
-          </div>
         </div>
       )}
     </div>

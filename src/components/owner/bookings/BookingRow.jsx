@@ -35,8 +35,8 @@ export default function BookingRow({ booking, zimmer, onView }) {
 
   return (
     <div
-      className="bg-white flex items-center justify-between overflow-hidden flex-shrink-0"
-      style={{ width: 1145, height: 112, padding: '24px 33px', borderRadius: 9, boxShadow: '0px 0px 16px 0px rgba(0,0,0,0.1)' }}
+      className="bg-white flex items-center justify-between overflow-hidden flex-shrink-0 border border-transparent transition-colors duration-300 ease-out hover:border-[#0B3838] focus-within:border-[#0B3838]"
+      style={{ width: '100%', maxWidth: 1145, height: 112, padding: '24px clamp(16px, 1.72vw, 33px)', gap: 8, borderRadius: 9, boxShadow: '0px 0px 16px 0px rgba(0,0,0,0.1)' }}
       dir="rtl"
     >
       {/* Property + guest preview */}
@@ -64,7 +64,7 @@ export default function BookingRow({ booking, zimmer, onView }) {
       <Divider />
 
       {/* Reservation identity */}
-      <div className="flex flex-col items-start flex-shrink-0 overflow-hidden" style={{ width: 210, gap: 3 }}>
+      <div className="flex flex-col items-start overflow-hidden" style={{ flex: '0 1 210px', minWidth: 140, gap: 3 }}>
         <div className="flex items-center justify-between w-full" style={{ height: 25 }}>
           <span className="font-simona" style={{ background: '#D9F3F9', color: TEXT, fontSize: 12, fontWeight: 700, lineHeight: 'normal', padding: '4px 8px', borderRadius: 4 }}>
             {isBlock ? 'חסימה' : 'הזמנה'}
@@ -83,7 +83,7 @@ export default function BookingRow({ booking, zimmer, onView }) {
       <Divider />
 
       {/* Stay details */}
-      <div className="flex flex-col flex-shrink-0 overflow-hidden" style={{ width: 190, gap: 8 }}>
+      <div className="flex flex-col overflow-hidden" style={{ flex: '0 1 190px', minWidth: 120, gap: 8 }}>
         <DetailLine icon={iconProperty}>{propertyName} · {formatRangeLong(booking.check_in, booking.check_out)}</DetailLine>
         <DetailLine icon={iconGuests}>{nightsLabel(nights)} · {guestsLabel(booking.num_guests || 1)}</DetailLine>
       </div>
@@ -91,7 +91,7 @@ export default function BookingRow({ booking, zimmer, onView }) {
       <Divider />
 
       {/* Status */}
-      <div className="flex flex-col items-center flex-shrink-0 overflow-hidden" style={{ width: 200, gap: 8 }}>
+      <div className="flex flex-col items-center overflow-hidden" style={{ flex: '0 1 200px', minWidth: 120, gap: 8 }}>
         <span className="font-simona whitespace-nowrap" style={{ background: st.bg, color: TEXT, fontSize: 13, fontWeight: 700, lineHeight: 'normal', padding: '4px 10px', borderRadius: 999 }} dir="auto">
           {st.label}
         </span>
@@ -121,7 +121,7 @@ export default function BookingRow({ booking, zimmer, onView }) {
         <button
           type="button"
           onClick={() => onView(booking)}
-          className="font-simona w-full h-full flex items-center justify-center transition-colors hover:bg-[#FAFAFA]"
+          className="font-simona w-full h-full flex items-center justify-center transition-colors duration-300 ease-out hover:!bg-[#0B3838] hover:!text-[#F5F5F5] hover:!border-[#0B3838] focus-visible:!bg-[#0B3838] focus-visible:!text-[#F5F5F5]"
           style={{ border: '1px solid #CCD8D8', borderRadius: 35, color: TEXT, fontSize: 16, fontWeight: 700, lineHeight: 'normal' }}
         >
           פתח הזמנה

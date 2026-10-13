@@ -328,7 +328,7 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
           <div className="w-7 h-7 border-2 border-[#E5E5E5] border-t-[#0B3838] rounded-full animate-spin" />
         </div>
       ) : isLg ? (
-        <div className="h-full grid grid-rows-1 lg:grid-cols-[300px_1fr_340px] min-[1600px]:grid-cols-[370px_1fr_446px]">
+        <div className="h-full grid grid-rows-1 lg:grid-cols-[clamp(280px,19.27vw,370px)_1fr_clamp(320px,23.23vw,446px)]">
           {listEl}{centerEl}{ctxEl}
         </div>
       ) : (

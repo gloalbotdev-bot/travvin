@@ -1,6 +1,8 @@
 import React from 'react';
 
-/** Presentational reservation bar — Figma Frame 86 Reservation Bar */
+const DOT_HOVER = 'group-hover:!bg-[#EFEFEF] group-hover:!opacity-100 group-focus-visible:!bg-[#EFEFEF] group-focus-visible:!opacity-100';
+
+/** Presentational reservation bar — Figma Frame 86 Reservation Bar (hover: ink fill, white text, 0.3s ease-out) */
 export default function CalendarReservationBar({
   label,
   pending,
@@ -13,7 +15,7 @@ export default function CalendarReservationBar({
     <button
       type="button"
       onClick={onClick}
-      className="absolute flex items-center overflow-hidden pointer-events-auto transition-opacity hover:opacity-90"
+      className="group absolute flex items-center overflow-hidden pointer-events-auto transition-colors duration-300 ease-out hover:!bg-[#0B3838] focus-visible:!bg-[#0B3838]"
       style={{
         height: 32,
         borderRadius: 10,
@@ -25,11 +27,11 @@ export default function CalendarReservationBar({
     >
       <div className="flex items-center w-full min-w-0" style={{ gap: 13 }} dir="rtl">
         <span
-          className="flex-shrink-0 rounded-full"
+          className={`flex-shrink-0 rounded-full transition-colors duration-300 ease-out ${DOT_HOVER}`}
           style={{ width: 8, height: 8, background: pending ? '#9CA3AF' : '#0B3838', opacity: 0.35 }}
         />
         <span
-          className="font-simona flex-1 min-w-0 truncate text-right"
+          className="font-simona flex-1 min-w-0 truncate text-right transition-colors duration-300 ease-out group-hover:!text-white group-focus-visible:!text-white"
           style={{ color: pending ? '#383838' : textColor, fontSize: 15, fontWeight: 500 }}
         >
           {label}
@@ -52,7 +54,7 @@ export default function CalendarReservationBar({
           </span>
         ) : (
           <span
-            className="flex-shrink-0 rounded-full"
+            className={`flex-shrink-0 rounded-full transition-colors duration-300 ease-out ${DOT_HOVER}`}
             style={{ width: 8, height: 8, background: '#0B3838', opacity: 0.35 }}
           />
         )}
