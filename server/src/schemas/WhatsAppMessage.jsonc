@@ -1,0 +1,33 @@
+// WhatsApp message log — every outbound send and inbound bot message (provider-agnostic).
+// Written by the server only (SERVICE_ACTOR); readable by admins for usage / failure review.
+{
+  "type": "object",
+  "name": "WhatsAppMessage",
+  "properties": {
+    "direction": { "type": "string", "enum": ["in", "out"], "title": "כיוון" },
+    "provider": { "type": "string", "title": "ספק" },
+    "provider_message_id": { "type": "string", "title": "מזהה הודעה אצל הספק" },
+    "phone": { "type": "string", "title": "טלפון (בינלאומי, ספרות בלבד)" },
+    "user_id": { "type": "string", "title": "משתמש מזוהה" },
+    "source": { "type": "string", "enum": ["notification", "bot", "manual"], "title": "מקור" },
+    "intent": { "type": "string", "title": "מטרת ההודעה" },
+    "kind": { "type": "string", "title": "סוג תוכן" },
+    "body": { "type": "string", "title": "תוכן (מקוצר)" },
+    "status": {
+      "type": "string",
+      "enum": ["received", "sent", "delivered", "read", "failed", "skipped", "not_configured"],
+      "title": "סטטוס"
+    },
+    "error": { "type": "string", "title": "שגיאה" },
+    "reply_to": { "type": "string", "title": "מצטט הודעה" },
+    "ref_id": { "type": "string", "title": "רשומה מקושרת (GuestMessage וכו')" },
+    "status_updated_at": { "type": "string", "title": "עדכון סטטוס אחרון" }
+  },
+  "required": ["direction", "phone", "status"],
+  "rls": {
+    "read": { "user_condition": { "role": "admin" } },
+    "create": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

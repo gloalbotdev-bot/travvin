@@ -3,7 +3,7 @@
  */
 import { SERVICE_ACTOR } from './service-role.js';
 import { pushInAppNotification } from './push-in-app-notification.js';
-import { assertSafeHttpsUrl } from './safe-webhook-url.js';
+import { composeWhatsAppText, deliverWhatsAppText } from './whatsapp/index.js';
 
 /**
  * @param {ReturnType<import('./entity-store.js').createEntityStore>} store
@@ -106,15 +106,20 @@ export async function sendGuestMessage(store, payload = {}) {
   }
 
   if (channels.includes('whatsapp')) {
-    const wa = await postWhatsApp(store, {
+    const wa = await deliverWhatsAppText(store, {
       to: customerPhone,
-      customer_id: customerId,
-      customer_name: customerName,
-      zimmer_name: zimmerName,
-      title,
-      body,
-      metadata: payload.metadata || {},
-      ref_message_id: guestMsg.id,
+      text: composeWhatsAppText(title, body),
+      intent: `guest.${payload.category || 'custom'}`,
+      vars: { customer_name: customerName, zimmer_name: zimmerName, title, body },
+      context: {
+        customer_id: customerId,
+        customer_name: customerName,
+        zimmer_name: zimmerName,
+        title,
+        body,
+        metadata: payload.metadata || {},
+        ref_message_id: guestMsg.id,
+      },
     });
     Object.assign(delivery, wa);
   }
@@ -127,52 +132,4 @@ export async function sendGuestMessage(store, payload = {}) {
   );
 
   return { ok: true, id: guestMsg.id, delivery };
-}
-
-async function loadWhatsAppSettings(store) {
-  const settings = await store.filter('AppSetting', {}, undefined, undefined, SERVICE_ACTOR);
-  let webhookUrl = '';
-  let apiToken = '';
-  for (const s of settings || []) {
-    if (s.key === 'whatsapp_webhook_url') webhookUrl = s.value || '';
-    if (s.key === 'whatsapp_api_token') apiToken = s.value || '';
-  }
-  return { webhookUrl, apiToken };
-}
-
-/**
- * @param {ReturnType<import('./entity-store.js').createEntityStore>} store
- * @param {object} body
- */
-export async function postWhatsApp(store, body) {
-  const delivery = {};
-  const { webhookUrl, apiToken } = await loadWhatsAppSettings(store);
-  if (!webhookUrl) {
-    delivery.whatsapp = 'not_configured';
-    return delivery;
-  }
-  let safeUrl;
-  try {
-    safeUrl = assertSafeHttpsUrl(webhookUrl);
-  } catch (e) {
-    delivery.whatsapp = 'failed';
-    delivery.whatsapp_error = e instanceof Error ? e.message : String(e);
-    return delivery;
-  }
-  try {
-    const waRes = await fetch(safeUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
-      },
-      body: JSON.stringify(body),
-    });
-    delivery.whatsapp = waRes.ok ? 'sent' : 'failed';
-    if (!waRes.ok) delivery.whatsapp_error = `HTTP ${waRes.status}`;
-  } catch (e) {
-    delivery.whatsapp = 'failed';
-    delivery.whatsapp_error = e instanceof Error ? e.message : String(e);
-  }
-  return delivery;
 }

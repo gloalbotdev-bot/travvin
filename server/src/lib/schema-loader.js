@@ -44,6 +44,8 @@ const ENTITY_NAMES = [
   'UnansweredQuestion',
   'User',
   'VideoLike',
+  'WhatsAppMessage',
+  'WhatsAppSession',
   'Zimmer',
   'ZimmerVideo',
 ];

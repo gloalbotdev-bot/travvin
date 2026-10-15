@@ -25,6 +25,9 @@ import { createAssistantRouter } from './routes/assistant.js';
 import { createUploadRouter } from './routes/upload.js';
 import { createStorage } from './lib/storage/index.js';
 import { createBookingsRouter } from './routes/bookings.js';
+import { createWhatsAppAdminRouter, createWhatsAppRouter } from './routes/whatsapp.js';
+import { createWhatsAppBot } from './lib/whatsapp-bot/index.js';
+import { createTravvinAgent } from './lib/agent/travvin.js';
 import { assertProductionEnv, getFrontendUrl } from './lib/env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -59,6 +62,9 @@ app.use(
       : { origin: false },
   ),
 );
+// Before the global JSON parser: WhatsApp providers may verify signatures over the raw body.
+const whatsAppBot = createWhatsAppBot({ store, agent: createTravvinAgent({ prisma, store }) });
+app.use('/api/whatsapp', createWhatsAppRouter({ store, onEvents: whatsAppBot.handleEvents }));
 app.use(express.json({ limit: '2mb' }));
 app.use(attachAuthUser);
 
@@ -110,6 +116,7 @@ app.use('/api/functions', createFunctionsRouter(store, prisma));
 app.use('/api/ai', createAiRouter());
 app.use('/api/assistant', createAssistantRouter({ prisma, store }));
 app.use('/api/upload', createUploadRouter(storage));
+app.use('/api/whatsapp', createWhatsAppAdminRouter({ store }));
 app.use(
   '/api/connectors/google-calendar',
   createGoogleCalendarConnectorRouter(prisma, store),
