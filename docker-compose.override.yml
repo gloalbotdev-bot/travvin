@@ -1,5 +1,0 @@
-# Local only: Windows Postgres services already own :5432, so expose the container on :5440 (:5433 is taken too).
-services:
-  db:
-    ports:
-      - "5440:5432"
