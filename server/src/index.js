@@ -12,6 +12,7 @@ import { createEntitiesRouter } from './routes/entities.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createAppSettingsRouter } from './routes/app-settings.js';
 import { createUsersRouter } from './routes/users.js';
+import { createRoleAccessRequestsRouter } from './routes/role-access-requests.js';
 import { createEventsRouter } from './routes/events.js';
 import { createFunctionsRouter } from './routes/functions.js';
 import { createGoogleCalendarConnectorRouter } from './routes/connectors/google-calendar-oauth.js';
@@ -103,6 +104,7 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/auth', createAuthRouter(prisma));
 app.use('/api/app', createAppSettingsRouter(prisma));
 app.use('/api/users', createUsersRouter(prisma));
+app.use('/api/role-access-requests', createRoleAccessRequestsRouter(prisma, store));
 app.use('/api/entities', createEntitiesRouter(store));
 app.use('/api/bookings', createBookingsRouter(prisma));
 app.use('/api/events', createEventsRouter());

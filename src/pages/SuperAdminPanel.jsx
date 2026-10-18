@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { Users, Home, ClipboardList, LogOut, UserPlus, MessageSquare, Search, X, Menu, UserCheck, ChevronRight, Trash2, Plus, PenLine, ShieldCheck, Megaphone, LayoutDashboard, Bot, Star, Video } from 'lucide-react';
+import { Users, Home, ClipboardList, LogOut, UserPlus, MessageSquare, Search, X, Menu, UserCheck, ChevronRight, Trash2, Plus, PenLine, ShieldCheck, Megaphone, LayoutDashboard, Bot, Star, Video, KeyRound } from 'lucide-react';
 import ChatHistoryPanel from '@/components/superadmin/ChatHistoryPanel';
 import CustomersPanel from '@/components/superadmin/CustomersPanel';
 import AddOwnerPanel from '@/components/superadmin/AddOwnerPanel';
@@ -15,6 +15,7 @@ import SuperAdminReviewsPanel from '@/components/superadmin/SuperAdminReviewsPan
 import SuperAdminDashboard from '@/components/superadmin/SuperAdminDashboard';
 import BookingCreatorChat from '@/components/owner/BookingCreatorChat';
 import SuperAdminVideos from '@/components/superadmin/SuperAdminVideos';
+import RoleAccessRequestsPanel from '@/components/superadmin/RoleAccessRequestsPanel';
 
 export default function SuperAdminPanel() {
   const [tab, setTab] = useState('dashboard');
@@ -156,7 +157,7 @@ export default function SuperAdminPanel() {
     );
   }
   if (editingZimmer) return <ZimmerEditor zimmer={editingZimmer} onSave={handleZimmerSave} onCancel={() => setEditingZimmer(null)} />;
-  if (creatingZimmer) return <ZimmerCreatorChat onSave={async (data) => { await api.entities.Zimmer.create({ ...data, owner_id: newZimmerOwnerId, owner_name: owners.find(o => o.id === newZimmerOwnerId)?.full_name || '' }); setCreatingZimmer(false); setNewZimmerOwnerId(''); loadAll(); }} onCancel={() => { setCreatingZimmer(false); setNewZimmerOwnerId(''); }} />;
+  if (creatingZimmer) return <ZimmerCreatorChat ownerId={newZimmerOwnerId} onSave={async (data) => { await api.entities.Zimmer.create({ ...data, owner_id: newZimmerOwnerId, owner_name: owners.find(o => o.id === newZimmerOwnerId)?.full_name || '' }); setCreatingZimmer(false); setNewZimmerOwnerId(''); loadAll(); }} onCancel={() => { setCreatingZimmer(false); setNewZimmerOwnerId(''); }} />;
 
   const allNavItems = [
     { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard },
@@ -166,6 +167,7 @@ export default function SuperAdminPanel() {
     { id: 'videos', label: 'וידאו', icon: Video },
     { id: 'customers', label: 'לקוחות', icon: UserCheck },
     { id: 'add_owner', label: 'הוסף בעל מתחם', icon: UserPlus },
+    { id: 'role_requests', label: 'בקשות תפקיד', icon: KeyRound },
     { id: 'chat_history', label: 'היסטוריית התכתבויות', icon: MessageSquare },
     { id: 'messages', label: 'הודעות ועדכונים', icon: Megaphone },
     { id: 'reviews', label: 'ניהול ביקורות', icon: Star },
@@ -181,6 +183,7 @@ export default function SuperAdminPanel() {
     if (item.id === 'reviews') return true; // ניהול ביקורות — זמין לכל מנהל
     if (item.id === 'ai_bookings') return true; // עוזר AI להזמנות — זמין לכל מנהל
     if (item.id === 'videos') return true; // וידאו — זמין לכל מנהל
+    if (item.id === 'role_requests') return true; // בקשות תפקיד — זמין לכל מנהל
     return allowedPages.includes(item.id);
   });
 
@@ -378,6 +381,7 @@ export default function SuperAdminPanel() {
             {tab === 'dashboard' && <SuperAdminDashboard onNavigate={setTab} />}
             {tab === 'customers' && <CustomersPanel />}
             {tab === 'add_owner' && <AddOwnerPanel onInvited={loadAll} />}
+            {tab === 'role_requests' && <RoleAccessRequestsPanel />}
             {tab === 'chat_history' && <ChatHistoryPanel />}
             {tab === 'messages' && <MessagesPanel />}
             {tab === 'reviews' && <SuperAdminReviewsPanel />}

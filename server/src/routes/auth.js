@@ -3,7 +3,7 @@
  */
 import { Router } from 'express';
 import crypto from 'node:crypto';
-import { signToken, verifyToken, extractBearer } from '../lib/jwt.js';
+import { signToken, verifyToken, extractBearer, signRoleAccessRequestToken } from '../lib/jwt.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import {
   generateOtp,
@@ -51,7 +51,7 @@ export function createAuthRouter(prisma) {
         extra_data: { reason: 'user_not_registered' },
       });
     }
-    res.json(users.toAuth(row));
+    res.json(users.toAuthWithSession(row, claims.role));
   });
 
   router.post('/login', async (req, res) => {
@@ -213,8 +213,10 @@ export function createAuthRouter(prisma) {
       if (!row || !row.registered) {
         return res.status(401).json({ error: 'User not found' });
       }
-      const access_token = signToken(users.toAuth(row));
-      res.json({ access_token, user: users.toAuth(row) });
+      const sessionRole = entry.sessionRole || row.role;
+      const user = users.toAuthWithSession(row, sessionRole);
+      const access_token = signToken(user);
+      res.json({ access_token, user });
     } catch (err) {
       sendErr(res, err);
     }
@@ -257,14 +259,31 @@ export function createAuthRouter(prisma) {
         (profile.email && (await users.findByEmail(profile.email)));
 
       if (row) {
-        if (!roleMatchesIntent(row.role, intent)) {
+        if (!roleMatchesIntent(row.role, intent, row.allowedRoles)) {
           const asRole =
             row.role === 'owner' || row.role === 'admin' || row.role === 'user'
               ? row.role
               : 'user';
-          return res.redirect(
-            `${frontendUrl()}/welcome?auth_error=role_mismatch&as=${encodeURIComponent(asRole)}`,
-          );
+          // Offer role-access request only for user↔owner mismatches (not admin).
+          const canRequest =
+            (asRole === 'user' || asRole === 'owner') &&
+            (intent === 'user' || intent === 'owner') &&
+            asRole !== intent;
+          const params = new URLSearchParams({
+            auth_error: 'role_mismatch',
+            as: asRole,
+            intent,
+          });
+          if (canRequest) {
+            const requestToken = signRoleAccessRequestToken({
+              userId: row.id,
+              email: row.email,
+              fromRole: asRole,
+              toRole: intent,
+            });
+            params.set('request_token', requestToken);
+          }
+          return res.redirect(`${frontendUrl()}/welcome?${params.toString()}`);
         }
         if (!row.googleId && profile.id) {
           row = await prisma.user.update({
@@ -300,7 +319,8 @@ export function createAuthRouter(prisma) {
         return res.redirect(`${front}/welcome?auth_error=user_not_registered`);
       }
 
-      const target = resolveRedirect(after, row.id);
+      // Session role = login intent (active role for this login).
+      const target = resolveRedirect(after, row.id, intent);
       res.redirect(target);
     } catch (err) {
       console.error('[google callback]', err);
@@ -316,13 +336,13 @@ function frontendUrl() {
 }
 
 /** SEC-012 — redirect with one-time auth_code instead of JWT in URL. */
-function resolveRedirect(after, userId) {
+function resolveRedirect(after, userId, sessionRole) {
   let url = after;
   if (!url.startsWith('http')) {
     url = `${frontendUrl()}${url.startsWith('/') ? url : `/${url}`}`;
   }
   const u = new URL(url);
-  const code = issueAuthCode(userId);
+  const code = issueAuthCode(userId, sessionRole);
   u.searchParams.set('auth_code', code);
   u.searchParams.delete('access_token');
   return u.toString();

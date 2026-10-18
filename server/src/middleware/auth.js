@@ -4,6 +4,7 @@
 import { extractBearer, verifyToken } from '../lib/jwt.js';
 import { normalizeActor } from '../lib/authz.js';
 import { createUserStore } from '../lib/user-store.js';
+import { resolveSessionRole } from '../lib/auth-role-intent.js';
 
 /**
  * @param {import('@prisma/client').PrismaClient} prisma
@@ -25,12 +26,13 @@ export function createAuthMiddleware(prisma) {
     try {
       const row = await users.findById(claims.id);
       if (row) {
-        req.user = users.toAuth(row);
+        req.user = users.toAuthWithSession(row, claims.role);
         req.actor = normalizeActor({
           id: req.user.id,
           email: req.user.email,
           role: req.user.role,
         });
+        req.sessionRole = resolveSessionRole(row, claims.role);
       }
     } catch {
       /* ignore */
@@ -56,12 +58,22 @@ export function requireOwnerOrAdmin(req, res, next) {
   next();
 }
 
-/** Authenticated customer only (`role === 'user'`). Owners/admins must use a separate Google account. */
+/** Authenticated customer surface (`user` or `admin`). Owners stay blocked. */
 export function requireCustomer(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  if (req.user.role !== 'user') {
+  if (req.user.role !== 'user' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+}
+
+export function requireAdmin(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden' });
   }
   next();

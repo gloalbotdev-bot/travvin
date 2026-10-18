@@ -15,6 +15,8 @@ export default function RoleGate({ allow, allowGuest = false, children }) {
   const allowKey = Array.isArray(allow) ? allow.join(',') : '';
   const [state, setState] = useState('loading'); // loading | ok | mismatch
   const [registeredAs, setRegisteredAs] = useState(null);
+  const [attemptedIntent, setAttemptedIntent] = useState(null);
+  const [alreadyHasDual, setAlreadyHasDual] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +38,17 @@ export default function RoleGate({ allow, allowGuest = false, children }) {
           setState('ok');
           return;
         }
-        setRegisteredAs(u.role || 'user');
+        const as = u.role || 'user';
+        setRegisteredAs(as);
+        // Infer the role they were trying to reach from the gate.
+        let intent = null;
+        if (allowed.includes('owner') && !allowed.includes('user')) intent = 'owner';
+        else if (allowed.includes('user') && !allowed.includes('owner')) intent = 'user';
+        else if (allowed.includes('owner')) intent = 'owner';
+        else if (allowed.includes('user')) intent = 'user';
+        setAttemptedIntent(intent);
+        const dual = Array.isArray(u.allowed_roles) ? u.allowed_roles : [];
+        setAlreadyHasDual(Boolean(intent && dual.includes(intent)));
         setState('mismatch');
       } catch {
         if (cancelled) return;
@@ -65,7 +77,13 @@ export default function RoleGate({ allow, allowGuest = false, children }) {
   if (state === 'mismatch') {
     return (
       <div className="fixed inset-0" style={{ background: '#F8F7F4' }}>
-        <RoleMismatchModal registeredAs={registeredAs} onDismiss={dismiss} />
+        <RoleMismatchModal
+          registeredAs={registeredAs}
+          attemptedIntent={attemptedIntent}
+          toRole={attemptedIntent}
+          alreadyHasDual={alreadyHasDual}
+          onDismiss={dismiss}
+        />
       </div>
     );
   }
