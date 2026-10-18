@@ -4,6 +4,7 @@
 import { ownEntities } from './own/entities';
 import { ownAuth } from './own/auth';
 import { ownUsers } from './own/users';
+import { ownRoleAccessRequests } from './own/roleAccessRequests';
 import { ownFunctions } from './own/functions';
 import { ownIntegrationsCore } from './own/integrations';
 import { ownAssistant } from './own/assistant';
@@ -17,6 +18,7 @@ export const api = {
   entities: ownEntities,
   auth: ownAuth,
   users: ownUsers,
+  roleAccessRequests: ownRoleAccessRequests,
   integrations: {
     Core: {
       InvokeLLM: ownIntegrationsCore.InvokeLLM,

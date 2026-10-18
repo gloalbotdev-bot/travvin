@@ -42,7 +42,18 @@ async function main() {
   assert(roleMatchesIntent('user', 'owner') === false, 'user blocked from owner intent');
   assert(roleMatchesIntent('owner', 'owner') === true, 'owner matches owner intent');
   assert(roleMatchesIntent('admin', 'admin') === true, 'admin matches admin intent');
+  assert(roleMatchesIntent('admin', 'user') === true, 'admin matches user intent');
+  assert(roleMatchesIntent('admin', 'owner') === true, 'admin matches owner intent');
   assert(roleMatchesIntent('owner', 'admin') === false, 'owner blocked from admin intent');
+  assert(roleMatchesIntent('user', 'admin') === false, 'user blocked from admin intent');
+  assert(
+    roleMatchesIntent('user', 'owner', ['user', 'owner']) === true,
+    'dual-access user may owner intent',
+  );
+  assert(
+    roleMatchesIntent('owner', 'user', ['user', 'owner']) === true,
+    'dual-access owner may user intent',
+  );
 
   // requireCustomer middleware shape
   let customerDenied = false;
@@ -77,6 +88,20 @@ async function main() {
     },
   );
   assert(customerOk, 'requireCustomer allows user');
+
+  let adminCustomerOk = false;
+  requireCustomer(
+    { user: { id: 'a1', role: 'admin' } },
+    {
+      status() {
+        return { json() {} };
+      },
+    },
+    () => {
+      adminCustomerOk = true;
+    },
+  );
+  assert(adminCustomerOk, 'requireCustomer allows admin');
 
   const prisma = new PrismaClient();
   const users = createUserStore(prisma);
@@ -141,6 +166,19 @@ async function main() {
   const invited = await asAdmin.json();
   assert(asAdmin.ok, `invite as admin → ok (${asAdmin.status})`);
   assert(invited.role === 'owner', 'admin invite sets owner role');
+
+  // Existing admin must not be demoted via owner invite
+  const demoteAdmin = await fetch(`${base}/api/users/invite`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${adminTok}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email: adminEmail, role: 'owner' }),
+  });
+  assert(demoteAdmin.status === 409, 'invite owner on admin email → 409');
+  const stillAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
+  assert(stillAdmin?.role === 'admin', 'admin role unchanged after demote attempt');
 
   await new Promise((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));

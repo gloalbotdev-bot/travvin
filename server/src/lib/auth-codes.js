@@ -13,15 +13,18 @@ export function pruneAuthCodes() {
   }
 }
 
-/** @param {string} userId */
-export function issueAuthCode(userId) {
+/**
+ * @param {string} userId
+ * @param {string} [sessionRole] active role for this login session (intent)
+ */
+export function issueAuthCode(userId, sessionRole) {
   pruneAuthCodes();
   const code = crypto.randomBytes(24).toString('hex');
-  authCodes.set(code, { userId, at: Date.now() });
+  authCodes.set(code, { userId, sessionRole: sessionRole || null, at: Date.now() });
   return code;
 }
 
-/** @returns {{ userId: string, at: number } | null} */
+/** @returns {{ userId: string, sessionRole: string|null, at: number } | null} */
 export function consumeAuthCode(code) {
   pruneAuthCodes();
   const entry = authCodes.get(code);

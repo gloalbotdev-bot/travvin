@@ -3,10 +3,13 @@ import { api } from '@/api/client';
 import { Check, X, Clock, Trash2, AlertTriangle } from 'lucide-react';
 
 const STATUS_CONFIG = {
-  'ממתינה': { color: 'text-yellow-400 bg-yellow-400/10', icon: Clock },
-  'אושרה': { color: 'text-green-400 bg-green-400/10', icon: Check },
-  'נדחתה': { color: 'text-red-400 bg-red-400/10', icon: X }
+  'ממתינה': { color: 'text-amber-700 bg-amber-50', icon: Clock },
+  'אושרה': { color: 'text-green-700 bg-green-50', icon: Check },
+  'נדחתה': { color: 'text-red-700 bg-red-50', icon: X }
 };
+
+const cardStyle = { background: '#fff', border: '1.5px solid #F0EEE8' };
+const chipStyle = { background: '#F8F7F4', border: '1.5px solid #E8E5E0' };
 
 export default function BookingsList() {
   const [bookings, setBookings] = useState([]);
@@ -55,7 +58,7 @@ export default function BookingsList() {
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
-      <div className="w-8 h-8 border-4 border-gray-700 border-t-[#25D366] rounded-full animate-spin"></div>
+      <div className="w-7 h-7 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
     </div>
   );
 
@@ -64,18 +67,18 @@ export default function BookingsList() {
   return (
     <div dir="rtl">
       <div className="mb-8">
-        <h1 className="text-xl sm:text-2xl font-bold text-white">בקשות הזמנה</h1>
-        <p className="text-gray-400 text-sm mt-1">
+        <h1 className="text-xl sm:text-2xl font-black" style={{ color: '#1A1A1A' }}>בקשות הזמנה</h1>
+        <p className="text-sm mt-1" style={{ color: '#6B7280' }}>
           {bookings.length} בקשות סה"כ
-          {deletionReqCount > 0 && <span className="text-red-400"> · {deletionReqCount} בקשות מחיקה מבעלי צימרים</span>}
+          {deletionReqCount > 0 && <span style={{ color: '#EF4444' }}> · {deletionReqCount} בקשות מחיקה מבעלי צימרים</span>}
         </p>
       </div>
 
       {bookings.length === 0 ? (
-        <div className="text-center py-20">
+        <div className="text-center py-20 rounded-2xl" style={cardStyle}>
           <div className="text-6xl mb-4">📋</div>
-          <h3 className="text-xl font-bold text-white mb-2">אין בקשות הזמנה</h3>
-          <p className="text-gray-400">כשלקוחות ישלחו בקשות, הן יופיעו כאן</p>
+          <h3 className="text-xl font-bold mb-2" style={{ color: '#1A1A1A' }}>אין בקשות הזמנה</h3>
+          <p style={{ color: '#9CA3AF' }}>כשלקוחות ישלחו בקשות, הן יופיעו כאן</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -84,33 +87,32 @@ export default function BookingsList() {
             const Icon = cfg.icon;
             const hasDelReq = !!b.deletion_request_reason;
             return (
-              <div key={b.id} className={`bg-gray-900 border rounded-2xl p-5 ${hasDelReq ? 'border-red-400/50 ring-1 ring-red-400/20' : 'border-gray-800'}`}>
-                {/* Deletion request banner (jumps to top via sort) */}
+              <div key={b.id} className={`rounded-2xl p-5 ${hasDelReq ? 'ring-1 ring-red-200' : ''}`} style={{ ...cardStyle, borderColor: hasDelReq ? 'rgba(239,68,68,0.35)' : '#F0EEE8' }}>
                 {hasDelReq && (
-                  <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-400/30">
-                    <p className="text-red-300 text-sm font-bold flex items-center gap-2 mb-1"><AlertTriangle size={15} /> בקשת מחיקה מבעל הצימר</p>
+                  <div className="mb-4 p-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <p className="text-sm font-bold flex items-center gap-2 mb-1" style={{ color: '#EF4444' }}><AlertTriangle size={15} /> בקשת מחיקה מבעל הצימר</p>
                     {b.deletion_request_reason && b.deletion_request_reason !== '—' && (
-                      <p className="text-gray-300 text-xs whitespace-pre-wrap mb-3">{b.deletion_request_reason}</p>
+                      <p className="text-xs whitespace-pre-wrap mb-3" style={{ color: '#6B7280' }}>{b.deletion_request_reason}</p>
                     )}
                     <div className="flex gap-2 mt-2">
-                      <button onClick={() => handleDelete(b.id)} disabled={deleting === b.id} className="flex-1 py-2 bg-red-500/20 text-red-300 rounded-lg text-sm font-semibold hover:bg-red-500/30 disabled:opacity-50">
+                      <button onClick={() => handleDelete(b.id)} disabled={deleting === b.id} className="flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" style={{ background: 'rgba(239,68,68,0.1)', color: '#EF4444' }}>
                         <Trash2 size={13} className="inline ml-1" /> {deleting === b.id ? 'מוחק...' : 'אשר מחיקה'}
                       </button>
-                      <button onClick={() => dismissDeletion(b)} className="flex-1 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700">דחה בקשה</button>
+                      <button onClick={() => dismissDeletion(b)} className="flex-1 py-2 rounded-lg text-sm" style={{ background: '#F8F7F4', color: '#6B7280' }}>דחה בקשה</button>
                     </div>
                   </div>
                 )}
 
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
                   <div className="min-w-0">
-                    <h3 className="font-bold text-white">{b.guest_name}</h3>
-                    <p className="text-gray-400 text-sm">{b.guest_phone}</p>
+                    <h3 className="font-bold" style={{ color: '#1A1A1A' }}>{b.guest_name}</h3>
+                    <p className="text-sm" style={{ color: '#6B7280' }}>{b.guest_phone}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <button onClick={() => handleDelete(b.id)} disabled={deleting === b.id} title="מחק הזמנה" className="flex items-center gap-1 text-red-400 bg-red-500/10 hover:bg-red-500/20 px-2.5 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50">
+                    <button onClick={() => handleDelete(b.id)} disabled={deleting === b.id} title="מחק הזמנה" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50" style={{ background: 'rgba(239,68,68,0.08)', color: '#EF4444' }}>
                       <Trash2 size={13} /> מחק
                     </button>
-                    {b.calendar_event_id && <span className="text-xs text-blue-400 bg-blue-400/10 px-2 py-1 rounded-full">📅 ביומן</span>}
+                    {b.calendar_event_id && <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(59,130,246,0.1)', color: '#2563EB' }}>📅 ביומן</span>}
                     <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${cfg.color}`}>
                       <Icon size={12} />
                       <span>{b.status}</span>
@@ -119,21 +121,21 @@ export default function BookingsList() {
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                  <div className="bg-gray-800 rounded-xl p-3">
-                    <div className="text-xs text-gray-500 mb-1">צימר</div>
-                    <div className="text-sm font-medium text-white">{b.zimmer_name}</div>
+                  <div className="rounded-xl p-3" style={chipStyle}>
+                    <div className="text-xs mb-1" style={{ color: '#9CA3AF' }}>צימר</div>
+                    <div className="text-sm font-medium" style={{ color: '#1A1A1A' }}>{b.zimmer_name}</div>
                   </div>
-                  <div className="bg-gray-800 rounded-xl p-3">
-                    <div className="text-xs text-gray-500 mb-1">כניסה</div>
-                    <div className="text-sm font-medium text-white">{b.check_in}</div>
+                  <div className="rounded-xl p-3" style={chipStyle}>
+                    <div className="text-xs mb-1" style={{ color: '#9CA3AF' }}>כניסה</div>
+                    <div className="text-sm font-medium" style={{ color: '#1A1A1A' }}>{b.check_in}</div>
                   </div>
-                  <div className="bg-gray-800 rounded-xl p-3">
-                    <div className="text-xs text-gray-500 mb-1">יציאה</div>
-                    <div className="text-sm font-medium text-white">{b.check_out}</div>
+                  <div className="rounded-xl p-3" style={chipStyle}>
+                    <div className="text-xs mb-1" style={{ color: '#9CA3AF' }}>יציאה</div>
+                    <div className="text-sm font-medium" style={{ color: '#1A1A1A' }}>{b.check_out}</div>
                   </div>
-                  <div className="bg-gray-800 rounded-xl p-3">
-                    <div className="text-xs text-gray-500 mb-1">אורחים</div>
-                    <div className="text-sm font-medium text-white">{b.num_guests}</div>
+                  <div className="rounded-xl p-3" style={chipStyle}>
+                    <div className="text-xs mb-1" style={{ color: '#9CA3AF' }}>אורחים</div>
+                    <div className="text-sm font-medium" style={{ color: '#1A1A1A' }}>{b.num_guests}</div>
                   </div>
                 </div>
 
@@ -142,13 +144,15 @@ export default function BookingsList() {
                     <button
                       onClick={() => updateStatus(b, 'אושרה')}
                       disabled={calendarLoading === b.id}
-                      className="flex-1 bg-green-500/20 text-green-400 hover:bg-green-500/30 py-2 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="flex-1 py-2 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                      style={{ background: 'rgba(34,197,94,0.12)', color: '#16A34A' }}
                     >
                       <Check size={14} /> {calendarLoading === b.id ? 'מוסיף ליומן...' : 'אשר הזמנה'}
                     </button>
                     <button
                       onClick={() => updateStatus(b, 'נדחתה')}
-                      className="flex-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 py-2 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 py-2 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                      style={{ background: 'rgba(239,68,68,0.08)', color: '#EF4444' }}
                     >
                       <X size={14} /> דחה הזמנה
                     </button>
@@ -156,7 +160,7 @@ export default function BookingsList() {
                 )}
 
                 {b.cancel_request_reason && (
-                  <div className="mt-3 text-xs text-yellow-300 bg-yellow-500/10 border border-yellow-400/20 rounded-lg px-3 py-2 flex items-center gap-2">
+                  <div className="mt-3 text-xs rounded-lg px-3 py-2 flex items-center gap-2" style={{ background: 'rgba(245,158,11,0.1)', color: '#B45309', border: '1px solid rgba(245,158,11,0.2)' }}>
                     <AlertTriangle size={13} /> בקשת ביטול מהלקוח: {b.cancel_request_reason}
                   </div>
                 )}

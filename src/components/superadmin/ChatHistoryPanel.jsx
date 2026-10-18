@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { Sparkles, ChevronDown, ChevronUp, MessageSquare, X, RefreshCw } from 'lucide-react';
+import { Sparkles, ChevronDown, ChevronUp, MessageSquare, RefreshCw } from 'lucide-react';
+
+const cardStyle = { background: '#fff', border: '1.5px solid #F0EEE8' };
 
 export default function ChatHistoryPanel() {
   const [sessions, setSessions] = useState([]);
@@ -38,17 +40,23 @@ export default function ChatHistoryPanel() {
     return acc;
   }, {});
 
-  if (loading) return <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-gray-700 border-t-purple-500 rounded-full animate-spin"></div></div>;
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-7 h-7 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const userGroups = Object.entries(byUser);
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-white mb-1">היסטוריית התכתבויות</h1>
-      <p className="text-gray-400 text-sm mb-8">{userGroups.length} לקוחות · {sessions.length} שיחות</p>
+      <h1 className="text-xl sm:text-2xl font-black mb-1" style={{ color: '#1A1A1A' }}>היסטוריית התכתבויות</h1>
+      <p className="text-sm mb-8" style={{ color: '#6B7280' }}>{userGroups.length} משתמשים · {sessions.length} שיחות</p>
 
       {userGroups.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
+        <div className="text-center py-20 rounded-2xl" style={cardStyle}>
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg, #EAD5FF 0%, #FFD4C2 100%)' }}>
             <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M6 6h20a2 2 0 012 2v14a2 2 0 01-2 2H10l-6 4V8a2 2 0 012-2z" stroke="#9CA3AF" strokeWidth="1.8" strokeLinejoin="round"/><path d="M10 13h12M10 18h7" stroke="#9CA3AF" strokeWidth="1.8" strokeLinecap="round"/></svg>
           </div>
@@ -57,49 +65,48 @@ export default function ChatHistoryPanel() {
       ) : (
         <div className="space-y-4">
           {userGroups.map(([userId, group]) => (
-            <div key={userId} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-              {/* User header */}
+            <div key={userId} className="rounded-2xl overflow-hidden" style={cardStyle}>
               <button
                 onClick={() => setExpanded(p => ({ ...p, [userId]: !p[userId] }))}
-                className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-800/50 transition-colors"
+                className="w-full flex items-center justify-between px-5 py-4 transition-colors"
+                style={{ background: expanded[userId] ? '#F8F7F4' : 'transparent' }}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-purple-600/30 flex items-center justify-center text-purple-400 font-bold text-sm">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm" style={{ background: 'rgba(249,115,22,0.12)', color: '#EA580C' }}>
                     {group.name[0]}
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-white text-sm">{group.name}</p>
-                    <p className="text-gray-500 text-xs">{group.email} · {group.sessions.length} שיחות</p>
+                    <p className="font-semibold text-sm" style={{ color: '#1A1A1A' }}>{group.name}</p>
+                    <p className="text-xs" style={{ color: '#9CA3AF' }}>{group.email} · {group.sessions.length} שיחות</p>
                   </div>
                 </div>
-                {expanded[userId] ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                {expanded[userId] ? <ChevronUp size={16} style={{ color: '#9CA3AF' }} /> : <ChevronDown size={16} style={{ color: '#9CA3AF' }} />}
               </button>
 
-              {/* Sessions */}
               {expanded[userId] && (
-                <div className="border-t border-gray-800 divide-y divide-gray-800">
+                <div style={{ borderTop: '1px solid #F0EEE8' }}>
                   {group.sessions.map(s => (
-                    <div key={s.id} className="px-5 py-4">
+                    <div key={s.id} className="px-5 py-4" style={{ borderTop: '1px solid #F0EEE8' }}>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs" style={{ color: '#9CA3AF' }}>
                           {new Date(s.created_date).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           {' · '}{(s.messages || []).length} הודעות
                           {s.zimmer_ids_shown?.length ? ` · ${s.zimmer_ids_shown.length} צימרים הוצגו` : ''}
                         </span>
-                        {s.booking_created && <span className="text-xs bg-green-400/10 text-green-400 px-2 py-0.5 rounded-full">✅ הזמנה</span>}
+                        {s.booking_created && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.1)', color: '#16A34A' }}>✅ הזמנה</span>}
                       </div>
 
-                      {/* Summary */}
                       {s.summary ? (
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-start gap-2 flex-1 min-w-0">
-                            <Sparkles size={13} className="text-purple-400 mt-0.5 flex-shrink-0" />
-                            <p className="text-gray-300 text-sm leading-relaxed">{s.summary}</p>
+                            <Sparkles size={13} className="mt-0.5 flex-shrink-0" style={{ color: '#F97316' }} />
+                            <p className="text-sm leading-relaxed" style={{ color: '#4B5563' }}>{s.summary}</p>
                           </div>
                           <button
                             onClick={() => generateSummary(s)}
                             disabled={summarizing[s.id]}
-                            className="flex items-center gap-1.5 text-xs bg-purple-600/10 text-purple-400 hover:bg-purple-600/20 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50 flex-shrink-0"
+                            style={{ background: 'rgba(249,115,22,0.1)', color: '#EA580C' }}
                           >
                             <RefreshCw size={12} className={summarizing[s.id] ? 'animate-spin' : ''} />
                             {summarizing[s.id] ? '...' : 'רענן'}
@@ -107,11 +114,12 @@ export default function ChatHistoryPanel() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-3">
-                          <p className="text-gray-500 text-sm italic flex-1">אין סיכום</p>
+                          <p className="text-sm italic flex-1" style={{ color: '#9CA3AF' }}>אין סיכום</p>
                           <button
                             onClick={() => generateSummary(s)}
                             disabled={summarizing[s.id]}
-                            className="flex items-center gap-1.5 text-xs bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
+                            style={{ background: 'rgba(249,115,22,0.1)', color: '#EA580C' }}
                           >
                             <Sparkles size={12} />
                             {summarizing[s.id] ? 'מסכם...' : 'סכם עם AI'}
@@ -119,11 +127,11 @@ export default function ChatHistoryPanel() {
                         </div>
                       )}
 
-                      {/* View full conversation */}
-                      <div className="mt-3 pt-3 border-t border-gray-800/50">
+                      <div className="mt-3 pt-3" style={{ borderTop: '1px solid #F0EEE8' }}>
                         <button
                           onClick={() => setOpenChat(p => p === s.id ? null : s.id)}
-                          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
+                          className="flex items-center gap-1.5 text-xs transition-colors"
+                          style={{ color: '#6B7280' }}
                         >
                           <MessageSquare size={12} />
                           {openChat === s.id ? 'סגור שיחה' : 'פתח שיחה מלאה'}
@@ -131,16 +139,21 @@ export default function ChatHistoryPanel() {
                         </button>
 
                         {openChat === s.id && (
-                          <div className="mt-3 space-y-2 bg-gray-950/50 rounded-xl p-3 border border-gray-800 max-h-96 overflow-y-auto">
+                          <div className="mt-3 space-y-2 rounded-xl p-3 max-h-96 overflow-y-auto" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0' }}>
                             {(s.messages || []).length === 0 ? (
-                              <p className="text-gray-600 text-xs text-center py-4">אין הודעות בשיחה זו</p>
+                              <p className="text-xs text-center py-4" style={{ color: '#9CA3AF' }}>אין הודעות בשיחה זו</p>
                             ) : (
                               (s.messages || []).map((m, i) => {
                                 const isUser = m.role === 'user';
                                 return (
                                   <div key={i} className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
-                                    <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${isUser ? 'bg-gray-800 text-gray-200' : 'bg-purple-600/20 text-purple-200 border border-purple-600/30'}`}>
-                                      <div className="text-[10px] mb-0.5 opacity-60">{isUser ? 'לקוח' : 'בוט'}{m.time ? ` · ${m.time}` : ''}</div>
+                                    <div
+                                      className="max-w-[80%] rounded-xl px-3 py-2 text-sm"
+                                      style={isUser
+                                        ? { background: '#fff', color: '#1A1A1A', border: '1.5px solid #E8E5E0' }
+                                        : { background: 'rgba(249,115,22,0.1)', color: '#9A3412', border: '1.5px solid rgba(249,115,22,0.25)' }}
+                                    >
+                                      <div className="text-[10px] mb-0.5 opacity-60">{isUser ? 'משתמש' : 'בוט'}{m.time ? ` · ${m.time}` : ''}</div>
                                       <div className="whitespace-pre-wrap break-words">{m.content}</div>
                                     </div>
                                   </div>

@@ -39,6 +39,8 @@ model User {
   passwordHash  String?  @map("password_hash")
   fullName      String?  @map("full_name")
   role          String   @default("user")
+  /// Extra login intents besides `role` (e.g. ["user","owner"]). null = exclusive role only.
+  allowedRoles  Json?    @map("allowed_roles")
   phone         String?
   businessName  String?  @map("business_name")
   notifications Json?

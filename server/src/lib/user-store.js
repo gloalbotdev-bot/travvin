@@ -1,13 +1,17 @@
 /**
  * User persistence + public shapes for auth.me() and User entity.
  */
+import { parseAllowedRoles, resolveSessionRole } from './auth-role-intent.js';
 
-export function userToAuth(user) {
+export function userToAuth(user, sessionRole) {
+  const role = sessionRole || user.role;
+  const allowed = parseAllowedRoles(user.allowedRoles);
   return {
     id: user.id,
     email: user.email,
     full_name: user.fullName ?? '',
-    role: user.role,
+    role,
+    allowed_roles: allowed.length ? allowed : null,
     phone: user.phone ?? null,
     business_name: user.businessName ?? null,
     notifications: user.notifications ?? null,
@@ -15,8 +19,10 @@ export function userToAuth(user) {
 }
 
 export function userToEntity(user) {
+  const allowed = parseAllowedRoles(user.allowedRoles);
   return {
     ...userToAuth(user),
+    allowed_roles: allowed.length ? allowed : null,
     created_date: user.createdDate.toISOString(),
     updated_date: user.updatedDate.toISOString(),
   };
@@ -63,6 +69,7 @@ export function createUserStore(prisma) {
           passwordHash: data.passwordHash ?? null,
           fullName: data.fullName ?? data.full_name ?? null,
           role: data.role ?? 'user',
+          allowedRoles: data.allowedRoles ?? data.allowed_roles ?? undefined,
           googleId: data.googleId ?? null,
           emailVerified: data.emailVerified ?? false,
           registered: data.registered ?? true,
@@ -80,6 +87,8 @@ export function createUserStore(prisma) {
       }
       const patch = {};
       if (data.role !== undefined) patch.role = data.role;
+      if (data.allowedRoles !== undefined) patch.allowedRoles = data.allowedRoles;
+      if (data.allowed_roles !== undefined) patch.allowedRoles = data.allowed_roles;
       if (data.full_name !== undefined) patch.fullName = data.full_name;
       if (data.fullName !== undefined) patch.fullName = data.fullName;
       if (data.phone !== undefined) patch.phone = data.phone;
@@ -108,6 +117,12 @@ export function createUserStore(prisma) {
       const normalized = email.toLowerCase();
       let u = await prisma.user.findUnique({ where: { email: normalized } });
       if (u) {
+        // Never demote an existing admin via invite (owner/user invite on admin email).
+        if (u.role === 'admin' && role !== 'admin') {
+          const err = new Error('Cannot change role of an existing admin via invite');
+          err.status = 409;
+          throw err;
+        }
         u = await prisma.user.update({
           where: { id: u.id },
           data: { role, registered: true },
@@ -126,6 +141,9 @@ export function createUserStore(prisma) {
     },
 
     toAuth: userToAuth,
+    toAuthWithSession(row, jwtRole) {
+      return userToAuth(row, resolveSessionRole(row, jwtRole));
+    },
   };
 }
 

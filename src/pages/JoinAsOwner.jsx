@@ -29,7 +29,12 @@ export default function JoinAsOwner() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(160deg, #EAD5FF 0%, #FFD4C2 45%, #C5DEFF 100%)', fontFamily: 'Heebo, sans-serif' }} dir="rtl">
       {mismatchAs && (
-        <RoleMismatchModal registeredAs={mismatchAs} onDismiss={dismissMismatch} />
+        <RoleMismatchModal
+          registeredAs={mismatchAs}
+          attemptedIntent="owner"
+          toRole="owner"
+          onDismiss={dismissMismatch}
+        />
       )}
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">

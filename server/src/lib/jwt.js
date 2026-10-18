@@ -23,6 +23,50 @@ export function signToken(user) {
 }
 
 /**
+ * Short-lived token so a role-mismatch screen can submit a RoleAccessRequest
+ * without an authenticated session.
+ * @param {{ userId: string, email: string, fromRole: string, toRole: string }} payload
+ */
+export function signRoleAccessRequestToken(payload) {
+  return jwt.sign(
+    {
+      purpose: 'role_access_request',
+      userId: payload.userId,
+      email: payload.email,
+      fromRole: payload.fromRole,
+      toRole: payload.toRole,
+    },
+    secret(),
+    { expiresIn: '30m' },
+  );
+}
+
+/**
+ * @returns {{ userId: string, email: string, fromRole: string, toRole: string }|null}
+ */
+export function verifyRoleAccessRequestToken(token) {
+  try {
+    const payload = jwt.verify(token, secret());
+    if (
+      payload.purpose !== 'role_access_request' ||
+      !payload.userId ||
+      !payload.fromRole ||
+      !payload.toRole
+    ) {
+      return null;
+    }
+    return {
+      userId: String(payload.userId),
+      email: String(payload.email || ''),
+      fromRole: String(payload.fromRole),
+      toRole: String(payload.toRole),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Short-lived signed state for calendar OAuth CSRF + owner binding.
  * @param {{ ownerId: string, redirect?: string }} payload
  */

@@ -82,14 +82,14 @@ const AuthenticatedApp = () => {
       <Route path="/admin-login" element={<AdminLogin />} />
       <Route path="/discover" element={<Discover />} />
       <Route path="/discover/owner/:ownerId" element={<OwnerProfile />} />
-      <Route path="/chat" element={<RoleGate allow={['user']} allowGuest><CustomerChat /></RoleGate>} />
-      <Route path="/promotions" element={<RoleGate allow={['user']} allowGuest><Promotions /></RoleGate>} />
-      <Route path="/owner" element={<RoleGate allow={['owner']}><OwnerPanel /></RoleGate>} />
+      <Route path="/chat" element={<RoleGate allow={['user', 'admin']} allowGuest><CustomerChat /></RoleGate>} />
+      <Route path="/promotions" element={<RoleGate allow={['user', 'admin']} allowGuest><Promotions /></RoleGate>} />
+      <Route path="/owner" element={<RoleGate allow={['owner', 'admin']}><OwnerPanel /></RoleGate>} />
       <Route path="/superadmin" element={<SuperAdminPanel />} />
       <Route path="/join" element={<JoinAsOwner />} />
       <Route path="/account-settings" element={<AccountSettings />} />
-      <Route path="/customer-portal" element={<RoleGate allow={['user']}><CustomerPortal /></RoleGate>} />
-      <Route path="/desktop-search" element={<RoleGate allow={['user']} allowGuest><div className="h-screen"><DesktopSearch /></div></RoleGate>} />
+      <Route path="/customer-portal" element={<RoleGate allow={['user', 'admin']}><CustomerPortal /></RoleGate>} />
+      <Route path="/desktop-search" element={<RoleGate allow={['user', 'admin']} allowGuest><div className="h-screen"><DesktopSearch /></div></RoleGate>} />
       <Route path="/CustomerChat" element={<Navigate to="/chat" replace />} />
       <Route path="/customer-chat" element={<Navigate to="/chat" replace />} />
       <Route path="/CustomerPortal" element={<Navigate to="/customer-portal" replace />} />

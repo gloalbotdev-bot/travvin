@@ -82,7 +82,15 @@ export default function SuperAdminDashboard({ onNavigate }) {
         byStatus, deletionReq, cancelReq, revenue,
         months, topZimmers,
         avgRating, activePromos, openQuestions,
-        recentBookings: bookings.slice(0, 6),
+        recentBookings: (() => {
+          const seen = new Set();
+          return bookings.filter((b) => {
+            const key = b.id || `${b.guest_name}|${b.check_in}|${b.check_out}|${b.zimmer_id || b.zimmer_name}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          }).slice(0, 6);
+        })(),
         recentReviews: reviews.slice(0, 4),
         sessionsCount: sessions.length,
       });

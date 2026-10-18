@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "מזהה משתמש"
+    },
+    "user_email": {
+      "type": "string",
+      "format": "email",
+      "title": "אימייל"
+    },
+    "from_role": {
+      "type": "string",
+      "enum": ["user", "owner"],
+      "title": "תפקיד נוכחי"
+    },
+    "to_role": {
+      "type": "string",
+      "enum": ["user", "owner"],
+      "title": "תפקיד מבוקש"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "approved_switch", "approved_both", "rejected"],
+      "default": "pending",
+      "title": "סטטוס"
+    }
+  },
+  "required": ["user_id", "user_email", "from_role", "to_role", "status"],
+  "name": "RoleAccessRequest",
+  "rls": {
+    "read": { "user_condition": { "role": "admin" } },
+    "create": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

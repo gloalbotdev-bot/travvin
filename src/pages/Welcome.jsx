@@ -19,6 +19,8 @@ function authErrorMessage(code) {
 
 export default function Welcome() {
   const [mismatchAs, setMismatchAs] = useState(null);
+  const [mismatchIntent, setMismatchIntent] = useState(null);
+  const [requestToken, setRequestToken] = useState(null);
   const [banner, setBanner] = useState(null);
 
   useEffect(() => {
@@ -27,6 +29,8 @@ export default function Welcome() {
     if (!err) return;
     if (err === 'role_mismatch') {
       setMismatchAs(sp.get('as') || 'user');
+      setMismatchIntent(sp.get('intent') || null);
+      setRequestToken(sp.get('request_token') || null);
     } else {
       setBanner(authErrorMessage(err) || 'אירעה שגיאה בהתחברות.');
     }
@@ -42,7 +46,14 @@ export default function Welcome() {
       {mismatchAs && (
         <RoleMismatchModal
           registeredAs={mismatchAs}
-          onDismiss={() => setMismatchAs(null)}
+          attemptedIntent={mismatchIntent}
+          requestToken={requestToken}
+          toRole={mismatchIntent}
+          onDismiss={() => {
+            setMismatchAs(null);
+            setMismatchIntent(null);
+            setRequestToken(null);
+          }}
         />
       )}
 
