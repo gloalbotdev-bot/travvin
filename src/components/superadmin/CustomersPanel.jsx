@@ -87,52 +87,52 @@ export default function CustomersPanel() {
 
     return (
       <div>
-        <button onClick={() => setSelected(null)} className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 text-sm transition-colors">
+        <button onClick={() => setSelected(null)} className="flex items-center gap-2 mb-6 text-sm transition-colors" style={{ color: '#6B7280' }}>
           <ChevronRight size={16} /> חזרה לרשימה
         </button>
 
         <div className="flex items-center gap-4 mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-purple-600/30 flex items-center justify-center text-2xl font-bold text-purple-300">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold" style={{ background: 'rgba(249,115,22,0.12)', color: '#EA580C' }}>
             {selected.full_name?.[0] || '?'}
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-white">{selected.full_name || 'ללא שם'}</h1>
-            <p className="text-gray-400 text-sm">{selected.email}</p>
+            <h1 className="text-xl sm:text-2xl font-black" style={{ color: '#1A1A1A' }}>{selected.full_name || 'ללא שם'}</h1>
+            <p className="text-sm" style={{ color: '#6B7280' }}>{selected.email}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Profile */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-            <h2 className="text-white font-semibold mb-4 flex items-center gap-2"><Star size={16} className="text-purple-400" /> פרופיל</h2>
+          <div className="rounded-2xl p-5" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
+            <h2 className="font-semibold mb-4 flex items-center gap-2" style={{ color: '#1A1A1A' }}><Star size={16} style={{ color: '#F97316' }} /> פרופיל</h2>
             {profile ? (
               <div className="space-y-3 text-sm">
-                {profile.phone && <div className="flex items-center gap-2 text-gray-300"><Phone size={14} className="text-gray-500" />{profile.phone}</div>}
-                {profile.preferred_regions && <div className="flex items-center gap-2 text-gray-300"><MapPin size={14} className="text-gray-500" />{profile.preferred_regions}</div>}
-                {profile.num_guests_usual && <div className="text-gray-400">בדרך כלל <span className="text-white font-medium">{profile.num_guests_usual}</span> אורחים</div>}
+                {profile.phone && <div className="flex items-center gap-2" style={{ color: '#4B5563' }}><Phone size={14} style={{ color: '#9CA3AF' }} />{profile.phone}</div>}
+                {profile.preferred_regions && <div className="flex items-center gap-2" style={{ color: '#4B5563' }}><MapPin size={14} style={{ color: '#9CA3AF' }} />{profile.preferred_regions}</div>}
+                {profile.num_guests_usual && <div style={{ color: '#6B7280' }}>בדרך כלל <span className="font-medium" style={{ color: '#1A1A1A' }}>{profile.num_guests_usual}</span> אורחים</div>}
                 {profile.vacation_preferences && (
-                  <div className="mt-3 p-3 bg-gray-800 rounded-xl text-gray-300 text-xs leading-relaxed">
+                  <div className="mt-3 p-3 rounded-xl text-xs leading-relaxed" style={{ background: '#F8F7F4', color: '#4B5563' }}>
                     {profile.vacation_preferences}
                   </div>
                 )}
               </div>
             ) : (
-              <p className="text-gray-500 text-sm">לא מילא פרופיל עדיין</p>
+              <p className="text-sm" style={{ color: '#9CA3AF' }}>לא מילא פרופיל עדיין</p>
             )}
           </div>
 
           {/* Bookings */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-            <h2 className="text-white font-semibold mb-4 flex items-center gap-2"><Calendar size={16} className="text-purple-400" /> הזמנות ({userBookings.length})</h2>
+          <div className="rounded-2xl p-5" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
+            <h2 className="font-semibold mb-4 flex items-center gap-2" style={{ color: '#1A1A1A' }}><Calendar size={16} style={{ color: '#F97316' }} /> הזמנות ({userBookings.length})</h2>
             {userBookings.length === 0 ? (
-              <p className="text-gray-500 text-sm">אין הזמנות</p>
+              <p className="text-sm" style={{ color: '#9CA3AF' }}>אין הזמנות</p>
             ) : (
               <div className="space-y-3">
                 {userBookings.map(b => (
-                  <div key={b.id} className="p-3 bg-gray-800 rounded-xl text-xs">
-                    <p className="text-white font-medium">{b.zimmer_name}</p>
-                    <p className="text-gray-400 mt-0.5">{b.check_in} → {b.check_out}</p>
-                    <span className={`mt-1 inline-block px-2 py-0.5 rounded-full text-xs ${b.status === 'אושרה' ? 'bg-green-400/10 text-green-400' : b.status === 'נדחתה' ? 'bg-red-400/10 text-red-400' : 'bg-yellow-400/10 text-yellow-400'}`}>
+                  <div key={b.id} className="p-3 rounded-xl text-xs" style={{ background: '#F8F7F4' }}>
+                    <p className="font-medium" style={{ color: '#1A1A1A' }}>{b.zimmer_name}</p>
+                    <p className="mt-0.5" style={{ color: '#6B7280' }}>{b.check_in} → {b.check_out}</p>
+                    <span className={`mt-1 inline-block px-2 py-0.5 rounded-full text-xs ${b.status === 'אושרה' ? 'bg-green-50 text-green-700' : b.status === 'נדחתה' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
                       {b.status}
                     </span>
                   </div>
@@ -142,21 +142,21 @@ export default function CustomersPanel() {
           </div>
 
           {/* Chat Sessions */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-            <h2 className="text-white font-semibold mb-4 flex items-center gap-2"><MessageSquare size={16} className="text-purple-400" /> שיחות ({userSessions.length})</h2>
+          <div className="rounded-2xl p-5" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
+            <h2 className="font-semibold mb-4 flex items-center gap-2" style={{ color: '#1A1A1A' }}><MessageSquare size={16} style={{ color: '#F97316' }} /> שיחות ({userSessions.length})</h2>
             {userSessions.length === 0 ? (
-              <p className="text-gray-500 text-sm">אין שיחות</p>
+              <p className="text-sm" style={{ color: '#9CA3AF' }}>אין שיחות</p>
             ) : (
               <div className="space-y-3 max-h-64 overflow-y-auto">
                 {userSessions.map(s => (
-                  <div key={s.id} className="p-3 bg-gray-800 rounded-xl text-xs">
-                    <p className="text-gray-400">{new Date(s.created_date).toLocaleDateString('he-IL')}</p>
+                  <div key={s.id} className="p-3 rounded-xl text-xs" style={{ background: '#F8F7F4' }}>
+                    <p style={{ color: '#6B7280' }}>{new Date(s.created_date).toLocaleDateString('he-IL')}</p>
                     {s.summary ? (
-                      <p className="text-gray-300 mt-1 leading-relaxed">{s.summary}</p>
+                      <p className="mt-1 leading-relaxed" style={{ color: '#4B5563' }}>{s.summary}</p>
                     ) : (
-                      <p className="text-gray-500 mt-1">{s.messages?.length || 0} הודעות</p>
+                      <p className="mt-1" style={{ color: '#9CA3AF' }}>{s.messages?.length || 0} הודעות</p>
                     )}
-                    {s.booking_created && <span className="mt-1 inline-block bg-green-400/10 text-green-400 px-2 py-0.5 rounded-full">הזמנה נוצרה ✓</span>}
+                    {s.booking_created && <span className="mt-1 inline-block bg-green-50 text-green-700 px-2 py-0.5 rounded-full">הזמנה נוצרה ✓</span>}
                   </div>
                 ))}
               </div>
@@ -171,25 +171,26 @@ export default function CustomersPanel() {
     <div>
       {deletingCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div className="rounded-2xl p-7 max-w-sm w-full mx-4 text-center bg-gray-900 border border-gray-700" dir="rtl">
-            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 bg-red-500/10">
-              <Trash2 size={22} className="text-red-400" />
+          <div className="rounded-2xl p-7 max-w-sm w-full mx-4 text-center" dir="rtl" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(239,68,68,0.1)' }}>
+              <Trash2 size={22} style={{ color: '#EF4444' }} />
             </div>
-            <h3 className="text-lg font-black mb-1 text-white">מחיקת לקוח</h3>
-            <p className="text-sm mb-1 text-gray-400">האם למחוק את <strong className="text-white">{deletingCustomer.full_name || deletingCustomer.email}</strong>?</p>
-            <p className="text-xs mb-6 text-red-400">פעולה זו אינה הפיכה</p>
+            <h3 className="text-lg font-black mb-1" style={{ color: '#1A1A1A' }}>מחיקת לקוח</h3>
+            <p className="text-sm mb-1" style={{ color: '#6B7280' }}>האם למחוק את <strong style={{ color: '#1A1A1A' }}>{deletingCustomer.full_name || deletingCustomer.email}</strong>?</p>
+            <p className="text-xs mb-6" style={{ color: '#EF4444' }}>פעולה זו אינה הפיכה</p>
             <div className="flex gap-3">
-              <button onClick={() => setDeletingCustomer(null)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-gray-700 text-gray-400">ביטול</button>
-              <button onClick={() => handleDeleteCustomer(deletingCustomer)} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-red-500 hover:bg-red-600">מחק</button>
+              <button onClick={() => setDeletingCustomer(null)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ border: '1.5px solid #E8E5E0', color: '#6B7280' }}>ביטול</button>
+              <button onClick={() => handleDeleteCustomer(deletingCustomer)} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: '#EF4444' }}>מחק</button>
             </div>
           </div>
         </div>
       )}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-white">לקוחות ({filtered.length})</h1>
+        <h1 className="text-xl sm:text-2xl font-black" style={{ color: '#1A1A1A' }}>לקוחות ({filtered.length})</h1>
         <button
           onClick={() => setShowInvite(true)}
-          className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-full sm:w-auto"
+          className="flex items-center justify-center gap-2 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-opacity hover:opacity-90 w-full sm:w-auto"
+          style={{ background: '#F97316' }}
         >
           <UserPlus size={16} /> הוסף לקוח חדש
         </button>
@@ -197,47 +198,51 @@ export default function CustomersPanel() {
 
       {/* Invite Modal */}
       {showInvite && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-md" dir="rtl">
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
+          <div className="rounded-2xl p-6 w-full max-w-md" dir="rtl" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-white font-bold text-lg">הוספת לקוח חדש</h2>
-              <button onClick={() => { setShowInvite(false); setInviteMsg(''); }} className="text-gray-400 hover:text-white"><X size={20} /></button>
+              <h2 className="font-bold text-lg" style={{ color: '#1A1A1A' }}>הוספת לקוח חדש</h2>
+              <button onClick={() => { setShowInvite(false); setInviteMsg(''); }} style={{ color: '#9CA3AF' }}><X size={20} /></button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1.5">מייל *</label>
+                <label className="block text-sm mb-1.5" style={{ color: '#6B7280' }}>מייל *</label>
                 <input
                   type="email"
                   value={inviteForm.email}
                   onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="email@example.com"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-purple-500"
+                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
+                  style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A' }}
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1.5">שם מלא (אופציונלי)</label>
+                <label className="block text-sm mb-1.5" style={{ color: '#6B7280' }}>שם מלא (אופציונלי)</label>
                 <input
                   value={inviteForm.full_name}
                   onChange={e => setInviteForm(f => ({ ...f, full_name: e.target.value }))}
                   placeholder="שם הלקוח"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-purple-500"
+                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
+                  style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A' }}
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1.5">טלפון (אופציונלי)</label>
+                <label className="block text-sm mb-1.5" style={{ color: '#6B7280' }}>טלפון (אופציונלי)</label>
                 <input
                   value={inviteForm.phone}
                   onChange={e => setInviteForm(f => ({ ...f, phone: e.target.value }))}
                   placeholder="050-0000000"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-purple-500"
+                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
+                  style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A' }}
                 />
               </div>
-              <p className="text-gray-500 text-xs">הלקוח יקבל הזמנה למייל ויוכל להתחבר עם גוגל. אם המייל שלו ב-Google תואם — הוא יכנס לדף האישי שלו מיד.</p>
-              {inviteMsg && <p className="text-sm text-center">{inviteMsg}</p>}
+              <p className="text-xs" style={{ color: '#9CA3AF' }}>הלקוח יקבל הזמנה למייל ויוכל להתחבר עם גוגל. אם המייל שלו ב-Google תואם — הוא יכנס לדף האישי שלו מיד.</p>
+              {inviteMsg && <p className="text-sm text-center" style={{ color: '#6B7280' }}>{inviteMsg}</p>}
               <button
                 onClick={handleInvite}
                 disabled={inviting || !inviteForm.email.trim()}
-                className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+                className="w-full py-3 text-white rounded-xl font-bold transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={{ background: '#F97316' }}
               >
                 {inviting ? 'שולח הזמנה...' : 'שלח הזמנה'}
               </button>
@@ -248,21 +253,22 @@ export default function CustomersPanel() {
 
       {/* Search */}
       <div className="relative mb-6">
-        <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: '#9CA3AF' }} />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="חיפוש לפי שם או מייל..."
-          className="w-full bg-gray-900 border border-gray-800 rounded-xl pr-9 pl-4 py-2.5 text-white text-sm outline-none focus:border-purple-500"
+          className="w-full rounded-xl pr-9 pl-4 py-2.5 text-sm outline-none"
+          style={{ background: '#fff', border: '1.5px solid #E8E5E0', color: '#1A1A1A' }}
         />
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-4 border-gray-700 border-t-purple-500 rounded-full animate-spin"></div>
+          <div className="w-7 h-7 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 rounded-2xl" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg, #EAD5FF 0%, #FFD4C2 100%)' }}>
             <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="11" cy="10" r="4" stroke="#9CA3AF" strokeWidth="1.8"/><circle cx="21" cy="10" r="4" stroke="#9CA3AF" strokeWidth="1.8"/><path d="M3 26c0-4.4 3.6-8 8-8h10c4.4 0 8 3.6 8 8" stroke="#9CA3AF" strokeWidth="1.8" strokeLinecap="round"/></svg>
           </div>
@@ -274,25 +280,25 @@ export default function CustomersPanel() {
             const profile = getProfile(c.id);
             const sessCount = getUserSessions(c.id).length;
             return (
-              <div key={c.id} className="bg-gray-900 border border-gray-800 hover:border-purple-600/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
+              <div key={c.id} className="rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
                 <button onClick={() => setSelected(c)} className="flex items-center gap-4 flex-1 text-right">
-                  <div className="w-10 h-10 rounded-xl bg-purple-600/20 flex items-center justify-center font-bold text-purple-300 flex-shrink-0">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold flex-shrink-0" style={{ background: 'rgba(249,115,22,0.12)', color: '#EA580C' }}>
                     {c.full_name?.[0] || '?'}
                   </div>
                   <div>
-                    <p className="font-semibold text-white">{c.full_name || 'ללא שם'}</p>
-                    <p className="text-gray-400 text-sm">{c.email}</p>
-                    {profile?.phone && <p className="text-gray-500 text-xs mt-0.5">{profile.phone}</p>}
+                    <p className="font-semibold" style={{ color: '#1A1A1A' }}>{c.full_name || 'ללא שם'}</p>
+                    <p className="text-sm" style={{ color: '#6B7280' }}>{c.email}</p>
+                    {profile?.phone && <p className="text-xs mt-0.5" style={{ color: '#9CA3AF' }}>{profile.phone}</p>}
                   </div>
                 </button>
-                <div className="flex items-center gap-2 flex-wrap text-sm text-gray-500">
+                <div className="flex items-center gap-2 flex-wrap text-sm" style={{ color: '#9CA3AF' }}>
                   <span>💬 {sessCount} שיחות</span>
                   <button onClick={() => setDeletingCustomer(c)}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-all"
                     style={{ background: 'rgba(239,68,68,0.08)', color: '#EF4444' }}>
                     <Trash2 size={12} /> מחק
                   </button>
-                  <ChevronRight size={16} className="text-gray-600 cursor-pointer" onClick={() => setSelected(c)} />
+                  <ChevronRight size={16} className="cursor-pointer" style={{ color: '#9CA3AF' }} onClick={() => setSelected(c)} />
                 </div>
               </div>
             );

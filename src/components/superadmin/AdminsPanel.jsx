@@ -34,8 +34,25 @@ export default function AdminsPanel() {
 
   const load = async () => {
     setLoading(true);
-    const data = await api.entities.AdminPermission.list();
-    setAdmins(data);
+    const [perms, users] = await Promise.all([
+      api.entities.AdminPermission.list(),
+      api.entities.User.list(),
+    ]);
+    const permEmails = new Set(
+      (perms || []).map((p) => (p.email || '').toLowerCase()).filter(Boolean),
+    );
+    // Also surface users who have role=admin but no AdminPermission row yet
+    const fromRole = (users || [])
+      .filter((u) => u.role === 'admin' && u.email && !permEmails.has(u.email.toLowerCase()))
+      .map((u) => ({
+        id: `role:${u.id}`,
+        email: u.email,
+        is_primary: true,
+        is_active: true,
+        allowed_pages: ALL_PAGES.map((p) => p.id),
+        _fromRole: true,
+      }));
+    setAdmins([...(perms || []), ...fromRole]);
     setLoading(false);
   };
 
@@ -84,6 +101,12 @@ export default function AdminsPanel() {
   };
 
   const handleDelete = async () => {
+    if (deletingAdmin._fromRole) {
+      setDeletingAdmin(null);
+      setAddMsg('❌ אדמין לפי role במערכת — לא ניתן למחוק מרשימה זו (שנו role ב-DB)');
+      setTimeout(() => setAddMsg(''), 4000);
+      return;
+    }
     await api.entities.AdminPermission.delete(deletingAdmin.id);
     setDeletingAdmin(null);
     await load();
@@ -193,16 +216,25 @@ export default function AdminsPanel() {
                     </>
                   ) : (
                     <>
-                      <button onClick={() => startEdit(admin)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold"
-                        style={{ background: 'rgba(249,115,22,0.08)', color: '#EA580C' }}>
-                        עריכה
-                      </button>
-                      <button onClick={() => setDeletingAdmin(admin)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold"
-                        style={{ background: 'rgba(239,68,68,0.08)', color: '#EF4444' }}>
-                        <Trash2 size={13} />
-                      </button>
+                      {!admin._fromRole && (
+                        <button onClick={() => startEdit(admin)}
+                          className="px-3 py-1.5 rounded-xl text-xs font-semibold"
+                          style={{ background: 'rgba(249,115,22,0.08)', color: '#EA580C' }}>
+                          עריכה
+                        </button>
+                      )}
+                      {admin._fromRole && (
+                        <span className="text-xs px-2 py-1 rounded-full font-semibold" style={{ background: '#F0EEE8', color: '#6B7280' }}>
+                          לפי role
+                        </span>
+                      )}
+                      {!admin._fromRole && (
+                        <button onClick={() => setDeletingAdmin(admin)}
+                          className="px-3 py-1.5 rounded-xl text-xs font-semibold"
+                          style={{ background: 'rgba(239,68,68,0.08)', color: '#EF4444' }}>
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
