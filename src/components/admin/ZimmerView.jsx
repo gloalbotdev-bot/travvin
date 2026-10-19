@@ -12,6 +12,7 @@ import ManualBookingForm from '@/components/owner/ManualBookingForm';
 import BlockDateForm from '@/components/owner/BlockDateForm';
 import CustomerPreviewModal from '@/components/admin/CustomerPreviewModal';
 import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
+import { effectiveOutdoorItems, hasOutdoorArea, outdoorItemLabel } from '@/lib/rooms';
 import iconCloseSidebar from '@/assets/owner/properties/icon-close-sidebar.svg';
 
 import iconBack from '@/assets/owner/properties/icon-back.svg';
@@ -137,7 +138,13 @@ export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDele
   const bathroomCount = (data.rooms_detail || []).filter(r => r.has_bathroom).length + (data.additional_bathrooms_count || 0);
   const bedroomCount = (data.rooms_detail || []).length || data.num_rooms || 0;
   const hasKitchen = (data.amenities || []).some(a => /מטבח/.test(a));
-  const hasPool = (data.amenities || []).some(a => /בריכה/.test(a));
+  const outdoorItems = effectiveOutdoorItems(data);
+  const outdoorArea = hasOutdoorArea(data) ? data.outdoor_area : {};
+  const outdoorMeta = [
+    outdoorArea.privacy === 'private' ? 'חצר פרטית' : outdoorArea.privacy === 'shared' ? 'חצר משותפת' : null,
+    outdoorArea.size_sqm ? `${outdoorArea.size_sqm} מ״ר` : null,
+  ].filter(Boolean).join(' · ');
+  const hasPool = (data.amenities || []).some(a => /בריכה/.test(a)) || outdoorItems.some(it => /בריכה/.test(it.name));
   const details = [
     bathroomCount > 0 ? { icon: iconDroplet, label: `${bathroomCount} חדר רחצה` } : null,
     bedroomCount > 0 ? { icon: iconBed, label: `${bedroomCount} חדרי שינה` } : null,
@@ -405,6 +412,49 @@ export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDele
               <section className="flex flex-col gap-4 items-end w-full">
                 <div className="flex flex-col gap-1 items-end w-full text-right">
                   <h2 className="font-simpler w-full" style={{ color: '#0B3838', fontSize: 20, fontWeight: 600 }}>
+                    המתחם החיצוני
+                  </h2>
+                  {outdoorMeta && (
+                    <p className="font-simona w-full" style={{ color: '#717171', fontSize: 15, fontWeight: 400 }}>{outdoorMeta}</p>
+                  )}
+                </div>
+                {outdoorArea.description && (
+                  <p className="font-simona w-full text-right whitespace-pre-wrap" style={{ color: '#717171', fontSize: 16, lineHeight: '26px' }}>
+                    {outdoorArea.description}
+                  </p>
+                )}
+                {outdoorItems.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 w-full">
+                    {outdoorItems.map((it, i) => (
+                      <div key={`${it.name}-${i}`} className="flex items-center justify-start gap-2 min-w-0">
+                        <span className="overflow-hidden shrink-0" style={{ width: 20, height: 20 }}>
+                          <img src={amenityIcon(it.name)} alt="" width={20} height={20} className="block w-full h-full" />
+                        </span>
+                        <span className="font-simona text-right" style={{ color: '#0B3838', fontSize: 16, fontWeight: 400 }}>
+                          {outdoorItemLabel(it, outdoorArea.privacy)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : !outdoorArea.description && (
+                  <button type="button" onClick={() => openEditor('rooms')} className="font-simona text-right w-full" style={{ color: '#717171', fontSize: 15 }}>
+                    עדיין לא הוגדר מתחם חיצוני. ניתן להוסיף בעריכה.
+                  </button>
+                )}
+                {Array.isArray(outdoorArea.photos) && outdoorArea.photos.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 w-full">
+                    {outdoorArea.photos.slice(0, 8).map((p, i) => (
+                      <img key={`${p}-${i}`} src={p} alt={`תמונת החצר ${i + 1}`} className="w-full aspect-square object-cover rounded-xl" loading="lazy" />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <div className="w-full h-px" style={{ background: '#E8E8E8' }} />
+
+              <section className="flex flex-col gap-4 items-end w-full">
+                <div className="flex flex-col gap-1 items-end w-full text-right">
+                  <h2 className="font-simpler w-full" style={{ color: '#0B3838', fontSize: 20, fontWeight: 600 }}>
                     היכן אני נמצא
                   </h2>
                   <p className="font-simona w-full" style={{ color: '#717171', fontSize: 15, fontWeight: 400 }}>
@@ -537,6 +587,7 @@ export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDele
               onUpdatePrice={() => openEditor('price')}
               onFillMissing={(i) => openEditor(MISSING_TAB[i] || 'basic')}
               onEmpty={() => setAiOpen(false)}
+              onZimmerUpdated={(z) => { setData(z); onUpdated?.(z); }}
             />
           ) : (
             <div className="px-4 pb-8">
@@ -547,6 +598,7 @@ export default function ZimmerView({ zimmer, onCancel, onSave, onUpdated, onDele
                 onUpdatePrice={() => openEditor('price')}
                 onOpenCheckin={() => openEditor('settings')}
                 onFillMissing={(i) => openEditor(MISSING_TAB[i] || 'basic')}
+                onZimmerUpdated={(z) => { setData(z); onUpdated?.(z); }}
               />
             </div>
           )}

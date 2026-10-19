@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Plus, Trash2, X, Upload } from 'lucide-react';
 import { api } from '@/api/client';
-import { BED_TYPES } from '@/lib/rooms';
+import { BED_TYPES, FIXED_BED_CAPACITY } from '@/lib/rooms';
 
 const inputStyle = {
   background: '#F8F7F4',
@@ -15,24 +15,36 @@ const inputBlur = (e) => { e.currentTarget.style.borderColor = '#E8E5E0'; e.curr
 
 const ROOM_AMENITY_SUGGESTIONS = ['טלוויזיה', 'מזגן', 'מאוורר', 'מרפסת פרטית', 'מקלחון מפנק', 'אח קטנה', 'קומקום', 'נטפליקס'];
 
+const CUSTOM_PREFIX = 'custom:';
+
+// Editing shape of a bed: raw custom_label / sleeps ('' while unknown) so typing isn't trimmed mid-word.
+const draftBed = (b) => ({
+  bed_type: b.bed_type || 'queen',
+  count: Math.max(1, Number(b.count) || 1),
+  sleeps: b.sleeps ?? '',
+  custom_label: b.custom_label ?? '',
+});
+
 // Normalize any room (old beds_count/bed_type OR new beds[]) to a working shape.
-const normalizeRoom = (r) => ({
+// With allowEmpty, an empty beds[] stays empty instead of defaulting to one queen bed.
+const makeNormalizeRoom = (allowEmpty) => (r) => ({
   ...r,
   room_name: r.room_name || '',
-  beds: Array.isArray(r.beds) && r.beds.length
-    ? r.beds.map((b) => ({ bed_type: b.bed_type || 'queen', count: Math.max(1, Number(b.count) || 1) }))
-    : [{ bed_type: r.bed_type || 'queen', count: Math.max(1, Number(r.beds_count) || 1) }],
+  beds: Array.isArray(r.beds) && (r.beds.length || allowEmpty)
+    ? r.beds.map(draftBed)
+    : [{ bed_type: r.bed_type || 'queen', count: Math.max(1, Number(r.beds_count) || 1), sleeps: '', custom_label: '' }],
   max_guests_in_room: r.max_guests_in_room ?? '',
   has_bathroom: !!r.has_bathroom,
   room_photo: r.room_photo || '',
   amenities: Array.isArray(r.amenities) ? r.amenities : [],
 });
 
-export default function RoomsDetailEditor({ value, onChange, additionalBathrooms, onAdditionalBathroomsChange }) {
+export default function RoomsDetailEditor({ value, onChange, additionalBathrooms, onAdditionalBathroomsChange, onRoomPhotoUploaded, allowEmptyBeds = false, customBedTypes = [] }) {
   const rawRooms = Array.isArray(value) ? value : [];
   const [amenityDraft, setAmenityDraft] = useState({});
+  const normalizeRoom = makeNormalizeRoom(allowEmptyBeds);
 
-  const addRoom = () => onChange([...rawRooms, { room_name: '', beds: [{ bed_type: 'queen', count: 1 }], has_bathroom: false, amenities: [], room_photo: '' }]);
+  const addRoom = () => onChange([...rawRooms, { room_name: '', beds: allowEmptyBeds ? [] : [{ bed_type: 'queen', count: 1 }], has_bathroom: false, amenities: [], room_photo: '' }]);
   const updateRoom = (i, patch) => {
     const next = rawRooms.map((r) => normalizeRoom(r));
     next[i] = { ...next[i], ...patch };
@@ -51,8 +63,23 @@ export default function RoomsDetailEditor({ value, onChange, additionalBathrooms
   };
   const removeBed = (i, bi) => {
     const room = normalizeRoom(rawRooms[i]);
-    if (room.beds.length <= 1) return; // keep at least one bed entry
+    if (!allowEmptyBeds && room.beds.length <= 1) return; // keep at least one bed entry
     updateRoom(i, { beds: room.beds.filter((_, idx) => idx !== bi) });
+  };
+
+  // Select value: owner-defined types are encoded as "custom:<label>" on top of bed_type "other".
+  const bedSelectValue = (b) => {
+    if (b.bed_type !== 'other' || !String(b.custom_label).trim()) return b.bed_type;
+    const match = customBedTypes.find((t) => t.custom_label.toLowerCase() === String(b.custom_label).trim().toLowerCase());
+    return match ? CUSTOM_PREFIX + match.custom_label : 'other';
+  };
+  const changeBedType = (i, bi, val) => {
+    if (val.startsWith(CUSTOM_PREFIX)) {
+      const t = customBedTypes.find((c) => c.custom_label === val.slice(CUSTOM_PREFIX.length));
+      updateBed(i, bi, { bed_type: 'other', custom_label: t?.custom_label || '', sleeps: t?.sleeps ?? '' });
+      return;
+    }
+    updateBed(i, bi, { bed_type: val, custom_label: '', sleeps: '' });
   };
 
   const addAmenity = (i) => {
@@ -71,6 +98,7 @@ export default function RoomsDetailEditor({ value, onChange, additionalBathrooms
     if (!file) return;
     const { file_url } = await api.integrations.Core.UploadFile({ file });
     updateRoom(i, { room_photo: file_url });
+    onRoomPhotoUploaded?.(file_url);
   };
 
   const rooms = rawRooms.map(normalizeRoom);
@@ -122,24 +150,55 @@ export default function RoomsDetailEditor({ value, onChange, additionalBathrooms
               <div className="mb-3">
                 <label className="text-xs font-medium block mb-1.5" style={{ color: '#6B7280' }}>מיטות בחדר</label>
                 <div className="space-y-1.5">
-                  {room.beds.map((b, bi) => (
-                    <div key={bi} className="flex gap-2 items-center">
-                      <select value={b.bed_type} onChange={(e) => updateBed(idx, bi, { bed_type: e.target.value })}
-                        className="flex-1 px-3 py-2 text-sm outline-none" style={inputStyle}>
-                        {BED_TYPES.map((bt) => <option key={bt.key} value={bt.key}>{bt.label}</option>)}
-                      </select>
-                      <input type="number" min={1} max={20} value={b.count}
-                        onChange={(e) => updateBed(idx, bi, { count: Math.max(1, Number(e.target.value) || 1) })}
-                        className="w-20 px-3 py-2 text-sm outline-none text-center" style={inputStyle} onFocus={inputFocus} onBlur={inputBlur} />
-                      <button type="button" onClick={() => removeBed(idx, bi)} disabled={room.beds.length <= 1}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors disabled:opacity-30" style={{ color: '#EF4444' }}>
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
+                  {room.beds.length === 0 && (
+                    <p className="text-xs rounded-lg px-3 py-2" style={{ background: '#FFFBEB', color: '#92400E', border: '1px dashed #FCD34D' }}>
+                      לא שובצו מיטות בחדר זה
+                    </p>
+                  )}
+                  {room.beds.map((b, bi) => {
+                    const needsSleeps = FIXED_BED_CAPACITY[b.bed_type] == null;
+                    const sleepsMissing = needsSleeps && !(Number(b.sleeps) > 0);
+                    return (
+                      <div key={bi} className="space-y-1.5">
+                        <div className="flex gap-2 items-center">
+                          <select value={bedSelectValue(b)} onChange={(e) => changeBedType(idx, bi, e.target.value)}
+                            aria-label="סוג מיטה"
+                            className="flex-1 px-3 py-2 text-sm outline-none" style={inputStyle}>
+                            {BED_TYPES.filter((bt) => bt.key !== 'other').map((bt) => <option key={bt.key} value={bt.key}>{bt.label}</option>)}
+                            {customBedTypes.map((t) => <option key={t.custom_label} value={CUSTOM_PREFIX + t.custom_label}>{t.custom_label}</option>)}
+                            <option value="other">אחר (סוג חדש)</option>
+                          </select>
+                          <input type="number" min={1} max={20} value={b.count} aria-label="כמות מיטות"
+                            onChange={(e) => updateBed(idx, bi, { count: Math.max(1, Number(e.target.value) || 1) })}
+                            className="w-20 px-3 py-2 text-sm outline-none text-center" style={inputStyle} onFocus={inputFocus} onBlur={inputBlur} />
+                          <button type="button" onClick={() => removeBed(idx, bi)} disabled={!allowEmptyBeds && room.beds.length <= 1}
+                            aria-label="הסר מיטה"
+                            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors disabled:opacity-30" style={{ color: '#EF4444' }}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                        {needsSleeps && (
+                          <div className="flex gap-2 items-center">
+                            {b.bed_type === 'other' && (
+                              <input value={b.custom_label} onChange={(e) => updateBed(idx, bi, { custom_label: e.target.value })}
+                                placeholder="שם הסוג, למשל פוטון" aria-label="שם סוג המיטה"
+                                className="flex-1 px-3 py-2 text-sm outline-none" style={inputStyle} onFocus={inputFocus} onBlur={inputBlur} />
+                            )}
+                            <label className="flex items-center gap-1.5 text-xs" style={{ color: sleepsMissing ? '#B45309' : '#6B7280' }}>
+                              ישנים במיטה
+                              <input type="number" min={1} max={10} value={b.sleeps}
+                                onChange={(e) => updateBed(idx, bi, { sleeps: e.target.value === '' ? '' : Math.max(1, Number(e.target.value) || 1) })}
+                                className="w-16 px-2 py-2 text-sm outline-none text-center"
+                                style={{ ...inputStyle, ...(sleepsMissing ? { borderColor: '#F59E0B', background: '#FFFBEB' } : {}) }} />
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <button type="button" onClick={() => addBed(idx)} className="flex items-center gap-1 text-xs font-semibold mt-1.5 px-2 py-1 rounded-lg" style={{ background: 'rgba(11,56,56,0.1)', color: '#0B3838' }}>
-                  <Plus size={12} /> סוג מיטה נוסף
+                  <Plus size={12} /> {room.beds.length === 0 ? 'הוסף מיטה' : 'סוג מיטה נוסף'}
                 </button>
               </div>
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
+import { bookingErrorMessage } from '@/lib/bookingErrors';
 import { Image } from '@/components/ui/image';
 import {
   ArrowRight, MapPin, Bath, BedDouble, Users, UtensilsCrossed, Waves,
@@ -10,10 +11,11 @@ import InfoSummarySection from '@/components/admin/InfoSummarySection';
 import RoomsSummary from '@/components/chat/RoomsSummary';
 import PolicySection from '@/components/chat/PolicySection';
 import NearbyLandmarks from '@/components/chat/NearbyLandmarks';
+import OutdoorAreaSection from '@/components/chat/OutdoorAreaSection';
 import ZimmerMapView from '@/components/admin/ZimmerMapView';
 import ZimmerPageSidebar from '@/components/customer/ZimmerPageSidebar';
 import BookingForm from '@/components/chat/BookingForm';
-import { normalizePhoneE164, whatsappLink, matchTag } from '@/lib/rooms';
+import { normalizePhoneE164, whatsappLink, matchTag, effectiveOutdoorItems } from '@/lib/rooms';
 import { formatILS } from '@/lib/bookingPrice';
 import { getBookedZimmerIds } from '@/components/chat/DateSearchWidget';
 
@@ -44,7 +46,8 @@ export default function ZimmerPublicPage({ zimmer, user, onBack, searchDates, pr
   const bathroomCount = (zimmer.rooms_detail || []).filter(r => r.has_bathroom).length + (zimmer.additional_bathrooms_count || 0);
   const bedroomCount = (zimmer.rooms_detail || []).length || zimmer.num_rooms || 0;
   const hasKitchen = (zimmer.amenities || []).some(a => /מטבח/.test(a));
-  const hasPool = (zimmer.amenities || []).some(a => /בריכה/.test(a));
+  const hasPool = (zimmer.amenities || []).some(a => /בריכה/.test(a))
+    || effectiveOutdoorItems(zimmer).some(it => /בריכה/.test(it.name));
 
   const weekdayPrice = zimmer.weekday_price ?? zimmer.price_per_night;
   const weekendPrice = zimmer.weekend_price ?? zimmer.price_per_night;
@@ -75,8 +78,8 @@ export default function ZimmerPublicPage({ zimmer, user, onBack, searchDates, pr
         ...data, status: 'ממתינה',
       });
       setBookingDone(true);
-    } catch {
-      setBookingError('מצטער, לא הצלחנו לשמור את הבקשה. נסה שוב.');
+    } catch (e) {
+      setBookingError(bookingErrorMessage(e, 'מצטער, לא הצלחנו לשמור את הבקשה. נסה שוב.'));
     }
   };
 
@@ -207,6 +210,9 @@ export default function ZimmerPublicPage({ zimmer, user, onBack, searchDates, pr
               </div>
             </section>
           )}
+
+          {/* Outdoor area (yard) */}
+          <OutdoorAreaSection zimmer={zimmer} variant="page" />
 
           {/* Location (own card — heading/map handled by ZimmerMapView) */}
           <ZimmerMapView zimmer={zimmer} editable={false} />

@@ -74,6 +74,7 @@
                     "single",
                     "bunk",
                     "sofa_bed",
+                    "mattress",
                     "other"
                   ],
                   "default": "queen",
@@ -83,6 +84,14 @@
                   "type": "number",
                   "title": "כמות",
                   "default": 1
+                },
+                "sleeps": {
+                  "type": "number",
+                  "title": "כמה ישנים במיטה אחת (חובה לספה נפתחת / סוג אחר)"
+                },
+                "custom_label": {
+                  "type": "string",
+                  "title": "שם סוג מיטה מותאם (כאשר bed_type=other)"
                 }
               },
               "required": [
@@ -104,6 +113,7 @@
               "single",
               "bunk",
               "sofa_bed",
+              "mattress",
               "other"
             ],
             "default": "queen",
@@ -147,6 +157,76 @@
       "default": [],
       "items": {
         "type": "string"
+      }
+    },
+    "outdoor_area": {
+      "type": "object",
+      "title": "מתחם חיצוני (חצר)",
+      "properties": {
+        "description": {
+          "type": "string",
+          "title": "תיאור החצר"
+        },
+        "size_sqm": {
+          "type": "number",
+          "title": "גודל החצר (מ״ר)",
+          "minimum": 0
+        },
+        "privacy": {
+          "type": "string",
+          "enum": ["private", "shared"],
+          "title": "פרטית / משותפת"
+        },
+        "photos": {
+          "type": "array",
+          "title": "תמונות החצר",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "items": {
+          "type": "array",
+          "title": "אבזור ומתקנים בחצר",
+          "default": [],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "title": "שם המתקן"
+              },
+              "privacy": {
+                "type": "string",
+                "enum": ["private", "shared"],
+                "title": "פרטי / משותף (ריק = כמו החצר)"
+              },
+              "heated": {
+                "type": "boolean",
+                "title": "מחומם"
+              },
+              "covered": {
+                "type": "boolean",
+                "title": "מקורה / מוצל"
+              },
+              "size": {
+                "type": "string",
+                "title": "גודל"
+              },
+              "hours": {
+                "type": "string",
+                "title": "שעות פעילות"
+              },
+              "note": {
+                "type": "string",
+                "title": "הערה"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
       }
     },
     "additional_bathrooms_count": {
@@ -230,6 +310,47 @@
         "required": [
           "start_date",
           "end_date"
+        ]
+      },
+      "default": []
+    },
+    "min_nights_rules": {
+      "type": "array",
+      "title": "מינימום לילות להזמנה",
+      "items": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "all",
+              "weekend",
+              "midweek"
+            ],
+            "title": "חל על (תמיד / סופ\"ש-חמשוש / אמצ\"ש)",
+            "default": "weekend"
+          },
+          "min_nights": {
+            "type": "number",
+            "title": "מינימום לילות",
+            "minimum": 1
+          },
+          "start_date": {
+            "type": "string",
+            "title": "תאריך התחלה (ריק = תמיד)"
+          },
+          "end_date": {
+            "type": "string",
+            "title": "תאריך סיום (ריק = תמיד)"
+          },
+          "label": {
+            "type": "string",
+            "title": "שם תקופה (חופשי)"
+          }
+        },
+        "required": [
+          "scope",
+          "min_nights"
         ]
       },
       "default": []
@@ -385,6 +506,11 @@
         "lng": {
           "type": "number",
           "title": "קואורדינטת אורך (longitude)"
+        },
+        "geo_source": {
+          "type": "string",
+          "enum": ["manual", "auto"],
+          "title": "מקור הקואורדינטות (סימון ידני / המרה אוטומטית מכתובת)"
         },
         "nav_link": {
           "type": "string",
