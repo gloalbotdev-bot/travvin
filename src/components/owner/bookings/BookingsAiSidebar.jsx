@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import { api } from '@/api/client';
 import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
+import ConfirmActionCard from '@/components/owner/ConfirmActionCard';
+import useOwnerAssistantThread, { confirmCardStatus } from '@/hooks/useOwnerAssistantThread';
 import MicButton from '@/components/chat/MicButton';
 import { needsAttention, nightsBetween, nightsLabel, formatRangeLong, isNextWeekendFree } from './bookingStatus';
 import iconChat from '@/assets/owner/bookings/sidebar-chat.svg';
@@ -103,13 +104,29 @@ function AttentionCard({ card }) {
 }
 
 // Desktop bookings sidebar: "דברים שכדאי לטפל בהם" + AI input (Figma 1776:20280).
-export default function BookingsAiSidebar({ bookings, zimmers, onQuickAction, onApproveQuick, onOpenBooking, onCreatePromo }) {
-  const [messages, setMessages] = useState([]);
+const OPEN_FORM_ACTIONS = { block: 'block_date', price: 'update_price', booking: 'add_booking' };
+
+export default function BookingsAiSidebar({ ownerId, focusZimmerId, bookings, zimmers, onQuickAction, onApproveQuick, onOpenBooking, onCreatePromo, onMutated }) {
   const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef(null);
   const zMap = Object.fromEntries(zimmers.map(z => [z.id, z]));
+  const openForm = (effect) => {
+    const action = OPEN_FORM_ACTIONS[effect?.form];
+    if (action) onQuickAction(action);
+  };
+  const chat = useOwnerAssistantThread({
+    ownerId,
+    surface: 'bookings',
+    focus: focusZimmerId ? { zimmerId: focusZimmerId } : null,
+    onMutated,
+    onOpenForm: openForm,
+  });
+  const { messages, isTyping: busy } = chat;
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages.length, busy]);
 
   const cards = [];
   bookings.filter(needsAttention).slice(0, 2).forEach(b => {
@@ -145,35 +162,17 @@ export default function BookingsAiSidebar({ bookings, zimmers, onQuickAction, on
     });
   }
 
-  const buildSummary = () => {
-    const lines = bookings.slice(0, 40).map(b => {
-      const z = zMap[b.zimmer_id];
-      return `• ${b.guest_name} | ${b.zimmer_name || z?.name} | ${b.check_in}→${b.check_out} | ${b.num_guests || 1} אורחים | סטטוס: ${b.status} | ₪${b.total_price || 0}`;
-    });
-    return `יש ${bookings.length} הזמנות.\n${lines.join('\n')}`;
-  };
-
-  const send = async () => {
+  const send = () => {
     const text = input.trim();
     if (!text || busy) return;
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: text }]);
-    setBusy(true);
-    try {
-      const prompt = `אתה עוזר אישי לבעל צימרים. ענה בעברית, בקצרה ובעניין, רק על הזמנות/ניהול נכסים.\nתאריך היום: ${new Date().toISOString().split('T')[0]}\nהנתונים:\n${buildSummary()}\nשאלה: ${text}`;
-      const res = await api.integrations.Core.InvokeLLM({ prompt });
-      setMessages(prev => [...prev, { role: 'bot', content: typeof res === 'string' ? res : (res?.message || 'מצטער, לא הצלחתי לענות כעת.') }]);
-    } catch {
-      setMessages(prev => [...prev, { role: 'bot', content: 'מצטער, שגיאה בשליחת השאלה. נסה שוב.' }]);
-    }
-    setBusy(false);
-    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 50);
+    chat.send(text);
   };
 
   return (
     <aside className="relative flex flex-col flex-shrink-0 h-full bg-white" style={{ width: 'clamp(440px, 26.72vw, 513px)', borderRight: '1px solid #E3E3E3' }} dir="rtl">
       <div className="flex-1 min-h-0 overflow-y-auto owner-sidebar-scroll" style={{ paddingLeft: 32, paddingRight: 'clamp(24px, 2.71vw, 52px)' }}>
-        <div className="flex flex-col items-center" style={{ width: '100%', maxWidth: 428, paddingTop: 30, paddingBottom: 150 }}>
+        <div className="flex flex-col items-center" style={{ width: '100%', maxWidth: 428, paddingTop: 30, paddingBottom: 24 }}>
           <OwnerAiIcon size={77} />
           <div className="flex items-center" style={{ gap: 9, marginTop: 22.4 }}>
             <span className="rounded-full" style={{ width: 8, height: 8, background: TEXT, opacity: 0.6 }} aria-hidden />
@@ -190,59 +189,88 @@ export default function BookingsAiSidebar({ bookings, zimmers, onQuickAction, on
         </div>
       </div>
 
-      {/* Bottom: fade + chat + input */}
-      <div className="absolute bottom-0 pointer-events-none" style={{ left: 32, right: 'clamp(24px, 2.71vw, 52px)', maxWidth: 428, paddingBottom: 32 }}>
-        <div
-          className="absolute inset-x-0 bottom-0"
-          style={{ height: 133, background: 'linear-gradient(to top, #FFFFFF 77%, rgba(255,255,255,0))', left: -32, right: -52 }}
-          aria-hidden
-        />
-        <div className="relative pointer-events-auto">
-          {messages.length > 0 && (
+      {/* Chat + composer stay in normal flow so they never cover the cards above */}
+      <div className="flex-shrink-0" style={{ paddingLeft: 32, paddingRight: 'clamp(24px, 2.71vw, 52px)', paddingBottom: 32, maxWidth: 428 + 32 + 52 }}>
+        <div className="relative" style={{ maxWidth: 428 }}>
+          {(messages.length > 0 || busy) && (
             <>
               <div
                 ref={scrollRef}
                 className="overflow-y-auto owner-sidebar-scroll bg-white flex flex-col"
-                style={{ maxHeight: expanded ? '50vh' : 160, gap: 8, marginBottom: 8, padding: 8, borderRadius: 16 }}
+                style={{ maxHeight: expanded ? '40vh' : 160, gap: 8, marginBottom: 8, padding: 8, borderRadius: 16 }}
               >
-                {messages.map((m, i) => (
-                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                {messages.map((m) => (
+                  <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-start' : 'items-end'}`}>
                     <div
                       className="font-simona max-w-[85%] whitespace-pre-wrap"
                       style={{ fontSize: 14, padding: '8px 12px', borderRadius: 14, ...(m.role === 'user' ? { background: '#FAFAFA', color: TEXT } : { background: TEXT, color: '#FFFFFF' }) }}
                     >
                       {m.content}
                     </div>
+                    {m.role === 'bot' && m.openForm && OPEN_FORM_ACTIONS[m.openForm] && (
+                      <button
+                        type="button"
+                        onClick={() => openForm({ form: m.openForm })}
+                        className="font-simona mt-1 transition-opacity hover:opacity-70"
+                        style={{ color: TEXT, fontSize: 13, textDecoration: 'underline', textUnderlineOffset: 3 }}
+                      >
+                        פתח את הטופס
+                      </button>
+                    )}
+                    {m.role === 'bot' && m.pendingAction && (
+                      <div className="w-full mt-1">
+                        <ConfirmActionCard
+                          compact
+                          action={m.pendingAction}
+                          status={confirmCardStatus(m.pendingAction, chat.busyActionId)}
+                          onConfirm={() => chat.confirm(m.pendingAction.id)}
+                          onCancel={() => chat.cancel(m.pendingAction.id)}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
+                {busy && (
+                  <div className="flex justify-end" role="status" aria-label="העוזר מקליד">
+                    <Loader2 size={14} className="animate-spin" style={{ color: TEXT }} />
+                  </div>
+                )}
               </div>
-              <div className="flex" style={{ marginBottom: 12, paddingRight: 194.2 }}>
-                <button
-                  type="button"
-                  onClick={() => setExpanded(e => !e)}
-                  aria-expanded={expanded}
-                  className="font-simona flex items-center justify-center rounded-full transition-opacity hover:opacity-80"
-                  style={{ width: 85.2, height: 28.9, gap: 6, background: '#EFEFEF', color: TEXT, fontSize: 13 }}
-                  dir="ltr"
-                >
-                  <img src={iconExpand} alt="" width={15} height={15} className="block" style={{ width: 15, height: 15 }} />
-                  Expand
-                </button>
-              </div>
+              {messages.length > 0 && (
+                <div className="flex" style={{ marginBottom: 12, paddingRight: 194.2 }}>
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(e => !e)}
+                    aria-expanded={expanded}
+                    className="font-simona flex items-center justify-center rounded-full transition-opacity hover:opacity-80"
+                    style={{ width: 85.2, height: 28.9, gap: 6, background: '#EFEFEF', color: TEXT, fontSize: 13 }}
+                    dir="ltr"
+                  >
+                    <img src={iconExpand} alt="" width={15} height={15} className="block" style={{ width: 15, height: 15 }} />
+                    Expand
+                  </button>
+                </div>
+              )}
             </>
           )}
           <div
             className="flex flex-col justify-center bg-white"
             style={{ minHeight: 86, gap: 14, padding: '12px 16px', border: '1px solid #E5E5E5', borderRadius: 23, filter: 'drop-shadow(0px 4px 10.55px rgba(0,0,0,0.07))' }}
           >
-            <input
+            <textarea
               value={input}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); send(); } }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              rows={1}
               placeholder="מה תרצי לדעת או לשנות בנכס?"
               aria-label="שאלה לעוזר ה-AI"
-              className="font-simona w-full bg-transparent outline-none text-right placeholder:text-[#0B3838]"
-              style={{ color: TEXT, fontSize: 17, fontWeight: 400 }}
+              className="font-simona w-full bg-transparent outline-none text-right placeholder:text-[#0B3838] resize-none"
+              style={{ color: TEXT, fontSize: 17, fontWeight: 400, minHeight: 24, maxHeight: 96 }}
             />
             <div className="flex items-center justify-between" dir="ltr">
               <div className="flex items-center gap-3">

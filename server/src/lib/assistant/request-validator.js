@@ -29,6 +29,19 @@ const FORBIDDEN_KEYS = new Set([
 
 const MAX_MESSAGE_LEN = 4000;
 const MAX_CLIENT_STATE_JSON = 8192;
+/** Owner wizards carry long collected state + up to 100 turns until the shared thread holds it. */
+const MAX_OWNER_CLIENT_STATE_JSON = 65536;
+
+export const OWNER_PANEL_PROFILES = new Set([
+  'owner_assistant',
+  'owner_booking_creator',
+  'owner_zimmer_creator',
+  'admin_zimmer_editor',
+  'owner_calendar_day_advice',
+  'owner_calendar_suggestions',
+  'owner_home_suggestions',
+  'owner_reply_draft',
+]);
 const MAX_ATTACHMENTS = 5;
 const UPLOAD_PATH_RE = /^\/(?:uploads|api\/upload)\/[A-Za-z0-9._-]+$/;
 
@@ -129,7 +142,10 @@ export function validateChatRequest(body) {
       throw err;
     }
     const serialized = JSON.stringify(body.clientState);
-    if (serialized.length > MAX_CLIENT_STATE_JSON) {
+    const limit = OWNER_PANEL_PROFILES.has(String(profile).trim())
+      ? MAX_OWNER_CLIENT_STATE_JSON
+      : MAX_CLIENT_STATE_JSON;
+    if (serialized.length > limit) {
       const err = new Error('clientState too large');
       err.status = 400;
       err.code = 'VALIDATION';

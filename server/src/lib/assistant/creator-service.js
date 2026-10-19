@@ -1,5 +1,8 @@
 /**
  * Interactive creator/editor assistant handler — Phase 8.
+ * Owner wizards share the owner base prompt + thread memory; a finished wizard
+ * proposes a pending action (confirm_action) instead of a client-side save.
+ * Admin sessions have no thread and keep the legacy client save.
  */
 import {
   buildAdminZimmerEditorContext,
@@ -19,6 +22,11 @@ import {
   parseOwnerZimmerCreatorResponse,
 } from './response-parser/creator.js';
 import { appendOwnerActionLog } from './conversation-service.js';
+import { buildOwnerBaseContext } from './context-builder/owner-base.js';
+import { resolveOwnerId } from './context-builder/owner-assistant.js';
+import { buildOwnerBasePrompt } from './prompt-builder/owner-base.js';
+import { appendOwnerThreadTurns, threadWritable } from './owner-thread.js';
+import { confirmActionEffect, createPendingAction } from './owner-actions.js';
 import { invokeLlm } from '../llm/index.js';
 import {
   ADMIN_ZIMMER_EDITOR_SCHEMA,
@@ -66,12 +74,41 @@ export async function handleCreatorProfile(req, profile, actor, deps) {
   }
 }
 
+/** Shared owner base (identity, data, cross-bubble memory) for a wizard surface. */
+async function ownerBasePrefix(deps, actor, ownerId, message, surface, focus = null) {
+  if (!ownerId) return { base: null, prefix: '' };
+  const base = await buildOwnerBaseContext(deps, { actor, ownerId, message, focus });
+  return { base, prefix: buildOwnerBasePrompt(base, { surface }) };
+}
+
+/**
+ * Write the wizard turn to the owner's thread; attach a pending action when the wizard is done.
+ * @returns {Promise<object[]>} extra uiEffects
+ */
+async function finishWizardTurn(deps, actor, ownerId, { surface, zimmerId, userMessage, botMessage, op, zimmers, profileId }) {
+  const uiEffects = [];
+  let pending = null;
+  if (op && threadWritable(actor, ownerId)) {
+    pending = createPendingAction(op, zimmers, profileId);
+    if (pending) uiEffects.push(confirmActionEffect(pending));
+  }
+  await appendOwnerThreadTurns(deps.store, ownerId, actor, [
+    { role: 'user', content: userMessage, surface, zimmerId },
+    { role: 'bot', content: botMessage, surface, zimmerId, pendingAction: pending },
+  ]).catch(() => {});
+  return uiEffects;
+}
+
 async function handleAdminZimmerEditor(req, profile, actor, deps) {
   const ctx = await buildAdminZimmerEditorContext(deps, {
     actor,
     clientState: req.clientState,
   });
-  const prompt = buildAdminZimmerEditorPrompt(ctx, req.message);
+  const ownerId = String(ctx.zimmer.owner_id || '');
+  const { prefix } = await ownerBasePrefix(deps, actor, ownerId, req.message, 'zimmer_editor', {
+    zimmerId: ctx.zimmerId,
+  });
+  const prompt = `${prefix}\n${buildAdminZimmerEditorPrompt(ctx, req.message)}`;
   const llmRaw = await invokeLlm({
     prompt,
     response_json_schema: ADMIN_ZIMMER_EDITOR_SCHEMA,
@@ -86,7 +123,20 @@ async function handleAdminZimmerEditor(req, profile, actor, deps) {
     entityId: ctx.zimmerId,
   }).catch(() => {});
 
-  return buildCreatorResponse(profile, parsed);
+  const changes = parsed.parsed.changes;
+  const extraEffects = await finishWizardTurn(deps, actor, ownerId, {
+    surface: 'zimmer_editor',
+    zimmerId: ctx.zimmerId,
+    userMessage: req.message,
+    botMessage: parsed.content,
+    op: (parsed.parsed.action === 'update' || parsed.parsed.action === 'confirm') && changes
+      ? { type: 'update_zimmer', zimmer_id: ctx.zimmerId, fields: changes }
+      : null,
+    zimmers: [ctx.zimmer],
+    profileId: profile.id,
+  });
+
+  return buildCreatorResponse(profile, { ...parsed, uiEffects: [...parsed.uiEffects, ...extraEffects] });
 }
 
 async function handleOwnerBookingCreator(req, profile, actor, deps) {
@@ -94,12 +144,13 @@ async function handleOwnerBookingCreator(req, profile, actor, deps) {
     actor,
     clientState: req.clientState,
   });
-  const prompt = buildOwnerBookingCreatorPrompt(ctx, req.message);
+  const { prefix } = await ownerBasePrefix(deps, actor, ctx.ownerId, req.message, 'booking_creator');
+  const prompt = `${prefix}\n${buildOwnerBookingCreatorPrompt(ctx, req.message)}`;
   const llmRaw = await invokeLlm({
     prompt,
     response_json_schema: BOOKING_CREATOR_SCHEMA,
   });
-  const parsed = parseOwnerBookingCreatorResponse(llmRaw);
+  const parsed = parseOwnerBookingCreatorResponse(llmRaw, { collectedData: ctx.collectedData });
 
   await appendOwnerActionLog(deps.store, actor, {
     profile: profile.id,
@@ -107,15 +158,42 @@ async function handleOwnerBookingCreator(req, profile, actor, deps) {
     summary: req.message,
   }).catch(() => {});
 
-  return buildCreatorResponse(profile, parsed);
+  const b = parsed.parsed.booking;
+  const extraEffects = await finishWizardTurn(deps, actor, ctx.ownerId, {
+    surface: 'booking_creator',
+    userMessage: req.message,
+    botMessage: parsed.content,
+    op: parsed.parsed.action === 'create' && b
+      ? {
+          type: 'create_booking',
+          guest_name: b.guest_name,
+          guest_phone: b.guest_phone,
+          zimmer_name: b.zimmer_name,
+          check_in: b.check_in,
+          check_out: b.check_out,
+          num_guests: b.num_guests,
+          notes: b.notes || '',
+          status: b.status,
+          ...(b.price_override != null && Number(b.price_override) > 0
+            ? { price_override: b.price_override }
+            : {}),
+        }
+      : null,
+    zimmers: ctx.zimmers,
+    profileId: profile.id,
+  });
+
+  return buildCreatorResponse(profile, { ...parsed, uiEffects: [...parsed.uiEffects, ...extraEffects] });
 }
 
 async function handleOwnerZimmerCreator(req, profile, actor, deps) {
+  const ownerId = resolveOwnerId(actor, req.clientState);
   const ctx = await buildOwnerZimmerCreatorContext(deps, {
     actor,
     clientState: req.clientState,
   });
-  const prompt = buildOwnerZimmerCreatorPrompt(ctx, req.message);
+  const { prefix } = await ownerBasePrefix(deps, actor, ownerId, req.message, 'zimmer_creator');
+  const prompt = `${prefix}\n${buildOwnerZimmerCreatorPrompt(ctx, req.message)}`;
   const llmRaw = await invokeLlm({
     prompt,
     response_json_schema: ZIMMER_CREATOR_SCHEMA,
@@ -128,7 +206,25 @@ async function handleOwnerZimmerCreator(req, profile, actor, deps) {
     summary: req.message,
   }).catch(() => {});
 
-  return buildCreatorResponse(profile, parsed);
+  const zd = parsed.parsed.zimmer_data;
+  const name = zd?.name || ctx.conversationData?.name;
+  const extraEffects = await finishWizardTurn(deps, actor, ownerId, {
+    surface: 'zimmer_creator',
+    userMessage: req.message,
+    botMessage: parsed.content,
+    op: parsed.parsed.action === 'build' && zd && typeof name === 'string' && name.trim()
+      ? (({ unclear_placement: _unclear, ...rest }) => ({
+          ...ctx.conversationData,
+          ...rest,
+          type: 'create_zimmer',
+          name,
+        }))(zd)
+      : null,
+    zimmers: [],
+    profileId: profile.id,
+  });
+
+  return buildCreatorResponse(profile, { ...parsed, uiEffects: [...parsed.uiEffects, ...extraEffects] });
 }
 
 async function handleOwnerZimmerKnowledgeSummary(req, profile, actor, deps) {

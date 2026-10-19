@@ -12,6 +12,8 @@ import suggestionSpark from '@/assets/owner/assistant/suggestion-spark.svg';
 import googleCalendarIcon from '@/assets/owner/assistant/google-calendar.png';
 import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
 import OwnerHomeComposer from '@/components/owner/OwnerHomeComposer';
+import OwnerAssistantThread from '@/components/owner/OwnerAssistantThread';
+import { composerPlaceholder } from '@/hooks/useOwnerAssistantThread';
 
 function nextFridayStr() {
   const d = new Date();
@@ -57,7 +59,8 @@ function SuggestionRow({ icon, title, body, actionLabel, onAction }) {
   );
 }
 
-export default function OwnerAssistantHome({ ownerId, zimmers, onChat, onQuickAction, onNavigate }) {
+/** "הצעות לשיפור" (Figma 1776:18142–18154) — shown on the home landing. */
+export function OwnerAssistantSuggestions({ ownerId, zimmers, onNavigate, style }) {
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSugg, setLoadingSugg] = useState(true);
   const firedRef = useRef(false);
@@ -76,27 +79,12 @@ export default function OwnerAssistantHome({ ownerId, zimmers, onChat, onQuickAc
 
         let llm = null;
         try {
-          llm = await api.integrations.Core.InvokeLLM({
-            prompt: `אתה יועץ לבעל צימרים בישראל. נתונים: ${questions.length} שאלות לקוחות ממתינות${questions[0] ? `, למשל: "${(questions[0].question || '').slice(0, 80)}"` : ''}. ${zimmers.length} צימרים בבעלות. ${freeWeekend ? 'יש לילות פנויות בסוף השבוע הקרוב' : 'אין לילות פנויות בסוף השבוע הקרוב'}.
-החזר בדיוק 2 הצעות לשיפור בעברית, כל אחת עם: title (כותרת קצרה), body (משפט אחד), action_label (טקסט כפתור), action_type ("add_info" להוספת מידע לנכס או "create_offer" ליצירת מבצע). JSON בלבד.`,
-            response_json_schema: {
-              type: 'object',
-              properties: {
-                suggestions: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      title: { type: 'string' },
-                      body: { type: 'string' },
-                      action_label: { type: 'string' },
-                      action_type: { type: 'string', enum: ['add_info', 'create_offer'] },
-                    },
-                  },
-                },
-              },
-            },
+          const res = await api.assistant.chat({
+            profile: 'owner_home_suggestions',
+            message: 'הצעות לשיפור',
+            clientState: {},
           });
+          llm = res?.meta?.parsed || null;
         } catch { /* fallback below */ }
 
         const list = (llm && Array.isArray(llm.suggestions) && llm.suggestions.length) ? llm.suggestions : fallbackSuggestions(questions, zimmers, freeWeekend);
@@ -139,6 +127,43 @@ export default function OwnerAssistantHome({ ownerId, zimmers, onChat, onQuickAc
     else if (s.action_type === 'create_offer') onNavigate('promotions');
   };
 
+  return (
+    <section className="w-full flex flex-col items-center" style={{ maxWidth: 723, ...style }}>
+      <h2 className="font-simona" style={{ color: 'rgba(0,0,0,0.58)', fontSize: 20, fontWeight: 400, lineHeight: 'normal' }}>
+        הצעות לשיפור
+      </h2>
+      <div className="w-full flex flex-col" style={{ gap: 17.6, marginTop: 20 }}>
+        {loadingSugg ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 size={18} className="animate-spin" style={{ color: '#9CA3AF' }} />
+          </div>
+        ) : (
+          suggestions.map((s, i) => (
+            <SuggestionRow
+              key={i}
+              icon={<img src={suggestionSpark} alt="" className="block" style={{ width: 25.8, height: 24.7 }} />}
+              title={s.title}
+              body={s.body}
+              actionLabel={s.action_label}
+              onAction={() => onSuggestionAction(s)}
+            />
+          ))
+        )}
+        {/* Figma 1776:18154 — Google Calendar row */}
+        <SuggestionRow
+          icon={<img src={googleCalendarIcon} alt="" className="block" style={{ width: 29.2, height: 31.4 }} />}
+          title="לנהל את היום שלך יחד עם Google Calendar"
+          body="לחיבור את Google Calendar"
+          actionLabel="לחיבור"
+          onAction={() => onNavigate('settings')}
+        />
+      </div>
+    </section>
+  );
+}
+
+export default function OwnerAssistantHome({ ownerId, zimmers, onQuickAction, onNavigate, onOpenForm, chat, showThread = false, waiting = false }) {
+  const scrollRef = useRef(null);
   /* Figma 1776:18131 / 18134 / 18137 — sizes include the stroke padding baked into the SVG files */
   const quickActions = [
     { type: 'add_booking', label: 'הוספת הזמנה', iconSrc: iconAddBooking, iconW: 17, iconH: 18 },
@@ -146,8 +171,43 @@ export default function OwnerAssistantHome({ ownerId, zimmers, onChat, onQuickAc
     { type: 'update_price', label: 'עדכון מחיר', iconSrc: iconUpdatePrice, iconW: 17, iconH: 17 },
   ];
 
+  if (showThread) {
+    return (
+      <div dir="rtl" className="relative h-full">
+        <div ref={scrollRef} className="h-full overflow-y-auto owner-hide-scrollbar">
+          <div className="flex flex-col items-center px-4" style={{ paddingTop: 48, paddingBottom: 240 }}>
+            <OwnerAssistantThread
+              messages={chat.messages}
+              isTyping={chat.isTyping || waiting}
+              busyActionId={chat.busyActionId}
+              onConfirm={chat.confirm}
+              onCancel={chat.cancel}
+              onNavigate={onNavigate}
+              onOpenForm={onOpenForm}
+              scrollParentRef={scrollRef}
+            />
+          </div>
+        </div>
+        {/* Figma 1776:18350 — fade behind the floating composer (Today tab), tinted to this page's #FCFCFC */}
+        <div
+          className="absolute inset-x-0 bottom-0 pointer-events-none"
+          style={{ height: 192.5, background: 'linear-gradient(to top, #FCFCFC 71.727%, rgba(252,252,252,0))' }}
+          aria-hidden
+        />
+        <div className="absolute inset-x-0 flex justify-center px-4" style={{ bottom: 38 }}>
+          <OwnerHomeComposer
+            autoFocus
+            onSubmit={chat.send}
+            placeholder={composerPlaceholder(true)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div dir="rtl" className="w-full flex flex-col items-center px-4" style={{ paddingTop: 86, paddingBottom: 48 }}>
+    <div dir="rtl" className="h-full overflow-y-auto owner-hide-scrollbar">
+    <div className="w-full flex flex-col items-center px-4" style={{ paddingTop: 86, paddingBottom: 48 }}>
       {/* Figma 1776:18070 — orb 178 inside a 220 glow ring */}
       <div className="relative flex items-center justify-center flex-shrink-0" style={{ width: 220, height: 220 }} aria-hidden>
         <span
@@ -170,8 +230,8 @@ export default function OwnerAssistantHome({ ownerId, zimmers, onChat, onQuickAc
       <div className="w-full flex justify-center" style={{ marginTop: 44.2 }}>
         <OwnerHomeComposer
           autoFocus
-          onSubmit={onChat}
-          placeholder="איך אפשר לעזור היום? שאלי אותי משהו או תני לי משימה"
+          onSubmit={chat.send}
+          placeholder={composerPlaceholder(false)}
         />
       </div>
 
@@ -199,37 +259,8 @@ export default function OwnerAssistantHome({ ownerId, zimmers, onChat, onQuickAc
         ))}
       </div>
 
-      <section className="w-full flex flex-col items-center" style={{ maxWidth: 723, marginTop: 72.6 }}>
-        <h2 className="font-simona" style={{ color: 'rgba(0,0,0,0.58)', fontSize: 20, fontWeight: 400, lineHeight: 'normal' }}>
-          הצעות לשיפור
-        </h2>
-        <div className="w-full flex flex-col" style={{ gap: 17.6, marginTop: 20 }}>
-          {loadingSugg ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 size={18} className="animate-spin" style={{ color: '#9CA3AF' }} />
-            </div>
-          ) : (
-            suggestions.map((s, i) => (
-              <SuggestionRow
-                key={i}
-                icon={<img src={suggestionSpark} alt="" className="block" style={{ width: 25.8, height: 24.7 }} />}
-                title={s.title}
-                body={s.body}
-                actionLabel={s.action_label}
-                onAction={() => onSuggestionAction(s)}
-              />
-            ))
-          )}
-          {/* Figma 1776:18154 — Google Calendar row */}
-          <SuggestionRow
-            icon={<img src={googleCalendarIcon} alt="" className="block" style={{ width: 29.2, height: 31.4 }} />}
-            title="לנהל את היום שלך יחד עם Google Calendar"
-            body="לחיבור את Google Calendar"
-            actionLabel="לחיבור"
-            onAction={() => onNavigate('settings')}
-          />
-        </div>
-      </section>
+      <OwnerAssistantSuggestions ownerId={ownerId} zimmers={zimmers} onNavigate={onNavigate} style={{ marginTop: 72.6 }} />
+    </div>
     </div>
   );
 }

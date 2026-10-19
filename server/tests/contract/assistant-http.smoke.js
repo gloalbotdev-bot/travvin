@@ -156,7 +156,7 @@ async function main() {
 
   const profilesBody = await profilesRes.json();
 
-  assert(Array.isArray(profilesBody.profiles) && profilesBody.profiles.length === 12, '12 profiles listed');
+  assert(Array.isArray(profilesBody.profiles) && profilesBody.profiles.length === 16, '16 profiles listed');
 
 
 

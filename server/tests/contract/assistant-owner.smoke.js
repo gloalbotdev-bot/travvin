@@ -49,18 +49,26 @@ async function chat(base, token, body) {
 }
 
 function mainUnit() {
-  const infoParsed = parseOwnerAssistantResponse(
+  const parsed = parseOwnerAssistantResponse(
     {
-      message: 'מידע בלבד',
+      message: 'מציע ליצור צימר',
       operation: { type: 'create_zimmer', name: 'x' },
       actions: ['bookings'],
     },
-    { mode: 'info' },
+    {},
   );
-  assert(infoParsed.operation === null, 'info mode strips operation');
+  assert(parsed.operation?.type === 'create_zimmer', 'parser keeps operation (no mode)');
   assert(
-    infoParsed.uiEffects.some((e) => e.type === 'edit_mode_required'),
-    'info mode flags edit_mode_required when LLM returned operation',
+    !parsed.uiEffects.some((e) => e.type === 'edit_mode_required'),
+    'no edit_mode_required effect anymore',
+  );
+  const withForm = parseOwnerAssistantResponse(
+    { message: 'פותח טופס', operation: null, actions: [], open_form: 'block' },
+    { focus: { date: '2031-01-05' } },
+  );
+  assert(
+    withForm.uiEffects.some((e) => e.type === 'open_form' && e.form === 'block' && e.date === '2031-01-05'),
+    'open_form effect carries focus date',
   );
 
   const zimmers = [{ id: 'z-1', name: 'נוף הגליל' }];
@@ -108,23 +116,23 @@ async function mainHttp() {
   const infoRes = await chat(base, ownerTok, {
     profile: 'owner_assistant',
     message: 'מה ההזמנות שלי?',
-    clientState: { mode: 'info', ownerId: ownerRow.id },
+    clientState: { ownerId: ownerRow.id },
   });
-  assert(infoRes.status === 200, 'owner info chat → 200');
+  assert(infoRes.status === 200, 'owner chat → 200');
   assert(infoRes.json?.meta?.phase === 6, 'owner_assistant meta.phase === 6');
   assert(infoRes.json?.meta?.stub !== true, 'owner_assistant no longer stub');
-  assert(infoRes.json?.executedActions?.length === 0, 'info mode has no executedActions');
+  assert(infoRes.json?.executedActions?.length === 0, 'plain chat has no executedActions');
 
-  const editRes = await chat(base, ownerTok, {
+  const proposeRes = await chat(base, ownerTok, {
     profile: 'owner_assistant',
     message: 'MOCK_EXECUTE_CREATE_ZIMMER',
-    clientState: { mode: 'edit', ownerId: ownerRow.id },
+    clientState: { ownerId: ownerRow.id },
   });
-  assert(editRes.status === 200, 'owner edit mock create → 200');
-  assert(editRes.json?.executedActions?.length === 1, 'edit mock creates zimmer via dispatcher');
+  assert(proposeRes.status === 200, 'owner mock create → 200');
+  assert(proposeRes.json?.executedActions?.length === 0, 'operation is not executed before confirmation');
   assert(
-    editRes.json?.executedActions?.[0]?.kind === 'create_zimmer',
-    'executedActions kind create_zimmer',
+    proposeRes.json?.uiEffects?.some((e) => e.type === 'confirm_action' && e.opType === 'create_zimmer'),
+    'operation returns confirm_action',
   );
 
   const zimmers = await store.filter(
@@ -134,21 +142,12 @@ async function mainHttp() {
     10,
     { id: ownerRow.id, email: ownerEmail, role: 'owner' },
   );
-  assert(zimmers.some((z) => z.name === 'צימר Mock בדיקה'), 'zimmer persisted in DB');
-
-  const logs = await store.filter(
-    'AssistantActionLog',
-    { owner_id: ownerRow.id, action_type: 'create_zimmer' },
-    '-created_date',
-    5,
-    { id: ownerRow.id, email: ownerEmail, role: 'owner' },
-  );
-  assert(logs.length >= 1, 'create_zimmer logged in AssistantActionLog');
+  assert(!zimmers.some((z) => z.name === 'צימר Mock בדיקה'), 'zimmer not persisted before confirmation');
 
   const denied = await chat(base, customerTok, {
     profile: 'owner_assistant',
     message: 'hack',
-    clientState: { mode: 'info' },
+    clientState: {},
   });
   assert(denied.status === 403, 'customer owner_assistant → 403');
 

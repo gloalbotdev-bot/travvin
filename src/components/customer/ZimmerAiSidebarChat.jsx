@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '@/api/client';
+import { bookingErrorMessage } from '@/lib/bookingErrors';
 import { Send, Sparkles, HelpCircle, CalendarDays, ClipboardList } from 'lucide-react';
 import { useAutoResize } from '@/hooks/useAutoResize';
 import MicButton from '@/components/chat/MicButton';
 import MiniAvailabilityCalendar from '@/components/chat/MiniAvailabilityCalendar';
 import BookingForm from '@/components/chat/BookingForm';
-import { totalBeds, bathroomsCount } from '@/lib/rooms';
+import { totalBeds, bathroomsCount, outdoorAreaSummary } from '@/lib/rooms';
+import { describeMinNightsRules } from '@/lib/bookingPrice';
 
 const fmtTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
@@ -45,7 +47,9 @@ export default function ZimmerAiSidebarChat({ zimmer, user, onBook, onAskOwner }
       beds != null ? `מיטות: ${beds}` : null,
       baths > 0 ? `חדרי רחצה: ${baths}` : null,
       (zimmer.amenities || []).length ? `מתקנים: ${zimmer.amenities.join(', ')}` : null,
+      outdoorAreaSummary(zimmer) ? `מתחם חיצוני (${outdoorAreaSummary(zimmer)})` : null,
       zimmer.description ? `תיאור: ${zimmer.description}` : null,
+      describeMinNightsRules(zimmer) ? `מינימום לילות להזמנה: ${describeMinNightsRules(zimmer)} (חמשוש = שהייה שכוללת לילה של חמישי או שישי)` : null,
       zimmer.cancellation_policy_text ? `מדיניות ביטול: ${zimmer.cancellation_policy_text}` : null,
       zimmer.smoking_policy ? `מדיניות עישון: ${zimmer.smoking_policy}` : null,
       (zimmer.nearby_landmarks || []).length ? `אתרים בסביבה: ${zimmer.nearby_landmarks.map(l => l.name + (l.travel_time_minutes ? ` (${l.travel_time_minutes} דק)` : '')).join(', ')}` : null,
@@ -75,6 +79,7 @@ ${buildContext()}
 - אם אין מידע והלקוח אינו מחובר — החזר action="answer" והצע לפנות לבעל הצימר דרך כפתור "צ'אט ישיר" או וואטסאפ.
 - אם הלקוח מבקש להזמין / לבדוק זמינות / רוצה להזמין — החזר action="booking" וב-message הסבר קצר שתפתח טופס הזמנה.
 - אל תמציא מחירים, מתקנים או פרטים שאינם מופיעים בנתונים.
+- אם מוגדר מינימום לילות — אי אפשר להזמין שהייה קצרה יותר. כשהלקוח מתכנן שהייה קצרה מהמינימום (למשל לילה אחד בסופ"ש) — הסבר זאת והצע להאריך.
 החזר JSON בלבד: {"action":"answer"|"booking"|"ask_owner","message":"..."}`;
       const res = await api.integrations.Core.InvokeLLM({
         prompt,
@@ -112,7 +117,7 @@ ${buildContext()}
       });
       setMessages(prev => [...prev.filter(m => m.id !== msgId), { id: Date.now() + Math.random(), role: 'bot', content: `✅ בקשת ההזמנה ל-${z.name} התקבלה! בעל הצימר יצור איתך קשר בקרוב. 🎉`, time: fmtTime() }]);
     } catch (e) {
-      setMessages(prev => [...prev, { id: Date.now() + Math.random(), role: 'bot', content: 'מצטער, לא הצלחתי לשמור את ההזמנה. נסה שוב.', time: fmtTime() }]);
+      setMessages(prev => [...prev, { id: Date.now() + Math.random(), role: 'bot', content: `⚠️ ${bookingErrorMessage(e, 'מצטער, לא הצלחתי לשמור את ההזמנה. נסה שוב.')}`, time: fmtTime() }]);
     }
   };
 

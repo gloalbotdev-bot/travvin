@@ -17,7 +17,7 @@ const fmtTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', 
 // Messages are interleaved chronologically (thread created-date + msg time),
 // New messages go to the thread of the last customer message, or the most
 // recently updated thread if none.
-export default function MessagesMergedChatWindow({ contact, zimmers = {}, booking = null }) {
+export default function MessagesMergedChatWindow({ contact, booking = null }) {
   const [threadMessages, setThreadMessages] = useState(() => {
     const m = {};
     (contact?.threads || []).forEach(t => { m[t.id] = t.messages || []; });
@@ -89,20 +89,11 @@ export default function MessagesMergedChatWindow({ contact, zimmers = {}, bookin
   };
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 
-  const buildPrompt = () => {
-    const z = targetThread ? zimmers[targetThread.zimmer_id] : null;
-    const zones = (z?.data_zones || []).map(zn => `[${zn.source_type || 'מידע'}]: ${zn.content || ''}`).join('\n');
-    const hist = merged.slice(-12).map(m => `${m.role === 'owner' ? 'בעלים' : 'לקוח'}${m.zimmerName ? ` (${m.zimmerName})` : ''}: ${m.content}`).join('\n');
-    const lastCustomer = [...merged].reverse().find(m => m.role === 'customer');
-    return `אתה עוזר של בעל צימר. כתוב תשובה קצרה, אדיבה ומועילה בעברית ללקוח בצ'אט.
-צימר: ${z?.name || targetThread?.zimmer_name || ''}
-פרטי הנכס:
-${zones || '(אין מידע נוסף)'}
-היסטוריית צ'אט:
-${hist || '(תחילת שיחה)'}
-ההודעה האחרונה מהלקוח: ${lastCustomer?.content || ''}
-החזר JSON בלבד: {"reply":"תוכן התשובה"}`;
-  };
+  const replyDraftState = () => ({
+    kind: 'chat',
+    threadIds: (contact?.threads || []).map(t => t.id).slice(0, 20),
+    zimmerId: targetThread?.zimmer_id || undefined,
+  });
 
   const lastMsg = merged[merged.length - 1];
   const aiKey = lastMsg && lastMsg.role === 'customer'
@@ -156,7 +147,7 @@ ${hist || '(תחילת שיחה)'}
           <AiReplySuggestion
             key={contact?.key}
             autoKey={aiKey}
-            buildPrompt={buildPrompt}
+            getClientState={replyDraftState}
             onApply={(t) => { setInput(p => p ? p.replace(/\s+$/, '') + ' ' + t : t); resize(); inputRef.current?.focus(); }}
             disabled={sending}
           />

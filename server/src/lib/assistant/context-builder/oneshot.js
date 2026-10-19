@@ -1,19 +1,27 @@
 /**
  * One-shot assistant profiles — Phase 7 (tips, summaries, vacation agent).
  */
-import { sanitizeUntrustedText } from '../../sanitize-prompt-data.js';
+import { MAX_OWNER_TEXT_CHARS, sanitizeOwnerText, sanitizeUntrustedText } from '../../sanitize-prompt-data.js';
 import { resolveOwnerId } from './owner-assistant.js';
 
 const MAX_RECENT_TURNS = 12;
 const MAX_TURN_CHARS = 2000;
 
-export function normalizeOneshotTurns(raw, limit = MAX_RECENT_TURNS) {
+/**
+ * @param {unknown} raw
+ * @param {number} [limit]
+ * @param {{ maxChars?: number }} [opts] — owner wizards pass MAX_OWNER_TEXT_CHARS
+ */
+export function normalizeOneshotTurns(raw, limit = MAX_RECENT_TURNS, opts = {}) {
   if (!Array.isArray(raw)) return [];
+  const ownerText = opts.maxChars === MAX_OWNER_TEXT_CHARS;
   return raw.slice(-limit).flatMap((t) => {
     if (!t || typeof t !== 'object') return [];
     const role = t.role === 'user' || t.role === 'bot' ? t.role : null;
     if (!role) return [];
-    const content = sanitizeUntrustedText(String(t.content || '')).slice(0, MAX_TURN_CHARS);
+    const content = ownerText
+      ? sanitizeOwnerText(String(t.content || ''))
+      : sanitizeUntrustedText(String(t.content || '')).slice(0, MAX_TURN_CHARS);
     if (!content) return [];
     return [{ role, content }];
   });

@@ -11,7 +11,7 @@ const TYPE_META = {
   review_period: { label: 'בדיקת תקופה', color: '#7C3AED' },
 };
 
-export default function CalendarAiSuggestions({ ownerId, zimmers, bookings, onApply, variant, expanded = false, stat = null }) {
+export default function CalendarAiSuggestions({ onApply, variant, expanded = false, stat = null }) {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [error, setError] = useState('');
@@ -19,37 +19,13 @@ export default function CalendarAiSuggestions({ ownerId, zimmers, bookings, onAp
   const analyze = async () => {
     setLoading(true); setError('');
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
-      const occupancy = bookings.filter(b => b.status === 'אושרה' && b.check_in >= today && b.check_in <= in30).length;
-      const pending = bookings.filter(b => b.status === 'ממתינה').length;
-      const zimmerList = zimmers.map(z => `${z.name} (מחיר ${z.price_per_night || '?'}/לילה)`).join(', ');
-      const prompt = `אתה עוזר ניהול לבעל צימרים. נתח את היומן ותן 3-4 הצעות פעולה קצרות לשיפור הכנסה ותפוסה.\nנכסים: ${zimmerList}\nהזמנות ב-30 הימים הקרובים: ${occupancy}\nהזמנות ממתינות: ${pending}\nתאריך נוכחי: ${today}\nהחזר JSON בלבד.`;
-      const res = await api.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            suggestions: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  type: { type: 'string', enum: ['price_update', 'open_availability', 'discount', 'review_period'] },
-                  title: { type: 'string' },
-                  description: { type: 'string' },
-                  zimmer_name: { type: 'string' },
-                  start_date: { type: 'string' },
-                  end_date: { type: 'string' },
-                  value: { type: 'number' },
-                },
-                required: ['type', 'title', 'description'],
-              },
-            },
-          },
-        },
+      // The server loads zimmers + bookings itself.
+      const res = await api.assistant.chat({
+        profile: 'owner_calendar_suggestions',
+        message: 'נתח את היומן',
+        clientState: {},
       });
-      setItems(res?.suggestions || []);
+      setItems(res?.meta?.parsed?.suggestions || []);
     } catch (e) { setError('שגיאה בניתוח. נסה שוב.'); }
     setLoading(false);
   };

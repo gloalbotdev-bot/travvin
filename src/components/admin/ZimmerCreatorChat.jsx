@@ -3,8 +3,16 @@ import { api } from '@/api/client';
 import { Send, X, ArrowRight, Check, Loader2 } from 'lucide-react';
 import { useAutoResize } from '@/hooks/useAutoResize';
 import MicButton from '@/components/chat/MicButton';
-import { extractAmenitiesFromText, normalizeRoomForSave } from '@/lib/rooms';
+import {
+  extractAmenitiesFromText, normalizeRoomForSave, roomsSleepingCapacity,
+  normalizeOutdoorAreaForSave, detectUnclearPlacement, applyPlacement,
+} from '@/lib/rooms';
+import { useOwnerCustomBedTypes } from '@/hooks/useOwnerCustomBedTypes';
+import { buildCreatorRecentTurns, getAssistantParsed } from '@/lib/assistantCreator';
+import { decideOwnerAction, findConfirmAction, ownerActionErrorText } from '@/lib/ownerActions';
 import RoomsDetailEditor from '@/components/chat/RoomsDetailEditor';
+import OutdoorAreaEditor from '@/components/chat/OutdoorAreaEditor';
+import { describeMinNightsRules } from '@/lib/bookingPrice';
 import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
 import iconPlus from '@/assets/owner/home/icon-plus.svg';
 import iconSend from '@/assets/owner/home/icon-send.svg';
@@ -25,9 +33,30 @@ const TypingIndicator = () => (
   </div>
 );
 
+// Sleeping places vs. max_guests, computed in code (the LLM's arithmetic is not trusted).
+function bedAllocationStatus(zimmer) {
+  const { assigned, unknownBeds } = roomsSleepingCapacity(zimmer?.rooms_detail);
+  const total = Number(zimmer?.max_guests) > 0 ? Number(zimmer.max_guests) : null;
+  const remaining = total == null ? 0 : total - assigned;
+  return { total, assigned, unknownBeds, remaining, complete: remaining <= 0 && unknownBeds === 0 };
+}
+
+function allocationQuestion({ total, assigned, unknownBeds, remaining }) {
+  const parts = [];
+  if (remaining > 0) {
+    parts.push(`זיהינו ${total} מקומות שינה, ושובצו ${assigned}. באיזה חדרים ממוקמות שאר המיטות (${remaining} מקומות)?`);
+  }
+  if (unknownBeds > 0) {
+    parts.push(`יש ${unknownBeds === 1 ? 'מיטה אחת' : `${unknownBeds} מיטות`} שלא ידוע לכמה אנשים ${unknownBeds === 1 ? 'היא מתאימה' : 'הן מתאימות'} (ספה נפתחת / סוג אחר).`);
+  }
+  parts.push('אפשר לכתוב לי (למשל "4 מיטות יחיד בחדר 3", "הספה נפתחת ל-3") או לשבץ ישירות בכרטיס.');
+  return parts.join('\n');
+}
+
 const fieldInputClass = 'font-simona w-full bg-white border-[1.5px] border-[#E4E7E5] hover:border-[#C9CFCC] focus:border-[#0B3838] rounded-xl px-3 py-2 text-sm outline-none transition-colors';
 
-export default function ZimmerCreatorChat({ onSave, onCancel, embedded = false }) {
+export default function ZimmerCreatorChat({ onSave, onCreated, onCancel, embedded = false, ownerId = null }) {
+  const customBedTypes = useOwnerCustomBedTypes(ownerId);
   const [messages, setMessages] = useState([{
     id: 1, role: 'bot', type: 'text',
     content: 'שלום! אני אעזור לך ליצור את הצימר שלך. ספר לי הכל — שם הצימר, מיקום, מספר חדרים, כמה אורחים, מחיר לאמצע שבוע (א\'-ה\'), מחיר לסוף שבוע (ה\'-ש\'), ומה מיוחד בו. כתוב בחופשיות!',
@@ -38,9 +67,14 @@ export default function ZimmerCreatorChat({ onSave, onCancel, embedded = false }
   const [uploadedImages, setUploadedImages] = useState([]);
   const [uploadingImg, setUploadingImg] = useState(false);
   const [builtZimmer, setBuiltZimmer] = useState(null);
+  // Zimmer waiting for the owner to place beds in rooms — shown before the preview card.
+  const [pendingZimmer, setPendingZimmer] = useState(null);
   const [chatMode, setChatMode] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
   const [conversationData, setConversationData] = useState({});
+  // Ambiguous amenities the owner already placed (inside / outside / both) — never asked twice.
+  const [placements, setPlacements] = useState({});
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null); 
   const { ref: inputRef, resize: resizeInput } = useAutoResize(input, 240);
@@ -82,12 +116,11 @@ export default function ZimmerCreatorChat({ onSave, onCancel, embedded = false }
     addMsg('user', 'text', text);
     setIsTyping(true);
 
-    const historyText = messages.map(m =>
-      m.role === 'user' ? `בעל הצימר: ${typeof m.content === 'string' ? m.content : '[תמונות]'}` :
-        `מערכת: ${typeof m.content === 'string' ? m.content : ''}`
-    ).join('\n');
-
-    const currentData = JSON.stringify(conversationData);
+    // The allocation/preview card may hold manual edits the LLM hasn't seen — send those rooms.
+    const cardZimmer = pendingZimmer || (chatMode ? builtZimmer : null);
+    const currentData = cardZimmer
+      ? { ...conversationData, rooms_detail: cardZimmer.rooms_detail, max_guests: cardZimmer.max_guests, num_rooms: cardZimmer.num_rooms, outdoor_area: cardZimmer.outdoor_area ?? null, amenities: cardZimmer.amenities }
+      : conversationData;
 
     // All owner text so far — used for automatic amenity detection (keyword-based, no AI guessing).
     const ownerFullText = messages
@@ -95,109 +128,72 @@ export default function ZimmerCreatorChat({ onSave, onCancel, embedded = false }
       .map(m => m.content)
       .join('\n');
 
-    const prompt = `אתה עוזר לבעל צימר ליצור את פרופיל הצימר שלו במערכת.
-היסטוריית השיחה:
-${historyText}
-
-הודעה נוכחית: "${text}"
-
-נתונים שנאספו עד כה: ${currentData}
-
-המשימה שלך:
-1. עדכן/השלם את נתוני הצימר לפי ההודעה החדשה
-2. אם יש מספיק נתונים (לפחות שם), הצע לסכם ולבנות
-3. אם חסר מידע חשוב — שאל שאלה ספציפית אחת
-4. אם הבעל אומר "בנה", "סיים", "אוקיי", "תן לי לראות", "יצור" — עבור למצב BUILD
-
-ענה JSON בלבד:
-{
-  "action": "collect" | "build",
-  "message": "...",
-  "zimmer_data": {
-    "name": "...",
-    "location": "...",
-    "price_per_night": number or null,
-    "weekday_price": number or null,
-    "weekend_price": number or null,
-    "num_rooms": number or null,
-    "max_guests": number or null,
-    "max_guests_event": number or null,
-    "description": "...",
-    "data_zones": [],
-    "contact_phone": "...",
-    "expose_availability_calendar": boolean,
-    "additional_bathrooms_count": number,
-    "rooms_detail": [
-      { "room_name": "...", "beds": [{"bed_type": "king|queen|single|bunk|sofa_bed|other", "count": number}], "has_bathroom": boolean, "amenities": ["..."] }
-    ]
-  }
-}
-
-אם action=build, מלא את zimmer_data בצורה מלאה ומפורטת לפי כל מה שנאמר בשיחה.
-חובה לבקש מהבעל מחיר נפרד לאמצע השבוע (א'-ה', weekday_price) ולסוף השבוע (ה'-ש', weekend_price). אם הבעל נתן רק מחיר אחד ולא ציין חלוקה — הגדר את אותו מחיר גם ל-weekday_price וגם ל-weekend_price (ול-price_per_night). אף פעם אל תשאיר את שניהם null כשיש מחיר כלשהו.
-ה-description צריך להיות ניסוח מחדש קצר ומושך של מה שהבעל אמר בפועל בלבד. אסור להמציא תכונות, מתקנים או נתונים שהבעל לא ציין. אם הבעל לא אמר "בריכה" — אל תכתוב בריכה. ציין רק עובדות.
-max_guests = כמות האורחים שיישנים בפועל (כמות המיטות).
-max_guests_event = כמות האורחים שניתן לארח באירוע/אירוע יוקרתי במקום, רק אם הבעל ציין. אחרת null.
-ה-data_zones צריכים לכלול מידע ייחודי שנאמר בשיחה (כגון: מדיניות ביטול, חיות מחמד, ציוד מיוחד וכו').
-contact_phone: טלפון/וואטסאפ ליצירת קשר אם הבעל ציין. אחרת null.
-expose_availability_calendar: נאות רק אם הבעל אמר במפורש שרוצה לחשוף יומן זמינות ללקוחות. ברירת מחדל false.
-rooms_detail: חלץ את חלוקת החדרים מתוך הטקסט כמיטב יכולתך. אם הבעל ציין מספר חדרים (num_rooms) — בנה בדיוק מספר כזה של חדרים. אם num_rooms חסר אך max_guests ידוע — בנה חלוקה סבירה (חדר זוגי + חדרי ילדים/אורחים). סכום המיטות בכל החדרים צריך להגיע ל-max_guests. bed_type ברירת מחדל: queen (king לחדר ראשי, single לילדים/אורחים, bunk לילדים אם רלוונטי). אם הטקסט מזכיר מתקנים בחדר (טלוויזיה, מזגן, מרפסת פרטית, כניסה פרטית) — כלול אותם ב-amenities של החדר הרלוונטי. זוהי הצעה שהבעלים יאשר או יערוך ידנית — אל תהסס להציע חלוקה גם כשהטקסט חלקי.
-additional_bathrooms_count: מספר חדרי רחצה נוספים/משותפים (לא צמודים לחדר שינה). למשל "3 חדרי רחצה נוספים" = 3, "שירותי אורחים" = 1, "מקלחת בכניסה" = 1. אם לא הוזכר — החזר 0.`;
-
-    const response = await api.integrations.Core.InvokeLLM({
-      prompt,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          action: { type: 'string' },
-          message: { type: 'string' },
-          zimmer_data: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              location: { type: 'string' },
-              price_per_night: { type: 'number' },
-              weekday_price: { type: 'number' },
-              weekend_price: { type: 'number' },
-              num_rooms: { type: 'number' },
-              max_guests: { type: 'number' },
-              max_guests_event: { type: 'number' },
-              description: { type: 'string' },
-              data_zones: { type: 'array', items: { type: 'object' } },
-              contact_phone: { type: 'string' },
-              expose_availability_calendar: { type: 'boolean' },
-              additional_bathrooms_count: { type: 'number' },
-              rooms_detail: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    room_name: { type: 'string' },
-                    beds: { type: 'array', items: { type: 'object', properties: { bed_type: { type: 'string' }, count: { type: 'number' } } } },
-                    has_bathroom: { type: 'boolean' },
-                    amenities: { type: 'array', items: { type: 'string' } }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    });
+    let res;
+    try {
+      res = await api.assistant.chat({
+        profile: 'owner_zimmer_creator',
+        message: text,
+        clientState: {
+          ...(ownerId ? { ownerId } : {}),
+          conversationData: currentData,
+          recentTurns: buildCreatorRecentTurns(messages),
+          uploadedImageCount: uploadedImages.length,
+          customBedTypes: customBedTypes.map((t) => ({ custom_label: t.custom_label, sleeps: t.sleeps ?? null })),
+        },
+      });
+    } catch {
+      setIsTyping(false);
+      addMsg('bot', 'text', 'מצטער, אירעה שגיאה. נסה שוב.');
+      return;
+    }
+    const parsedRes = getAssistantParsed(res);
+    const response = { ...parsedRes, message: res?.message?.content || parsedRes.message };
+    const freshConfirm = findConfirmAction(res);
+    if (freshConfirm) setConfirmAction(freshConfirm);
 
     setIsTyping(false);
 
+    const aiUnclear = Array.isArray(response.zimmer_data?.unclear_placement) ? response.zimmer_data.unclear_placement : [];
     if (response.zimmer_data) {
+      delete response.zimmer_data.unclear_placement;
       setConversationData(prev => ({ ...prev, ...response.zimmer_data }));
+    }
+    const ownerTextNow = `${ownerFullText}\n${text}`;
+    const askPlacement = (zimmer) => {
+      const unclear = detectUnclearPlacement(ownerTextNow, zimmer, { resolved: Object.keys(placements), aiUnclear });
+      if (unclear.length) addMsg('bot', 'placement', unclear);
+    };
+
+    // Bed-allocation step: the owner answered in text — take only room/bed data and re-check.
+    if (pendingZimmer) {
+      const zd = response.zimmer_data || {};
+      const next = {
+        ...pendingZimmer,
+        ...(Array.isArray(zd.rooms_detail) ? { rooms_detail: zd.rooms_detail } : {}),
+        ...(zd.max_guests != null ? { max_guests: zd.max_guests } : {}),
+        ...(zd.num_rooms != null ? { num_rooms: zd.num_rooms } : {}),
+        ...(zd.additional_bathrooms_count != null ? { additional_bathrooms_count: zd.additional_bathrooms_count } : {}),
+        ...(zd.outdoor_area && typeof zd.outdoor_area === 'object' ? { outdoor_area: zd.outdoor_area } : {}),
+      };
+      if (bedAllocationStatus(next).complete) {
+        proceedToPreview(next, 'כל המיטות שובצו! הנה הצימר — אפשר לערוך כל שדה או להוסיף פרטים בצ׳אט:');
+      } else {
+        setPendingZimmer(next);
+        addMsg('bot', 'text', response.message || allocationQuestion(bedAllocationStatus(next)));
+      }
+      return;
     }
 
     // "הוסף פרטים בצ׳אט" flow — keep the preview card, merge new data + refresh auto-amenities.
     if (chatMode && builtZimmer && response.zimmer_data) {
       const sourceForAmenities = [ownerFullText, text, response.zimmer_data.description || ''].join('\n');
       const mergedAmenities = extractAmenitiesFromText(sourceForAmenities, builtZimmer.amenities || []);
-      setBuiltZimmer(prev => ({ ...prev, ...response.zimmer_data, images: uploadedImages, amenities: mergedAmenities }));
+      const nextZimmer = { ...builtZimmer, ...response.zimmer_data, images: uploadedImages, amenities: mergedAmenities };
+      if (!response.zimmer_data.outdoor_area) nextZimmer.outdoor_area = builtZimmer.outdoor_area ?? null;
+      setBuiltZimmer(nextZimmer);
       setChatMode(false);
       addMsg('bot', 'text', response.message || 'עדכנתי את הפרטים החדשים בכרטיס — אפשר להמשיך לערוך או לסיים ולפרסם.');
+      askPlacement(nextZimmer);
       return;
     }
 
@@ -226,13 +222,38 @@ additional_bathrooms_count: מספר חדרי רחצה נוספים/משותפי
         amenities: autoAmenities,
         data_zones: [ownerZone, ...aiZones],
       };
-      setBuiltZimmer(finalZimmer);
-      setChatMode(false);
-      addMsg('bot', 'text', response.message || 'מצוין! הנה הצימר שבניתי לך — לחצו על כל שדה לעריכה, או הוסיפו פרטים בצ׳אט:');
-      addMsg('bot', 'preview', finalZimmer);
+      const status = bedAllocationStatus(finalZimmer);
+      if (!status.complete) {
+        setPendingZimmer(finalZimmer);
+        addMsg('bot', 'text', allocationQuestion(status));
+        addMsg('bot', 'bed_allocation', null);
+        askPlacement(finalZimmer);
+        return;
+      }
+      proceedToPreview(finalZimmer, response.message);
+      askPlacement(finalZimmer);
     } else {
       addMsg('bot', 'text', response.message || 'תודה! ספר לי עוד.');
     }
+  };
+
+  const proceedToPreview = (zimmer, message) => {
+    const images = [...new Set([...(zimmer.images || []), ...uploadedImages])];
+    const finalZimmer = { ...zimmer, images };
+    setPendingZimmer(null);
+    setBuiltZimmer(finalZimmer);
+    setChatMode(false);
+    addMsg('bot', 'text', message || 'מצוין! הנה הצימר שבניתי לך — לחצו על כל שדה לעריכה, או הוסיפו פרטים בצ׳אט:');
+    addMsg('bot', 'preview', finalZimmer);
+  };
+
+  const updatePendingField = (field, val) => setPendingZimmer(prev => (prev ? { ...prev, [field]: val } : prev));
+
+  const resolvePlacement = (name, choice) => {
+    setPlacements(prev => ({ ...prev, [name]: choice }));
+    setPendingZimmer(prev => (prev ? applyPlacement(prev, name, choice) : prev));
+    setBuiltZimmer(prev => (prev ? applyPlacement(prev, name, choice) : prev));
+    setConversationData(prev => applyPlacement(prev, name, choice));
   };
 
   const handleKeyDown = (e) => {
@@ -247,15 +268,65 @@ additional_bathrooms_count: מספר חדרי רחצה נוספים/משותפי
       rooms_detail: (builtZimmer.rooms_detail || []).map(normalizeRoomForSave),
       additional_bathrooms_count: Math.max(0, Number(builtZimmer.additional_bathrooms_count) || 0),
       amenities: (builtZimmer.amenities || []).filter((a) => String(a).trim()),
+      outdoor_area: normalizeOutdoorAreaForSave(builtZimmer.outdoor_area),
       images: uploadedImages,
       approval_status: 'אושר',
     };
-    await onSave(normalized);
-    setSaving(false);
+    if (!confirmAction) {
+      // Admin sessions have no owner thread — legacy direct save.
+      await onSave(normalized);
+      setSaving(false);
+      return;
+    }
+    const confirmWith = (action) => decideOwnerAction({
+      profile: 'owner_zimmer_creator',
+      actionId: action.actionId,
+      confirm: true,
+      editedFields: normalized,
+      ...(ownerId ? { ownerId } : {}),
+    });
+    try {
+      let res;
+      try {
+        res = await confirmWith(confirmAction);
+      } catch (err) {
+        // The proposal expired while the owner edited the card — ask the server for a fresh one.
+        if (err?.status !== 404 && err?.status !== 410) throw err;
+        const fresh = findConfirmAction(await api.assistant.chat({
+          profile: 'owner_zimmer_creator',
+          message: 'בנה את הצימר',
+          clientState: { ...(ownerId ? { ownerId } : {}), conversationData: normalized, recentTurns: [] },
+        }));
+        if (!fresh) throw err;
+        res = await confirmWith(fresh);
+      }
+      setConfirmAction(null);
+      const created = res?.executedActions?.[0]?.zimmer || null;
+      if (onCreated) await onCreated(created);
+      else onCancel?.();
+    } catch (err) {
+      addMsg('bot', 'text', ownerActionErrorText(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleEditField = (field, val) => {
     setBuiltZimmer(prev => ({ ...prev, [field]: val }));
+  };
+
+  const addRoomPhotoToGallery = (url) => {
+    setUploadedImages(prev => (prev.includes(url) ? prev : [...prev, url]));
+    setPendingZimmer(prev => {
+      if (!prev) return prev;
+      const images = prev.images || [];
+      return images.includes(url) ? prev : { ...prev, images: [...images, url] };
+    });
+    setBuiltZimmer(prev => {
+      if (!prev) return prev;
+      const images = prev.images || [];
+      return images.includes(url) ? prev : { ...prev, images: [...images, url] };
+    });
   };
 
   return (
@@ -295,7 +366,15 @@ additional_bathrooms_count: מספר חדרי רחצה נוספים/משותפי
                 key={msg.id}
                 msg={msg}
                 onEditField={handleEditField}
+                onRoomPhotoUploaded={addRoomPhotoToGallery}
                 builtZimmer={builtZimmer}
+                pendingZimmer={pendingZimmer}
+                onEditPendingField={updatePendingField}
+                onConfirmAllocation={() => proceedToPreview(pendingZimmer, 'מעולה, כל המיטות שובצו! הנה הצימר — אפשר לערוך כל שדה או להוסיף פרטים בצ׳אט:')}
+                onSkipAllocation={() => proceedToPreview(pendingZimmer, 'בסדר, אפשר להשלים את שיבוץ המיטות בכרטיס או אחרי הפרסום בעורך הצימר:')}
+                customBedTypes={customBedTypes}
+                placements={placements}
+                onResolvePlacement={resolvePlacement}
               />
             ))}
             {isTyping && <TypingIndicator />}
@@ -394,8 +473,125 @@ additional_bathrooms_count: מספר חדרי רחצה נוספים/משותפי
   );
 }
 
-function AdminChatBubble({ msg, onEditField, builtZimmer }) {
+function BedAllocationCounter({ status }) {
+  const { total, assigned, unknownBeds, remaining } = status;
+  const pct = total ? Math.min(100, Math.round((assigned / total) * 100)) : 100;
+  return (
+    <div className="rounded-[10px] px-3 py-2.5" style={{ background: '#F5F5F5' }} role="status" aria-live="polite">
+      {total != null && (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-simona text-sm" style={{ color: '#0B3838', fontWeight: 600 }}>
+              שובצו {assigned} מתוך {total} מקומות שינה
+            </span>
+            {remaining > 0 && <span className="font-simona text-xs" style={{ color: '#717171' }}>נותרו {remaining}</span>}
+          </div>
+          <div className="h-1.5 rounded-full mt-2 overflow-hidden" style={{ background: '#E4E7E5' }}>
+            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#0B3838' }} />
+          </div>
+          {remaining < 0 && (
+            <p className="font-simona text-xs mt-1.5" style={{ color: '#B45309' }}>
+              שובצו יותר מקומות שינה ממספר האורחים ({total}) — כדאי לבדוק את מספר האורחים.
+            </p>
+          )}
+        </>
+      )}
+      {unknownBeds > 0 && (
+        <p className="font-simona text-xs mt-1.5" style={{ color: '#B45309' }}>
+          {unknownBeds === 1 ? 'מיטה אחת' : `${unknownBeds} מיטות`} ללא קיבולת — מלא "ישנים במיטה".
+        </p>
+      )}
+    </div>
+  );
+}
+
+const PLACEMENT_CHOICES = [['inside', 'בפנים'], ['outside', 'בחצר'], ['both', 'גם וגם']];
+
+function PlacementQuestion({ names, placements, onResolve }) {
+  return (
+    <div className="flex items-start gap-2">
+      <OwnerAiIcon size={32} className="mt-1" />
+      <div className="flex-1 min-w-0 max-w-md rounded-[10px] px-4 py-3" style={{ background: '#F5F5F5' }}>
+        <p className="font-simona mb-2" style={{ color: '#0B3838', fontSize: 15 }}>
+          לא היה ברור לי איפה נמצאים המתקנים הבאים — בפנים או בחצר?
+        </p>
+        <div className="space-y-2">
+          {names.map((name) => (
+            <div key={name} className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="font-simona text-sm" style={{ color: '#0B3838', fontWeight: 600 }}>{name}</span>
+              <div className="flex gap-1.5" role="radiogroup" aria-label={`מיקום ${name}`}>
+                {PLACEMENT_CHOICES.map(([val, lbl]) => {
+                  const active = placements[name] === val;
+                  return (
+                    <button key={val} type="button" role="radio" aria-checked={active} onClick={() => onResolve(name, val)}
+                      className="font-simona text-xs px-3 py-1.5 rounded-lg transition-all"
+                      style={active ? { background: '#0B3838', color: '#fff' } : { background: '#fff', color: '#0B3838', border: '1.5px solid #E4E7E5' }}>
+                      {lbl}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminChatBubble({ msg, onEditField, onRoomPhotoUploaded, builtZimmer, pendingZimmer, onEditPendingField, onConfirmAllocation, onSkipAllocation, customBedTypes, placements, onResolvePlacement }) {
   const isBot = msg.role === 'bot';
+
+  if (msg.type === 'placement') {
+    return <PlacementQuestion names={msg.content || []} placements={placements} onResolve={onResolvePlacement} />;
+  }
+
+  if (msg.type === 'bed_allocation') {
+    if (!pendingZimmer) return null;
+    const status = bedAllocationStatus(pendingZimmer);
+    return (
+      <div className="flex items-start gap-2">
+        <OwnerAiIcon size={32} className="mt-1" />
+        <div className="flex-1 min-w-0 bg-white rounded-[23px] p-4 sm:p-5" style={{ border: '1.5px solid #E4E7E5' }}>
+          <h2 className="font-simpler mb-1" style={{ color: '#0B3838', fontSize: 18, fontWeight: 600 }}>שיבוץ מיטות בחדרים</h2>
+          <p className="font-simona mb-3" style={{ color: '#717171', fontSize: 13 }}>
+            שיבצנו רק מיטות שציינת במפורש. הוסף לכל חדר את המיטות שבו, או כתוב לי בצ׳אט.
+          </p>
+          <BedAllocationCounter status={status} />
+          <div className="mt-4">
+            <RoomsDetailEditor
+              value={Array.isArray(pendingZimmer.rooms_detail) ? pendingZimmer.rooms_detail : []}
+              onChange={(rooms) => onEditPendingField('rooms_detail', rooms)}
+              additionalBathrooms={pendingZimmer.additional_bathrooms_count ?? 0}
+              onAdditionalBathroomsChange={(n) => onEditPendingField('additional_bathrooms_count', n)}
+              onRoomPhotoUploaded={onRoomPhotoUploaded}
+              allowEmptyBeds
+              customBedTypes={customBedTypes}
+            />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4">
+            <button
+              type="button"
+              onClick={onConfirmAllocation}
+              disabled={!status.complete}
+              className="font-simpler flex-1 text-white py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: '#0B3838', fontWeight: 600 }}
+            >
+              <Check size={16} /> אישור השיבוץ
+            </button>
+            <button
+              type="button"
+              onClick={onSkipAllocation}
+              className="font-simona px-5 py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-all hover:opacity-90"
+              style={{ background: 'rgba(11,56,56,0.08)', color: '#0B3838', border: '1.5px solid rgba(11,56,56,0.12)' }}
+            >
+              דלג, אשלים אחר כך
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (msg.type === 'images') {
     return (
@@ -460,15 +656,53 @@ function AdminChatBubble({ msg, onEditField, builtZimmer }) {
                 className="w-4 h-4" style={{ accentColor: '#0B3838' }} />
               <span className="font-simona text-sm" style={{ color: '#0B3838' }}>חשוף מיני-יומן זמינות ללקוחות</span>
             </label>
+            {(() => {
+              const rules = Array.isArray(builtZimmer.min_nights_rules) ? builtZimmer.min_nights_rules : [];
+              const isAlwaysWeekend = (r) => r.scope === 'weekend' && !r.start_date && !r.end_date;
+              const weekendRule = rules.find(isAlwaysWeekend);
+              const others = describeMinNightsRules({ min_nights_rules: rules.filter((r) => !isAlwaysWeekend(r)) });
+              return (
+                <label className="block">
+                  <span className={sectionLabel} style={{ ...sectionLabelStyle, marginBottom: 4 }}>מינימום לילות בסופ"ש (חמשוש)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={weekendRule?.min_nights || ''}
+                    placeholder="ללא הגבלה"
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      const rest = rules.filter((r) => !isAlwaysWeekend(r));
+                      onEditField('min_nights_rules', n > 1 ? [...rest, { scope: 'weekend', min_nights: n, start_date: null, end_date: null, label: null }] : rest);
+                    }}
+                    className={fieldInputClass}
+                    style={{ color: '#0B3838' }}
+                  />
+                  {others && <span className="font-simona block mt-1" style={hintStyle}>כללים נוספים: {others}</span>}
+                </label>
+              );
+            })()}
             <div>
-              <span className={sectionLabel} style={sectionLabelStyle}>חלוקת חדרים, מיטות ומתקנים — הצעה לעריכה</span>
+              <span className={sectionLabel} style={sectionLabelStyle}>חלוקת חדרים, מיטות ומתקנים</span>
+              {!bedAllocationStatus(builtZimmer).complete && (
+                <div className="mb-3"><BedAllocationCounter status={bedAllocationStatus(builtZimmer)} /></div>
+              )}
               <RoomsDetailEditor
                 value={Array.isArray(builtZimmer.rooms_detail) ? builtZimmer.rooms_detail : []}
                 onChange={(rooms) => onEditField('rooms_detail', rooms)}
                 additionalBathrooms={builtZimmer.additional_bathrooms_count ?? 0}
                 onAdditionalBathroomsChange={(n) => onEditField('additional_bathrooms_count', n)}
+                onRoomPhotoUploaded={onRoomPhotoUploaded}
+                allowEmptyBeds
+                customBedTypes={customBedTypes}
               />
-              <p className="font-simona mt-2" style={hintStyle}>החלוקה נקבעה מתוך הטקסט שהקלדת — בדוק ותקן אם צריך לפני פרסום.</p>
+              <p className="font-simona mt-2" style={hintStyle}>המיטות שובצו רק לפי מה שציינת או שיבצת — בדוק ותקן אם צריך לפני פרסום.</p>
+            </div>
+            <div>
+              <span className={sectionLabel} style={sectionLabelStyle}>מתחם חיצוני (חצר)</span>
+              <OutdoorAreaEditor
+                value={builtZimmer.outdoor_area}
+                onChange={(area) => onEditField('outdoor_area', area)}
+              />
             </div>
             {(builtZimmer.data_zones || []).length > 0 && (
               <div>

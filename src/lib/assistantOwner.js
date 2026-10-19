@@ -1,6 +1,7 @@
 /**
  * Owner assistant UI — apply server uiEffects + executedActions (Phase 6).
  */
+import { buildCreatorRecentTurns } from './assistantCreator';
 
 const ACTION_LINKS = {
   bookings: { label: '📋 עבור להזמנות', tab: 'bookings' },
@@ -9,15 +10,12 @@ const ACTION_LINKS = {
   reviews: { label: '⭐ ביקורות', tab: 'reviews' },
 };
 
-export function buildOwnerRecentTurns(messages, limit = 8) {
+export function buildOwnerRecentTurns(messages, limit = 20) {
   if (!Array.isArray(messages)) return [];
-  return messages
-    .filter((m) => m.type === 'text' && typeof m.content === 'string')
-    .slice(-limit)
-    .map((m) => ({
-      role: m.role === 'user' ? 'user' : 'bot',
-      content: m.content,
-    }));
+  return buildCreatorRecentTurns(
+    messages.filter((m) => m.type === 'text' && typeof m.content === 'string'),
+    limit,
+  );
 }
 
 /**
@@ -44,9 +42,6 @@ export function applyOwnerAssistantResponse({ response, actions }) {
   for (const effect of uiEffects) {
     if (effect.type === 'owner_action_links' && Array.isArray(effect.actions)) {
       actionsFromEffects.push(...effect.actions);
-    }
-    if (effect.type === 'edit_mode_required' && actions.onEditModeRequired) {
-      actions.onEditModeRequired();
     }
   }
 

@@ -3,7 +3,7 @@ import { api } from '@/api/client';
 import { Send } from 'lucide-react';
 import QuickOptions from '@/components/chat/QuickOptions';
 import DateSearchWidget, { getBookedZimmerIds, datesOverlap } from '@/components/chat/DateSearchWidget';
-import { rankZimmersByFit, zimmerPriceSummary, formatILS } from '@/lib/bookingPrice';
+import { rankZimmersByFit, zimmerPriceSummary, formatILS, minNightsPromptNote, MIN_NIGHTS_PROMPT_RULE } from '@/lib/bookingPrice';
 import { REGION_KEYWORDS } from '@/lib/regions';
 import { useAutoResize } from '@/hooks/useAutoResize';
 import MicButton from '@/components/chat/MicButton';
@@ -121,9 +121,9 @@ export default function SearchChat({ user, onResults, onSelectZimmer, onBookZimm
         const priceLine = pr.isPartial
           ? `${formatILS(pr.avg)}/לילה (חלקי, סה"כ ${formatILS(pr.total)})`
           : `${formatILS(pr.avg)}/לילה (מלא, סה"כ ${formatILS(pr.total)})`;
-        return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || '—'} | ${priceLine} | חדרים: ${z.num_rooms || '?'} | מקס אורחים: ${z.max_guests || '?'}\n${zones}`;
+        return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || '—'} | ${priceLine} | חדרים: ${z.num_rooms || '?'} | מקס אורחים: ${z.max_guests || '?'}${minNightsPromptNote(z, priceCheckIn, priceCheckOut)}\n${zones}`;
       }).join('\n');
-      const prompt = `אתה בוט צימרים. ענה בעברית. מחפש ${label}, ${numAdults} מבוגרים ו-${numChildren} ילדים.\nצימרים פנויים (מסודרים לפי התאמת קיבולת):\n${ctx}\nבחר עד 5 מועמדים מתאימים. החזר JSON {"action":"search","zimmer_ids":[...],"message":"..."}.\nmessage: הסבר קצר. JSON בלבד.`;
+      const prompt = `אתה בוט צימרים. ענה בעברית. מחפש ${label}, ${numAdults} מבוגרים ו-${numChildren} ילדים.\nצימרים פנויים (מסודרים לפי התאמת קיבולת):\n${ctx}\nבחר עד 5 מועמדים מתאימים. ${MIN_NIGHTS_PROMPT_RULE} העדף צימרים שאפשר להזמין בתאריכים שנבחרו.\nהחזר JSON {"action":"search","zimmer_ids":[...],"message":"..."}.\nmessage: הסבר קצר. JSON בלבד.`;
       const res = await api.integrations.Core.InvokeLLM({
         prompt,
         response_json_schema: { type: 'object', properties: { action: { type: 'string' }, message: { type: 'string' }, zimmer_ids: { type: 'array', items: { type: 'string' } } } },
@@ -184,10 +184,10 @@ export default function SearchChat({ user, onResults, onSelectZimmer, onBookZimm
           const pr = zimmerPriceSummary(z, priceCheckIn, priceCheckOut, numAdults, numChildren);
           priceStr = pr.isPartial ? `${formatILS(pr.avg)}/לילה (חלקי)` : `${formatILS(pr.avg)}/לילה (מלא, סה"כ ${formatILS(pr.total)})`;
         }
-        return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || '—'} | ${priceStr} | מקס אורחים: ${z.max_guests || '?'}\n${zones}`;
+        return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || '—'} | ${priceStr} | מקס אורחים: ${z.max_guests || '?'}${minNightsPromptNote(z, priceCheckIn, priceCheckOut)}\n${zones}`;
       }).join('\n\n');
       const hist = messages.slice(-6).map((m) => (m.role === 'user' ? `לקוח: ${m.content}` : `בוט: ${typeof m.content === 'string' ? m.content : '[תוצאות]'}`)).join('\n');
-      const prompt = `אתה בוט צימרים, ענה בעברית. ${datesInfo}\nצימרים פנויים:\n${zctx}\nהיסטוריה: ${hist}\nהודעה: "${text}"\nהחזר JSON: {"action":"search"|"answer"|"booking"|"view","zimmer_ids":[...],"zimmer_id":"...","message":"...","unanswered_question":bool}.\nחוקי חובה:\n- כל אילוץ שהלקוח הזכיר בשיחה (אזור, כמות אורחים, מתקנים, תקציב) מצטבר — החזר ב-zimmer_ids רק צימרים העונים לכל האילוצים גם יחד. לדוגמה: אם קודם אמר "צפון" ועכשיו הוסיף "זוג" — החזר רק צימרים בצפון שמתאימים לזוג.\n- החזר zimmer_ids מתוך רשימת הצימרים הפנויים למעלה בלבד. החזר עד 20 תוצאות רלוונטיות.\n- בקשה להזמין צימר מוזכר → action="booking", zimmer_id.\n- בקשה לראות דף צימר / תמונות / פרטים מלאים / "תן לי לראות את" / "פתח דף צימר" / "אני רוצה לראות תמונות" → action="view", zimmer_id.\n- שאלת המשך על צימר שמוזכר → action="answer" בלבד.\n- לראות תוצאות/חיפוש מחדש → action="search". JSON בלבד.`;
+      const prompt = `אתה בוט צימרים, ענה בעברית. ${datesInfo}\nצימרים פנויים:\n${zctx}\nהיסטוריה: ${hist}\nהודעה: "${text}"\nהחזר JSON: {"action":"search"|"answer"|"booking"|"view","zimmer_ids":[...],"zimmer_id":"...","message":"...","unanswered_question":bool}.\nחוקי חובה:\n- כל אילוץ שהלקוח הזכיר בשיחה (אזור, כמות אורחים, מתקנים, תקציב) מצטבר — החזר ב-zimmer_ids רק צימרים העונים לכל האילוצים גם יחד. לדוגמה: אם קודם אמר "צפון" ועכשיו הוסיף "זוג" — החזר רק צימרים בצפון שמתאימים לזוג.\n- החזר zimmer_ids מתוך רשימת הצימרים הפנויים למעלה בלבד. החזר עד 20 תוצאות רלוונטיות.\n- בקשה להזמין צימר מוזכר → action="booking", zimmer_id.\n- ${MIN_NIGHTS_PROMPT_RULE}\n- בקשה לראות דף צימר / תמונות / פרטים מלאים / "תן לי לראות את" / "פתח דף צימר" / "אני רוצה לראות תמונות" → action="view", zimmer_id.\n- שאלת המשך על צימר שמוזכר → action="answer" בלבד.\n- לראות תוצאות/חיפוש מחדש → action="search". JSON בלבד.`;
       const res = await api.integrations.Core.InvokeLLM({
         prompt,
         response_json_schema: { type: 'object', properties: { action: { type: 'string' }, message: { type: 'string' }, zimmer_ids: { type: 'array', items: { type: 'string' } }, zimmer_id: { type: 'string' }, unanswered_question: { type: 'boolean' } } },

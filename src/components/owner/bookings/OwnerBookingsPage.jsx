@@ -197,6 +197,9 @@ export default function OwnerBookingsPage({ ownerId, zimmers = [], onAddBooking,
           </div>
         </main>
         <BookingsAiSidebar
+          ownerId={ownerId}
+          focusZimmerId={zimmerFilter !== 'all' ? zimmerFilter : null}
+          onMutated={loadBookings}
           bookings={zimmerBookings}
           zimmers={zimmers}
           onQuickAction={onQuickAction}

@@ -2,22 +2,57 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/api/client';
 import { Send, Bot, X, Sparkles, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import ConfirmActionCard from '@/components/owner/ConfirmActionCard';
+import { buildCreatorRecentTurns } from '@/lib/assistantCreator';
+import { decideOwnerAction, findConfirmAction, ownerActionErrorText } from '@/lib/ownerActions';
 
 const fmtTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
 /**
  * Compact inline AI assistant scoped to a single zimmer (no agents API).
+ * Owner sessions: changes run on the server only after confirm_action is confirmed.
  */
-export default function ZimmerInlineChat({ zimmer, initialPrompt, onClose }) {
+export default function ZimmerInlineChat({ zimmer, initialPrompt, onClose, onApplied }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [conversationId, setConversationId] = useState(null);
+  const [applyingId, setApplyingId] = useState(null);
   const sentRef = useRef(false);
   const endRef = useRef(null);
 
-  const addMsg = (role, content) => {
-    setMessages(prev => [...prev, { id: Date.now() + Math.random(), role, content, time: fmtTime() }]);
+  const addMsg = (role, content, extra = {}) => {
+    setMessages(prev => [...prev, { id: Date.now() + Math.random(), role, content, time: fmtTime(), ...extra }]);
+  };
+
+  const setMsg = (id, patch) => setMessages(prev => prev.map(m => (m.id === id ? { ...m, ...patch } : m)));
+
+  const applyChanges = async (msg) => {
+    if (!msg.changes || applyingId) return;
+    setApplyingId(msg.id);
+    try {
+      let updated;
+      if (msg.confirmAction) {
+        const res = await decideOwnerAction({ profile: 'admin_zimmer_editor', actionId: msg.confirmAction.actionId, confirm: true });
+        updated = res?.executedActions?.[0]?.zimmer;
+      } else {
+        // Admin sessions have no owner thread — legacy direct save.
+        updated = await api.entities.Zimmer.update(zimmer.id, msg.changes);
+      }
+      setMsg(msg.id, { applied: true });
+      onApplied?.(updated || { ...zimmer, ...msg.changes });
+    } catch (err) {
+      addMsg('assistant', msg.confirmAction ? ownerActionErrorText(err) : 'לא הצלחתי לשמור את השינויים. נסה שוב.');
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+  const dismissChanges = (msg) => {
+    if (msg.confirmAction) {
+      decideOwnerAction({ profile: 'admin_zimmer_editor', actionId: msg.confirmAction.actionId, confirm: false }).catch(() => {});
+    }
+    setMsg(msg.id, { dismissed: true });
   };
 
   const doSend = async (text) => {
@@ -26,17 +61,23 @@ export default function ZimmerInlineChat({ zimmer, initialPrompt, onClose }) {
     setInput('');
     setSending(true);
     addMsg('user', t);
-    const ctx = `[מצב: עריכה] [הקשר: אתה בדף ניהול הצימר "${zimmer.name}" (מזהה ${zimmer.id}). כל בקשה מתייחסת לצימר זה אלא אם צוין אחרת.] ${t}`;
     try {
       const response = await api.assistant.chat({
         profile: 'admin_zimmer_editor',
-        message: ctx,
+        message: t,
         conversationId,
-        clientState: { zimmerId: zimmer.id },
+        clientState: {
+          zimmerId: zimmer.id,
+          recentTurns: buildCreatorRecentTurns(messages),
+        },
       });
       if (response?.conversationId) setConversationId(response.conversationId);
       const content = response?.message?.content || response?.message || 'לא התקבלה תשובה.';
-      addMsg('assistant', typeof content === 'string' ? content : JSON.stringify(content));
+      const preview = (response?.uiEffects || []).find(e => e?.type === 'zimmer_changes_preview');
+      addMsg('assistant', typeof content === 'string' ? content : JSON.stringify(content), {
+        changes: preview?.changes || null,
+        confirmAction: findConfirmAction(response),
+      });
     } catch {
       addMsg('assistant', 'מצטער, אירעה שגיאה. נסה שוב.');
     } finally {
@@ -69,9 +110,7 @@ export default function ZimmerInlineChat({ zimmer, initialPrompt, onClose }) {
         )}
         {messages.map((m) => {
           const isUser = m.role === 'user';
-          const content = isUser
-            ? String(m.content || '').replace(/^\[מצב: [^\]]+\]\s*\[הקשר:[^\]]*\]\s*/, '')
-            : (m.content || '');
+          const content = m.content || '';
           return (
             <div key={m.id} className={`flex items-end gap-1.5 ${isUser ? 'flex-row-reverse' : ''}`}>
               {!isUser && (
@@ -88,6 +127,25 @@ export default function ZimmerInlineChat({ zimmer, initialPrompt, onClose }) {
                     ? <p className="whitespace-pre-wrap">{content}</p>
                     : <div className="prose prose-sm max-w-none"><ReactMarkdown>{content}</ReactMarkdown></div>}
                 </div>
+                {!isUser && m.changes && m.confirmAction && (
+                  <div className="mt-1">
+                    <ConfirmActionCard
+                      compact
+                      action={m.confirmAction}
+                      status={m.applied ? 'done' : m.dismissed ? 'cancelled' : applyingId === m.id ? 'busy' : 'pending'}
+                      onConfirm={() => applyChanges(m)}
+                      onCancel={() => dismissChanges(m)}
+                      confirmLabel="החל על הצימר"
+                    />
+                  </div>
+                )}
+                {!isUser && m.changes && !m.confirmAction && (
+                  <button type="button" onClick={() => applyChanges(m)} disabled={m.applied || !!applyingId}
+                    className="mt-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg disabled:opacity-60"
+                    style={m.applied ? { background: '#ECFDF5', color: '#047857' } : { background: '#0B3838', color: '#fff' }}>
+                    {m.applied ? '✓ השינויים נשמרו' : applyingId === m.id ? 'שומר...' : 'החל שינויים על הצימר'}
+                  </button>
+                )}
                 <div className="text-[10px] mt-0.5 px-1" style={{ color: '#9CA3AF' }}>{m.time}</div>
               </div>
             </div>

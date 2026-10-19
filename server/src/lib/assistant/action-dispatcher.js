@@ -66,12 +66,12 @@ export async function dispatchOwnerAssistantOperation(store, input) {
     kind: result.kind,
     message: result.message,
     entityType:
-      result.kind === 'create_booking'
+      result.kind === 'create_booking' || result.kind === 'update_booking' || result.kind === 'block_dates'
         ? 'BookingRequest'
-        : result.kind === 'create_zimmer' || result.kind === 'update_zimmer'
+        : ['create_zimmer', 'update_zimmer', 'add_seasonal_price'].includes(result.kind)
           ? 'Zimmer'
           : null,
-    entityId: result.zimmer?.id || result.booking?.id || null,
+    entityId: result.booking?.id || result.zimmer?.id || null,
     zimmer: result.zimmer || null,
     booking: result.booking || null,
   };

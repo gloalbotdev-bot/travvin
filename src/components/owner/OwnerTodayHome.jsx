@@ -10,6 +10,9 @@ import { PropertyThumb, GuestCircle } from '@/components/owner/bookings/Bookings
 import { formatRangeLong, nightsBetween, nightsLabel } from '@/components/owner/bookings/bookingStatus';
 import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
 import OwnerHomeComposer from '@/components/owner/OwnerHomeComposer';
+import OwnerAssistantThread from '@/components/owner/OwnerAssistantThread';
+import useOwnerAssistantThread, { composerPlaceholder } from '@/hooks/useOwnerAssistantThread';
+import { OwnerAssistantSuggestions } from '@/components/owner/OwnerAssistantHome';
 import { monthStats } from '@/lib/occupancy';
 import CustomScrollThumb from '@/components/common/CustomScrollThumb';
 import iconChat from '@/assets/owner/bookings/sidebar-chat.svg';
@@ -143,9 +146,19 @@ function TaskCard({ card, onAction }) {
   );
 }
 
-export default function OwnerTodayHome({ ownerId, zimmers, currentUser, onAction, onNavigate, onEditZimmer, onChat }) {
+export default function OwnerTodayHome({
+  ownerId, zimmers, currentUser, onAction, onNavigate, onEditZimmer, onAssistantMutated, onOpenForm,
+}) {
   const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef(null);
+  const chat = useOwnerAssistantThread({
+    ownerId,
+    surface: 'home',
+    onMutated: onAssistantMutated,
+    onOpenForm,
+  });
+
+  const showThread = chat.chatStarted;
   const {
     bookings, loading, selectedZimmer, setSelectedZimmer,
     checkoutsToday, checkinsToday, pending, activeGuests,
@@ -183,6 +196,31 @@ export default function OwnerTodayHome({ ownerId, zimmers, currentUser, onAction
 
       <div className="relative flex-1 min-h-0">
       <div ref={scrollRef} className="h-full overflow-y-auto owner-hide-scrollbar">
+        {showThread ? (
+          <div className="flex flex-col items-center px-4" style={{ paddingTop: 24.5, paddingBottom: 240 }}>
+            <div className="w-full flex justify-start" style={{ maxWidth: 723, marginBottom: 24 }}>
+              <button
+                type="button"
+                onClick={chat.reset}
+                disabled={chat.isTyping}
+                className="font-simona transition-opacity hover:opacity-70 disabled:opacity-40"
+                style={{ color: INK, fontSize: 14, textDecoration: 'underline', textUnderlineOffset: 3 }}
+              >
+                חזרה למשימות היום
+              </button>
+            </div>
+            <OwnerAssistantThread
+              messages={chat.messages}
+              isTyping={chat.isTyping}
+              busyActionId={chat.busyActionId}
+              onConfirm={chat.confirm}
+              onCancel={chat.cancel}
+              onNavigate={onNavigate}
+              onOpenForm={onOpenForm}
+              scrollParentRef={scrollRef}
+            />
+          </div>
+        ) : (
         <div className="flex flex-col items-center px-4" style={{ paddingTop: 24.5, paddingBottom: 240 }}>
           <OwnerAiIcon variant="orb" size={90} />
           <h1
@@ -212,7 +250,9 @@ export default function OwnerTodayHome({ ownerId, zimmers, currentUser, onAction
               shown.map(a => <TaskCard key={`${a.type}-${a.id}`} card={toCard(a)} onAction={() => handleAction(a)} />)
             )}
           </div>
+          <OwnerAssistantSuggestions ownerId={ownerId} zimmers={zimmers} onNavigate={onNavigate} style={{ marginTop: 56 }} />
         </div>
+        )}
       </div>
       {/* Figma 1776:18223 Rectangle 621 — scroll thumb 68px right of the cards column */}
       <CustomScrollThumb
@@ -221,7 +261,7 @@ export default function OwnerTodayHome({ ownerId, zimmers, currentUser, onAction
         width={10.4}
         height={114.2}
         radius={47}
-        style={{ left: 'calc(50% + 333.5px)', top: 24.5, bottom: 200 }}
+        style={{ left: showThread ? 'calc(50% + 385px)' : 'calc(50% + 333.5px)', top: 24.5, bottom: 200 }}
       />
       </div>
 
@@ -231,7 +271,7 @@ export default function OwnerTodayHome({ ownerId, zimmers, currentUser, onAction
         style={{ height: 192.5, background: 'linear-gradient(to top, #FFFFFF 71.727%, rgba(255,255,255,0))' }}
         aria-hidden
       />
-      {actions.length > VISIBLE_CARDS && (
+      {!showThread && actions.length > VISIBLE_CARDS && (
         <button
           type="button"
           onClick={() => setExpanded(v => !v)}
@@ -249,7 +289,11 @@ export default function OwnerTodayHome({ ownerId, zimmers, currentUser, onAction
         </button>
       )}
       <div className="absolute inset-x-0 flex justify-center px-4" style={{ bottom: 38 }}>
-        <OwnerHomeComposer onSubmit={onChat} placeholder="איך אפשר לעזור היום? שאלי אותי משהו או תני לי משימה" />
+        <OwnerHomeComposer
+          onSubmit={chat.send}
+          autoFocus={showThread}
+          placeholder={composerPlaceholder(showThread)}
+        />
       </div>
     </div>
   );

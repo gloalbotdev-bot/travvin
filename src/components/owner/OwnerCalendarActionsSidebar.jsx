@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { api } from '@/api/client';
 import { Loader2 } from 'lucide-react';
+import ConfirmActionCard from '@/components/owner/ConfirmActionCard';
+import useOwnerAssistantThread, { confirmCardStatus } from '@/hooks/useOwnerAssistantThread';
 import BlockDateForm from '@/components/owner/BlockDateForm';
 import PriceUpdateForm from '@/components/owner/PriceUpdateForm';
 import CalendarAiSuggestions from '@/components/owner/CalendarAiSuggestions';
@@ -133,8 +134,9 @@ const SECTIONS = [
   { id: 'block', title: 'חסימת תאריך', desc: 'סגירת יום או טווח תאריכים שלא יהיו זמינים להזמנה.\nמתאים לתחזוקה, שימוש פרטי, חופשה או כל סיבה אחרת.' },
   { id: 'price', title: 'עדכון מחיר', desc: 'שינוי מחיר ליום מסוים או לטווח תאריכים. אפשר לקבוע מחיר חדש, להעלות באחוזים או להוריד לפי צורך.' },
   { id: 'booking', title: 'הוספת הזמנה', desc: 'יצירת הזמנה ידנית ביומן. מתאים להזמנה שנסגרה מחוץ למערכת, בטלפון או מול בעל הצימר ישירות.' },
-  { id: 'ai', title: 'הצעות AI', desc: 'קבלת הצעות חכמות לשיפור היומן. למשל: עדכון מחיר, פתיחת זמינות, הנחה לתאריך פנוי או בדיקת תקופה מבוקשת.' },
 ];
+
+const REPLY_LIMIT = 8;
 
 export default function OwnerCalendarActionsSidebar({
   ownerId, zimmers, bookings, selectedDate, onRefresh, onOpenManual, onZimmerSaved, command, onCommandConsumed, monthLabel,
@@ -145,9 +147,8 @@ export default function OwnerCalendarActionsSidebar({
   const [blockPrefill, setBlockPrefill] = useState({ date: selectedDate, zimmerId: '' });
   const [pricePrefill, setPricePrefill] = useState({ zimmerId: '', range: null });
   const [aiText, setAiText] = useState('');
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiError, setAiError] = useState('');
   const inputRef = useRef(null);
+  const repliesRef = useRef(null);
 
   // Keep block prefill date in sync with the selected calendar day when the
   // accordion is closed (so opening it reflects the current day).
@@ -170,6 +171,47 @@ export default function OwnerCalendarActionsSidebar({
 
   const toggle = (id) => setOpen(o => (o === id ? null : id));
 
+  const openForm = (effect) => {
+    const date = effect?.date || selectedDate;
+    const zimmerId = effect?.zimmerId || (zimmerFilter !== 'all' ? zimmerFilter : '');
+    if (effect?.form === 'block') {
+      setBlockPrefill({ date, zimmerId });
+      setOpen('block');
+    } else if (effect?.form === 'price') {
+      setPricePrefill({ zimmerId, range: { start: date, end: date } });
+      setOpen('price');
+    } else if (effect?.form === 'booking') {
+      onOpenManual?.(date);
+    }
+  };
+
+  const chat = useOwnerAssistantThread({
+    ownerId,
+    surface: 'calendar',
+    focus: {
+      ...(selectedDate ? { date: selectedDate } : {}),
+      ...(zimmerFilter !== 'all' ? { zimmerId: zimmerFilter } : {}),
+    },
+    onMutated: (exec) => {
+      onRefresh?.();
+      if (exec?.kind === 'update_zimmer' || exec?.kind === 'add_seasonal_price' || exec?.kind === 'create_zimmer') onZimmerSaved?.();
+    },
+    onOpenForm: openForm,
+  });
+  const aiBusy = chat.isTyping;
+  const replies = chat.messages.slice(-REPLY_LIMIT);
+
+  React.useEffect(() => {
+    repliesRef.current?.scrollTo({ top: repliesRef.current.scrollHeight, behavior: 'smooth' });
+  }, [replies.length, aiBusy]);
+
+  const sendAi = (raw) => {
+    const text = (raw ?? aiText).trim();
+    if (!text || aiBusy) return;
+    if (raw === undefined) setAiText('');
+    chat.send(text);
+  };
+
   const applyAiSuggestion = (s) => {
     const zimmer = zimmers.find(z => z.name === s.zimmer_name) || zimmers[0];
     if (s.type === 'price_update' || s.type === 'discount') {
@@ -178,52 +220,11 @@ export default function OwnerCalendarActionsSidebar({
     } else if (s.type === 'open_availability') {
       setOpen('block');
     } else {
-      setOpen('ai');
+      sendAi(`ספרי לי עוד על ההצעה: ${s.title}${s.description ? ` — ${s.description}` : ''}`);
     }
   };
 
-  const classifyAndRoute = async () => {
-    const text = aiText.trim();
-    if (!text || aiBusy) return;
-    setAiBusy(true); setAiError('');
-    try {
-      const zimmerList = zimmers.map(z => z.name).join(', ');
-      const res = await api.integrations.Core.InvokeLLM({
-        prompt: `סווג את בקשת המשתמש לאחת מ-4 פעולות ביומן צימרים וחלץ פרמטרים.\nפעולות: block_date (חסימת תאריך), update_price (עדכון מחיר), add_booking (הוספת הזמנה), ai_suggestion (הצעה/ניתוח כללי).\nנכסים אפשריים: ${zimmerList}.\nתאריך נוכחי: ${selectedDate}\nבקשה: "${text}"\nהחזר JSON בלבד.`,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            intent: { type: 'string', enum: ['block_date', 'update_price', 'add_booking', 'ai_suggestion'] },
-            zimmer_name: { type: 'string' },
-            start_date: { type: 'string' },
-            end_date: { type: 'string' },
-            reason: { type: 'string' },
-            price: { type: 'number' },
-            mode: { type: 'string', enum: ['absolute', 'increase', 'decrease'] },
-          },
-        },
-      });
-      const intent = res?.intent || 'ai_suggestion';
-      const zimmer = zimmers.find(z => z.name === res?.zimmer_name) || zimmers[0];
-      if (intent === 'block_date') {
-        setBlockPrefill({ date: res?.start_date || selectedDate, zimmerId: zimmer?.id || '' });
-        setOpen('block');
-      } else if (intent === 'update_price') {
-        setPricePrefill({ zimmerId: zimmer?.id || '', range: { start: res?.start_date, end: res?.end_date } });
-        setOpen('price');
-      } else if (intent === 'add_booking') {
-        onOpenManual?.(res?.start_date || selectedDate);
-      } else {
-        setOpen('ai');
-      }
-      setAiText('');
-    } catch {
-      setAiError('שגיאה. נסה לנסח אחרת.');
-    }
-    setAiBusy(false);
-  };
-
-  const openSection = SECTIONS.find((s) => s.id === open && s.id !== 'ai');
+  const openSection = SECTIONS.find((s) => s.id === open);
 
   const scopedZimmers = zimmerFilter !== 'all' ? zimmers.filter((z) => z.id === zimmerFilter) : zimmers;
   const scopedBookings = zimmerFilter !== 'all' ? bookings.filter((b) => b.zimmer_id === zimmerFilter) : bookings;
@@ -369,7 +370,51 @@ export default function OwnerCalendarActionsSidebar({
 
       {/* Figma 1776:18992 — ai-input-bar */}
       <div className="flex-shrink-0" style={{ padding: '16px 42px 24px 45px' }}>
-        {aiError && <p className="font-simona text-xs mb-1.5 text-red-500">{aiError}</p>}
+        {(replies.length > 0 || aiBusy) && (
+          <div
+            ref={repliesRef}
+            className="overflow-y-auto owner-hide-scrollbar flex flex-col"
+            style={{ maxHeight: 220, gap: 8, marginBottom: 10 }}
+            aria-live="polite"
+          >
+            {replies.map((m) => (
+              <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-start' : 'items-end'}`}>
+                <div
+                  className="font-simona max-w-[90%] whitespace-pre-wrap break-words"
+                  style={{ fontSize: 14, padding: '8px 12px', borderRadius: 14, ...(m.role === 'user' ? { background: '#FAFAFA', color: INK } : { background: INK, color: '#FFFFFF' }) }}
+                >
+                  {m.content}
+                </div>
+                {m.role === 'bot' && m.openForm && (
+                  <button
+                    type="button"
+                    onClick={() => openForm({ form: m.openForm })}
+                    className="font-simona mt-1 transition-opacity hover:opacity-70"
+                    style={{ color: INK, fontSize: 13, textDecoration: 'underline', textUnderlineOffset: 3 }}
+                  >
+                    פתח את הטופס
+                  </button>
+                )}
+                {m.role === 'bot' && m.pendingAction && (
+                  <div className="w-full mt-1">
+                    <ConfirmActionCard
+                      compact
+                      action={m.pendingAction}
+                      status={confirmCardStatus(m.pendingAction, chat.busyActionId)}
+                      onConfirm={() => chat.confirm(m.pendingAction.id)}
+                      onCancel={() => chat.cancel(m.pendingAction.id)}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+            {aiBusy && (
+              <div className="flex justify-end" role="status" aria-label="העוזר מקליד">
+                <Loader2 size={14} className="animate-spin" style={{ color: INK }} />
+              </div>
+            )}
+          </div>
+        )}
         <div
           className="flex flex-col justify-center bg-white"
           style={{ minHeight: 86, gap: 14, padding: '12px 16px', border: '1px solid #E5E5E5', borderRadius: 23, filter: 'drop-shadow(0px 4px 10.55px rgba(0,0,0,0.07))' }}
@@ -378,7 +423,7 @@ export default function OwnerCalendarActionsSidebar({
             ref={inputRef}
             value={aiText}
             onChange={(e) => setAiText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); classifyAndRoute(); } }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); sendAi(); } }}
             placeholder="שאלי אותי על התאריך הזה..."
             aria-label="שאלי אותי על התאריך הזה"
             className="font-simona w-full bg-transparent outline-none text-right placeholder:text-[#0B3838]"
@@ -388,7 +433,7 @@ export default function OwnerCalendarActionsSidebar({
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={classifyAndRoute}
+                onClick={() => sendAi()}
                 disabled={aiBusy || !aiText.trim()}
                 className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-40"
                 style={{ background: INK }}
