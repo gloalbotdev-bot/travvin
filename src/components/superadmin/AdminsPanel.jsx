@@ -60,17 +60,23 @@ export default function AdminsPanel() {
     if (!newEmail.trim()) return;
     setAdding(true);
     setAddMsg('');
-    await api.entities.AdminPermission.create({
-      email: newEmail.trim().toLowerCase(),
-      is_primary: false,
-      is_active: true,
-      allowed_pages: ALL_PAGES.map(p => p.id),
-    });
-    setNewEmail('');
-    setAddMsg('✅ אדמין נוסף בהצלחה');
-    await load();
-    setAdding(false);
-    setTimeout(() => setAddMsg(''), 3000);
+    try {
+      await api.entities.AdminPermission.create({
+        email: newEmail.trim().toLowerCase(),
+        is_primary: false,
+        is_active: true,
+        allowed_pages: ALL_PAGES.map(p => p.id),
+      });
+      setNewEmail('');
+      setAddMsg('✅ אדמין נוסף בהצלחה (User עם role=admin)');
+      await load();
+      setTimeout(() => setAddMsg(''), 3000);
+    } catch (e) {
+      setAddMsg(`❌ ${e?.message || e?.error || 'שגיאה בהוספת אדמין'}`);
+      setTimeout(() => setAddMsg(''), 5000);
+    } finally {
+      setAdding(false);
+    }
   };
 
   const startEdit = (admin) => {
@@ -107,9 +113,17 @@ export default function AdminsPanel() {
       setTimeout(() => setAddMsg(''), 4000);
       return;
     }
-    await api.entities.AdminPermission.delete(deletingAdmin.id);
-    setDeletingAdmin(null);
-    await load();
+    try {
+      await api.entities.AdminPermission.delete(deletingAdmin.id);
+      setDeletingAdmin(null);
+      setAddMsg('✅ אדמין הוסר (role ירד ל-user אם אין הרשאה נוספת)');
+      await load();
+      setTimeout(() => setAddMsg(''), 4000);
+    } catch (e) {
+      setDeletingAdmin(null);
+      setAddMsg(`❌ ${e?.message || e?.error || 'שגיאה במחיקת אדמין'}`);
+      setTimeout(() => setAddMsg(''), 5000);
+    }
   };
 
   return (
@@ -138,7 +152,7 @@ export default function AdminsPanel() {
         <h2 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: '#1A1A1A' }}>
           <Shield size={15} style={{ color: '#F97316' }} /> הוסף אדמין חדש
         </h2>
-        <p className="text-xs mb-3" style={{ color: '#9CA3AF' }}>כל מייל שיתחבר למערכת ידו — יקבל גישת אדמין-על אוטומטית</p>
+        <p className="text-xs mb-3" style={{ color: '#9CA3AF' }}>נוצר משתמש עם role אדמין. הכניסה דרך כניסת אדמין (Google) כמו היום</p>
         <div className="flex gap-3">
           <input
             type="email"

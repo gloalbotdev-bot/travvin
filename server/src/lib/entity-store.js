@@ -32,6 +32,10 @@ import {
 import { createUserStore } from './user-store.js';
 import { publishEntityChange } from './entity-events.js';
 import { SERVICE_ACTOR } from './service-role.js';
+import {
+  demoteAdminIfOrphan,
+  promoteAdminByEmail,
+} from './admin-permission-sync.js';
 
 const COLUMN_SORT = {
   created_date: 'createdDate',
@@ -147,6 +151,19 @@ export function createEntityStore(prisma, hooks = {}) {
       if (entityType === 'Review') {
         assertReviewCreateStatus(user, payload.status);
         assertReviewSettlementOffer({}, payload);
+      }
+      // M15 #19 — assign admin via AdminPermission (not User.update): promote User.role first.
+      if (entityType === 'AdminPermission') {
+        const email = String(payload.email || '')
+          .trim()
+          .toLowerCase();
+        if (!email) {
+          const err = new Error('AdminPermission email is required');
+          err.status = 400;
+          throw err;
+        }
+        payload.email = email;
+        await promoteAdminByEmail(users, email);
       }
 
       if (entityType === 'BookingRequest') {
@@ -360,9 +377,13 @@ export function createEntityStore(prisma, hooks = {}) {
         err.status = 404;
         throw err;
       }
-      assertCan(entityType, 'delete', user, toPublic(existing));
+      const pub = toPublic(existing);
+      assertCan(entityType, 'delete', user, pub);
       await prisma.record.delete({ where: { id } });
       publishEntityChange(entityType, { type: 'delete', id });
+      if (entityType === 'AdminPermission' && pub.email) {
+        await demoteAdminIfOrphan(prisma, users, pub.email);
+      }
       return { id, deleted: true };
     },
   };
