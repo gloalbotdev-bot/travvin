@@ -376,12 +376,48 @@ async function updateZimmer(store, op, ownerId, actor) {
     throw err;
   }
 
+  // If the model returns only newly added amenities (common), merge instead of wiping the list.
+  if (Array.isArray(clean.amenities)) {
+    clean.amenities = mergeAmenitiesList(zimmer.amenities, clean.amenities);
+  }
+
   const updated = await store.update('Zimmer', zid, clean, actor);
   return {
     kind: 'update_zimmer',
     zimmer: updated,
     message: `✅ עדכנתי את "${updated.name || zimmer.name}" — ${formatUpdateDetail(clean)}.`,
   };
+}
+
+function amenityLabel(a) {
+  if (typeof a === 'string') return a.trim();
+  if (a && typeof a === 'object') return String(a.name || a.label || '').trim();
+  return '';
+}
+
+/** Keep existing amenities when the incoming list barely overlaps (additive update). */
+export function mergeAmenitiesList(existingRaw, incomingRaw) {
+  const existing = Array.isArray(existingRaw) ? existingRaw : [];
+  const incoming = Array.isArray(incomingRaw) ? incomingRaw : [];
+  if (!incoming.length) return existing.length ? existing : incoming;
+  if (!existing.length) return incoming;
+
+  const existingLabels = existing.map(amenityLabel).filter(Boolean);
+  const incomingLabels = incoming.map(amenityLabel).filter(Boolean);
+  const existingSet = new Set(existingLabels.map((s) => s.toLowerCase()));
+  const covered = incomingLabels.filter((s) => existingSet.has(s.toLowerCase())).length;
+  const coverage = existingLabels.length ? covered / existingLabels.length : 1;
+  if (coverage >= 0.5) return incoming;
+
+  const seen = new Set(existingLabels.map((s) => s.toLowerCase()));
+  const merged = [...existing];
+  for (const item of incoming) {
+    const label = amenityLabel(item).toLowerCase();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    merged.push(item);
+  }
+  return merged;
 }
 
 const UPDATE_FIELD_LABELS = {

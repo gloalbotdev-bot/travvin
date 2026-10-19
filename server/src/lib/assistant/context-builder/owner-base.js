@@ -112,15 +112,22 @@ function chatsSummary(chats) {
     .join('\n');
 }
 
-/** Compact zimmer line for the LLM prompt — omit bulky amenity/outdoor payloads. */
+/** Compact zimmer line — keep amenity *names* so the model can propose a full amenities list. */
 function zimmerPromptLine(z) {
   const seasonal = Array.isArray(z.seasonal_pricing) ? z.seasonal_pricing : [];
   const minRules = Array.isArray(z.min_nights_rules) ? z.min_nights_rules : [];
   const outdoor = outdoorAreaSummary(z);
-  const amenityCount = Array.isArray(z.amenities) ? z.amenities.length : 0;
+  const amenityNames = (Array.isArray(z.amenities) ? z.amenities : [])
+    .map((a) => (typeof a === 'string' ? a : a?.name || a?.label || ''))
+    .map((s) => sanitizeUntrustedText(String(s), 40))
+    .filter(Boolean)
+    .slice(0, 24);
+  const amenitiesStr = amenityNames.length
+    ? `amenities: ${JSON.stringify(amenityNames)}${Array.isArray(z.amenities) && z.amenities.length > amenityNames.length ? ` (+${z.amenities.length - amenityNames.length})` : ''}`
+    : 'amenities: []';
   const desc = z.description ? sanitizeUntrustedText(String(z.description), 160) : 'אין';
   return (
-    `id:${z.id} | ${z.name} | מיקום: ${z.location || '—'} | מחיר/לילה: ${z.price_per_night ?? '—'} | אמצ"ש: ${z.weekday_price ?? '—'} | סופ"ש: ${z.weekend_price ?? '—'} | חדרים: ${z.num_rooms ?? '—'} | אורחים מקס: ${z.max_guests ?? '—'} | מינימום לילות: ${describeMinNightsRules(z) || 'ללא'} | min_nights_rules: ${JSON.stringify(minRules)} | seasonal_pricing: ${JSON.stringify(seasonal.slice(0, 6))}${seasonal.length > 6 ? ` (+${seasonal.length - 6})` : ''} | סטטוס: ${z.approval_status} | תיאור: ${desc} | amenities: ${amenityCount} פריטים${outdoor ? ` | ${outdoor}` : ''}`
+    `id:${z.id} | ${z.name} | מיקום: ${z.location || '—'} | מחיר/לילה: ${z.price_per_night ?? '—'} | אמצ"ש: ${z.weekday_price ?? '—'} | סופ"ש: ${z.weekend_price ?? '—'} | חדרים: ${z.num_rooms ?? '—'} | אורחים מקס: ${z.max_guests ?? '—'} | מינימום לילות: ${describeMinNightsRules(z) || 'ללא'} | min_nights_rules: ${JSON.stringify(minRules)} | seasonal_pricing: ${JSON.stringify(seasonal.slice(0, 6))}${seasonal.length > 6 ? ` (+${seasonal.length - 6})` : ''} | סטטוס: ${z.approval_status} | תיאור: ${desc} | ${amenitiesStr}${outdoor ? ` | ${outdoor}` : ''}`
   );
 }
 

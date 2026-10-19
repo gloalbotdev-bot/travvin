@@ -12,8 +12,12 @@ import { createEntityStore } from '../../src/lib/entity-store.js';
 import { signToken } from '../../src/lib/jwt.js';
 import { createUserStore } from '../../src/lib/user-store.js';
 import { SERVICE_ACTOR } from '../../src/lib/service-role.js';
-import { parseOwnerAssistantResponse } from '../../src/lib/assistant/response-parser/owner-assistant.js';
+import {
+  finalizeOwnerAssistantContent,
+  parseOwnerAssistantResponse,
+} from '../../src/lib/assistant/response-parser/owner-assistant.js';
 import { prepareOwnerAssistantOperation } from '../../src/lib/assistant/action-dispatcher.js';
+import { mergeAmenitiesList } from '../../src/lib/owner-assistant-ops.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
@@ -77,6 +81,19 @@ function mainUnit() {
     zimmers,
   );
   assert(prepared.zimmer_id === 'z-1', 'prepareOwnerAssistantOperation resolves zimmer_id');
+
+  const falseDone = finalizeOwnerAssistantContent('בוצע — הוספתי מזגן לצימר', { hasPendingAction: false });
+  assert(!/בוצע|הוספתי/.test(falseDone), 'false-done copy stripped without pending action');
+  assert(/לא ביצעתי|עדיין לא/.test(falseDone), 'false-done explains nothing was written');
+
+  const pendingCopy = finalizeOwnerAssistantContent('בוצע עדכון תאריך יציאה', { hasPendingAction: true });
+  assert(/כרטיס|אישור/.test(pendingCopy), 'pending action copy points at confirm card');
+  assert(!/^בוצע/.test(pendingCopy), 'pending action copy does not claim completion');
+
+  const merged = mergeAmenitiesList(['Wi-Fi', 'מזגן'], ['בריכה']);
+  assert(merged.includes('Wi-Fi') && merged.includes('מזגן') && merged.includes('בריכה'), 'amenities merge keeps existing + new');
+  const replaced = mergeAmenitiesList(['Wi-Fi', 'מזגן', 'טלוויזיה'], ['Wi-Fi', 'מזגן', 'טלוויזיה', 'כספת']);
+  assert(replaced.length === 4 && replaced.includes('כספת'), 'amenities full-list replace when overlap is high');
 }
 
 async function mainHttp() {

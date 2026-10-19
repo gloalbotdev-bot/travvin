@@ -11,7 +11,10 @@ import {
   resolveOwnerId,
 } from './context-builder/owner-assistant.js';
 import { buildOwnerAssistantPrompt } from './prompt-builder/owner-assistant.js';
-import { parseOwnerAssistantResponse } from './response-parser/owner-assistant.js';
+import {
+  finalizeOwnerAssistantContent,
+  parseOwnerAssistantResponse,
+} from './response-parser/owner-assistant.js';
 import {
   confirmActionEffect,
   createPendingAction,
@@ -258,6 +261,10 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
     }
   }
 
+  const content = finalizeOwnerAssistantContent(parsed.content, {
+    hasPendingAction: Boolean(pending),
+  });
+
   await appendOwnerActionLog(deps.store, actor, {
     profile: profile.id,
     actionType: pending ? `propose_${pending.op.type}` : 'chat_turn',
@@ -273,7 +280,7 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
     { role: 'user', content: req.message, surface: ctx.surface, zimmerId: focusZimmerId },
     {
       role: 'bot',
-      content: parsed.content,
+      content,
       surface: ctx.surface,
       zimmerId: focusZimmerId,
       ui: Object.keys(ui).length ? ui : null,
@@ -286,7 +293,7 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
     conversationId: null,
     message: {
       role: 'assistant',
-      content: parsed.content,
+      content,
       time: new Date().toISOString(),
     },
     uiEffects,

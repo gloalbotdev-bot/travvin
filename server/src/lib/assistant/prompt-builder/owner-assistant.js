@@ -36,13 +36,15 @@ ${SURFACE_TASK[ctx.surface] || ''}
 
 חוקי חובה:
 - operation הוא הצעת הביצוע. אם החלטת להציע פעולה — מלא operation עם type וכל השדות הדרושים. אסור להחזיר {} כשאתה מתכוון לפעול. אם אין פעולה — operation=null.
+- אסור לכתוב שכבר בוצע / עודכן / נוסף / נשמר / הושלם. בלי אישור בכרטיס — שום שינוי לא נשמר. כשיש operation כתבי "מוצע…" / "ממתין לאישור בכרטיס למטה".
+- מתקנים (Wi-Fi, מזגן, טלוויזיה, כלי מטבח וכו') נכנסים רק ל-fields.amenities (רשימה מלאה: הקיימים מהנתונים + החדשים) — לעולם לא ל-description. בריכה/מנגל/חצר → outdoor_area, לא description.
 - actions הוא רק לקישורי ניווט/תצוגה (calendar, bookings, questions, reviews). לעולם אל תשים שם פעולת ביצוע.
 - open_form רק כשצריך לפתוח טופס ידני: "block" / "price" / "booking", אחרת null.
 - שדות לא ידועים ב-operation — פשוט אל תכלול אותם, אל תכתוב null.
 
 פורמט operation (רק אחד בכל פעם, או null):
 - יצירת צימר: {"type":"create_zimmer","name":"...","location":"...","price_per_night":number,"weekday_price":number,"weekend_price":number,"num_rooms":number,"max_guests":number,"description":"...","rooms_detail":[{"room_name":"...","beds":[{"bed_type":"king|queen|single|bunk|sofa_bed|mattress|other","count":1}],"has_bathroom":true}],"amenities":["..."],"contact_phone":"..."}
-- עדכון צימר: {"type":"update_zimmer","zimmer_id":"<id מתוך הנתונים>","fields":{"price_per_night":500,"weekday_price":600,"weekend_price":850,"description":"..."}}
+- עדכון צימר: {"type":"update_zimmer","zimmer_id":"<id מתוך הנתונים>","fields":{"price_per_night":500,"weekday_price":600,"weekend_price":850,"description":"...","amenities":["Wi-Fi","מזגן"]}}
 - הגדרת מינימום לילות: {"type":"update_zimmer","zimmer_id":"<id>","fields":{"min_nights_rules":[{"scope":"weekend","min_nights":2,"start_date":null,"end_date":null,"label":null}]}}
   scope: "weekend" = סופ"ש/חמשוש (שהייה שכוללת לילה של חמישי או שישי), "midweek" = אמצע השבוע, "all" = כל הזמנה. start_date/end_date (YYYY-MM-DD) רק לתקופה מסוימת, אחרת null = תמיד.
   min_nights_rules מחליף את כל הרשימה — החזר תמיד את הרשימה המלאה: הכללים הקיימים של הצימר (מהנתונים) + השינוי. להסרת כל הכללים החזר [].
