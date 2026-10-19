@@ -1,0 +1,33 @@
+---
+description: Figma extras — node links, RTL, a11y, assets, MCP limits, UI vs server scope
+alwaysApply: true
+---
+
+# Figma MCP — Extras
+
+## Traceability
+
+- For each screen/task, keep the Figma URL (file + node) in the plan, PR, or task notes so the design source is clear.
+
+## RTL & locale
+
+- If the design is Hebrew / RTL, match direction, alignment, and bidirectional spacing — not only a mirrored “looks similar” layout.
+
+## Accessibility
+
+- Do not drop labels, focus states, keyboard access, or contrast just to match pixels.
+- Preserve semantic HTML and existing a11y patterns unless Figma + the task explicitly redefine them.
+
+## Assets
+
+- Do not invent icons or images.
+- Export from Figma or reuse assets already in the project.
+
+## MCP boundaries
+
+- If an MCP tool is blocked, fails, or Figma data is incomplete: **stop, report, and state assumptions** — do not guess specs or invent missing design details.
+
+## Scope: UI vs server
+
+- UI/Figma work stays in the frontend (`src/`) unless the task explicitly requires API or `server/` changes.
+- Do not reshape backend contracts only to fit a layout.

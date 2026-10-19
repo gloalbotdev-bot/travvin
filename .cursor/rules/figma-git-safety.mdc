@@ -1,0 +1,16 @@
+---
+description: Git safety before Figma/Base44 work — protect branch, local changes, and Base44 sync
+alwaysApply: true
+---
+
+# Git Safety (Figma / Base44)
+
+Before starting design or Base44-related work:
+
+- Confirm the **current branch**.
+- Confirm there are **no unsaved / unintended local changes** (check `git status`).
+- **Never overwrite** changes that came from Base44.
+- Before merge/rebase, inspect the working tree.
+- After pulling Base44 updates: check for conflicts and impact on code already written for Figma/UI work.
+
+Do not commit, push, or force-reset unless the user explicitly asks.

@@ -1,0 +1,44 @@
+---
+description: Figma MCP design-to-code — visual fidelity, reuse existing components, never invent specs
+alwaysApply: true
+---
+
+# Figma MCP — Design to Code
+
+When working with Figma MCP (design → code or visual UI changes):
+
+## Sources of truth
+
+- **Figma** = visual design (layout, typography, spacing, colors, borders, radius, shadows).
+- **Existing code** = architecture and business logic.
+- Do **not** replace business logic only to match design.
+- Do **not** change APIs or data structures for UI fit unless the task explicitly requires it.
+
+## Components
+
+- Prefer existing reusable components over new ones or duplication.
+- Before creating a component, search for a similar one and reuse it correctly.
+- Do **not** copy one screen’s structure onto another unless the structure is truly shared.
+
+## Visual fidelity
+
+- Read sizes and values from Figma; do not invent measurements when Figma provides them.
+- Match typography, spacing, colors, borders, radius, and shadows to Figma.
+- “Looks similar” is not enough — aim for precise visual match.
+- Check Desktop and Mobile when both exist in Figma.
+- Do not invent responsive behavior when Figma already defines it.
+- If Figma is missing info, **state the assumption** instead of inventing a spec.
+- Prefer project design tokens / CSS variables over one-off hardcoded values from Figma.
+
+## Scope & safety
+
+- No broad refactors or unrelated changes.
+- Do not delete unused-looking code without checking references.
+- Before a significant change, assess impact on other screens.
+- After each meaningful screen: visual fidelity check vs Figma, then ensure build and existing tests still pass.
+
+## MCP workflow
+
+- Load the relevant Figma skill before MCP calls (`figma-design-to-code`, `figma-use`, etc.).
+- Parse `fileKey` / `nodeId` from Figma URLs correctly (`node-id` hyphens → colons).
+- Use design context + screenshot for comparison; fix gaps before calling the work done.
