@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "title": "שיחת העוזר של בעל המתחם (משותפת לכל הבועות)",
+  "properties": {
+    "owner_id": {
+      "type": "string",
+      "title": "מזהה בעלים"
+    },
+    "messages": {
+      "type": "array",
+      "title": "הודעות (כל הבועות, מתויגות לפי surface)",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "role": { "type": "string", "enum": ["user", "bot"] },
+          "content": { "type": "string" },
+          "time": { "type": "string" },
+          "surface": { "type": "string" },
+          "zimmer_id": { "type": "string" },
+          "ui": { "type": "object" },
+          "pending_action": { "type": "object" },
+          "actor_id": { "type": "string" },
+          "actor_role": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["owner_id"],
+  "name": "OwnerAssistantThread",
+  // Written only by the server (service actor) — owners read their own thread.
+  "rls": {
+    "read": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "create": {
+      "user_condition": { "role": "admin" }
+    },
+    "update": {
+      "user_condition": { "role": "admin" }
+    },
+    "delete": {
+      "user_condition": { "role": "admin" }
+    }
+  }
+}
