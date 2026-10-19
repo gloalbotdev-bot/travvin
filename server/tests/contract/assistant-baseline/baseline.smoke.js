@@ -35,11 +35,11 @@ function assertDeepEqual(a, b, msg) {
 }
 
 async function main() {
-  assert(AI_PROFILE_BASELINES.length === 12, 'baseline registry has 12 profiles');
+  assert(AI_PROFILE_BASELINES.length === 16, 'baseline registry has 16 profiles');
 
   const jsonProfiles = AI_PROFILE_BASELINES.filter((p) => p.responseMode === 'json');
   const textProfiles = AI_PROFILE_BASELINES.filter((p) => p.responseMode === 'text');
-  assert(jsonProfiles.length === 7, '7 structured JSON profiles');
+  assert(jsonProfiles.length === 11, '11 structured JSON profiles');
   assert(textProfiles.length === 5, '5 plain-text profiles');
 
   // Freeze current generic mock shape (all schema calls share one mock today).

@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
 import { Loader2 } from 'lucide-react';
 
-const HEB_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const INK = '#0B3838';
 
 /** Date-specific AI price advice: { summary, recommendations[{ zimmer_name, recommended_price, reason }] }. */
-export function useDayPriceAdvice(iso, zimmers, bookings) {
+export function useDayPriceAdvice(iso, zimmers) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -15,41 +14,13 @@ export function useDayPriceAdvice(iso, zimmers, bookings) {
     if (!iso || !zimmers.length) return;
     setLoading(true); setError(''); setData(null);
     try {
-      const dayBookings = (bookings || []).filter(
-        (b) => b.check_in <= iso && b.check_out > iso && b.status !== 'נדחית' && !b.is_block
-      );
-      const occupiedIds = new Set(dayBookings.map((b) => b.zimmer_id));
-      const zimmerInfo = zimmers.map((z) => ({
-        name: z.name,
-        base_price: z.price_per_night,
-        weekday_price: z.weekday_price,
-        weekend_price: z.weekend_price,
-        occupied: occupiedIds.has(z.id),
-        seasonal: (z.seasonal_pricing || []).filter((r) => r.start_date <= iso && r.end_date >= iso),
-      }));
-      const date = new Date(iso + 'T00:00:00');
-      const dayName = HEB_DAYS[date.getDay()];
-      const res = await api.integrations.Core.InvokeLLM({
-        prompt: `אתה יועץ תמחור לבעל צימרים. תן סיכום מתומצת (עד 3 משפטים) והמלצת מחיר לכל נכס לתאריך ${iso} (יום ${dayName}), בהתחשב בתפוסה, יום בשבוע, עונתיות ושוק.\nנכסים: ${JSON.stringify(zimmerInfo)}.\nהחזר JSON בלבד.`,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            summary: { type: 'string' },
-            recommendations: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  zimmer_name: { type: 'string' },
-                  recommended_price: { type: 'number' },
-                  reason: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
+      // The server loads zimmers + bookings for the day itself.
+      const res = await api.assistant.chat({
+        profile: 'owner_calendar_day_advice',
+        message: `סיכום מחירים ל-${iso}`,
+        clientState: { date: iso },
       });
-      setData(res);
+      setData(res?.meta?.parsed || null);
     } catch (e) {
       setError('שגיאה. נסה שוב.');
     }

@@ -22,7 +22,8 @@ export default function ZimmerMapView({ zimmer, onEdit, editable = true, figmaLa
       if (!queries.length) { if (!cancelled) setMode('none'); return; }
       try {
         const res = await api.functions.invoke('geocodeAddresses', { addresses: queries });
-        const r = res?.results || [];
+        const body = res?.data || res;
+        const r = body?.results || [];
         const preciseRes = precise ? r[0] : null;
         const regionRes = region ? r[precise ? 1 : 0] : null;
         if (!cancelled) {

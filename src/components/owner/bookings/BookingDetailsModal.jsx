@@ -15,9 +15,12 @@ export default function BookingDetailsModal({ booking, zimmers, onClose, onSave,
 
   const handleSave = async () => {
     const z = zimmers?.find(zs => zs.id === form.zimmer_id);
-    const total = calcBookingTotal(form.check_in, form.check_out, z?.price_per_night || booking.price_per_night);
+    const hasOverride = form.price_override !== '' && form.price_override != null && Number(form.price_override) >= 0;
+    const total = hasOverride
+      ? Number(form.price_override)
+      : calcBookingTotal(form.check_in, form.check_out, z?.price_per_night || booking.price_per_night);
     setSaving(true);
-    await onSave({ ...form, total_price: total });
+    await onSave({ ...form, price_override: hasOverride ? Number(form.price_override) : null, total_price: total });
     setSaving(false);
     setEditing(false);
   };
@@ -77,10 +80,11 @@ export default function BookingDetailsModal({ booking, zimmers, onClose, onSave,
                 { label: "צ'ק-אין", field: 'check_in', type: 'date' },
                 { label: "צ'ק-אאוט", field: 'check_out', type: 'date' },
                 { label: 'מספר אורחים', field: 'num_guests', type: 'number' },
+                { label: 'מחיר מוסכם (ריק = לפי המחירון)', field: 'price_override', type: 'number' },
               ].map(({ label, field, type }) => (
                 <div key={field}>
                   <label className="text-xs block mb-1" style={{ color: '#9e9e9e' }}>{label}</label>
-                  <input type={type} value={form[field] || ''} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+                  <input type={type} value={form[field] ?? ''} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
                     className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ border: '1px solid #ECEFF1', color: '#212121' }} />
                 </div>
               ))}

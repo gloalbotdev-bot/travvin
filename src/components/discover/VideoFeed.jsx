@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/api/client';
+import { bookingErrorMessage } from '@/lib/bookingErrors';
 import { useNavigate } from 'react-router-dom';
 import VideoCard from '@/components/discover/VideoCard';
 import CommentsSheet from '@/components/discover/CommentsSheet';
@@ -149,7 +150,7 @@ export default function VideoFeed() {
       setBookingSourceVideoId(null);
       setBookingMsg('✅ בקשת ההזמנה נשלחה! בעל הצימר יצור איתך קשר בקרוב.');
     } catch (e) {
-      showToast('שגיאה בשליחת ההזמנה. נסה שוב.', 'error');
+      showToast(bookingErrorMessage(e, 'שגיאה בשליחת ההזמנה. נסה שוב.'), 'error');
     } finally {
       setSubmittingBooking(false);
     }

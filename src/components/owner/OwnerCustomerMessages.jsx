@@ -164,7 +164,8 @@ function CustomerMessageForm({ zimmers, editing, onCancel, onSaved }) {
     if (!zimmerId) { setErr('בחר צימר'); return; }
     setSaving(true);
     try {
-      await api.entities.Zimmer.update(zimmerId, { stay_settings: form });
+      const z = zimmers.find(x => x.id === zimmerId) || editing;
+      await api.entities.Zimmer.update(zimmerId, { stay_settings: { ...(z?.stay_settings || {}), ...form } });
       onSaved();
     } catch (e) { setErr('שמירה נכשלה: ' + (e?.message || String(e))); }
     setSaving(false);

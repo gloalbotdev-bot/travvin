@@ -6,7 +6,8 @@ import ZimmerDetailDrawer from '@/components/chat/ZimmerDetailDrawer';
 import BookingForm from '@/components/chat/BookingForm';
 import QuickOptions from '@/components/chat/QuickOptions';
 import DateSearchWidget, { getBookedZimmerIds, datesOverlap } from '@/components/chat/DateSearchWidget';
-import { rankZimmersByFit, zimmerPriceSummary, formatILS } from '@/lib/bookingPrice';
+import { rankZimmersByFit, zimmerPriceSummary, formatILS, minNightsPromptNote, MIN_NIGHTS_PROMPT_RULE } from '@/lib/bookingPrice';
+import { bookingErrorMessage } from '@/lib/bookingErrors';
 import { REGION_KEYWORDS } from '@/lib/regions';
 import VacationAgentChat from '@/components/chat/VacationAgentChat';
 import DirectChat, { getOrCreateDirectThread } from '@/components/chat/DirectChat';
@@ -514,7 +515,7 @@ export default function CustomerChat() {
         const priceLine = price.isPartial
           ? `מחיר ללילה: ${formatILS(price.avg)} (תמחור חלקי לפי אדם, סה"כ ${formatILS(price.total)} ל-${price.nights} לילות)`
           : `מחיר ללילה: ${formatILS(price.avg)} (מחיר מלא, סה"כ ${formatILS(price.total)} ל-${price.nights} לילות)`;
-        return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || 'לא צוין'} | ${priceLine} | חדרים: ${z.num_rooms || '?'} | אורחים מקס: ${z.max_guests || '?'} | תפוסה לקבוצה: ${Math.max(0, (z.max_guests||0) - searchParams.numGuests)} מקומות עודפים | ${zones}`;
+        return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || 'לא צוין'} | ${priceLine} | חדרים: ${z.num_rooms || '?'} | אורחים מקס: ${z.max_guests || '?'} | תפוסה לקבוצה: ${Math.max(0, (z.max_guests||0) - searchParams.numGuests)} מקומות עודפים${minNightsPromptNote(z, priceCheckIn, priceCheckOut)} | ${zones}`;
       }).join('\n');
 
       const prompt = `אתה בוט צימרים. ענה בעברית בלבד.
@@ -525,6 +526,7 @@ ${zimmerContext}
 דרג ובחר עד 5 הצימרים המתאימים ביותר. החזר JSON: {"action":"search","zimmer_ids":[...],"message":"..."}
 חשוב מאוד: הצימרים להלן מסודרים מראש לפי התאמת קיבולת לכמות האורחים — מקומות שמתאימים בדיוק לכמות (לזוג: מקומות זוגיים, max_guests קרוב למספר האורחים) מופיעים ראשונים. החזר קודם את המתאימים בדיוק לכמות, בסדר הנתון. רק אם פחות מ-5 כאלה — השלם מהסוף עם צימרים גדולים יותר, גם בסדר הנתון. אל תעדיף צימר גדול על פני מתאים-בדיוק גם אם יש לו מתקנים.
 ${searchParams.amenities?.length ? 'אם יש מתקנים מבוקשים ועדיין נותרו מקומות פנויים באותה קיבולת מדויקת, העדף מביניהם את אלה שכוללים את המתקנים.' : ''}
+${MIN_NIGHTS_PROMPT_RULE} העדף צימרים שאפשר להזמין בתאריכים שנבחרו.
 message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
 
       const response = await api.integrations.Core.InvokeLLM({
@@ -717,7 +719,7 @@ message: הסבר קצר על התוצאות בעברית. JSON בלבד.`;
             ? `מחיר ללילה: ${formatILS(price.avg)} (תמחור חלקי, סה"כ ${formatILS(price.total)})`
             : `מחיר ללילה: ${formatILS(price.avg)} (מחיר מלא, סה"כ ${formatILS(price.total)})`;
         }
-        return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || 'לא צוין'} | ${priceStr} | חדרים: ${z.num_rooms || '?'} | אורחים מקס: ${z.max_guests || '?'}\n${zones}`;
+        return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || 'לא צוין'} | ${priceStr} | חדרים: ${z.num_rooms || '?'} | אורחים מקס: ${z.max_guests || '?'}${minNightsPromptNote(z, priceCheckIn, priceCheckOut)}\n${zones}`;
       }).join('\n\n');
 
       const historyText = messages.slice(-20).map(m =>
@@ -787,6 +789,7 @@ ${zimmerContext}
       - בקשה להזמין צימר שמוזכר בשיחה → action="booking", zimmer_id="...", message="...", וכן החזר check_in ו-check_out בפורמט YYYY-MM-DD לפי תאריך היום למעלה. פתור ביטויי זמן יחסיים (כגון "היום","מחר","יום שישי הקרוב","סוף השבוע","בעוד שבוע") לתאריכים ברי-תוקף וודא ש-check_out מאוחר מ-check_in. אם התאריכים נמסרו דרך ווידג'ט החיפוש כבר (מופיעים ב-datesInfo) — החזר את אותם תאריכים. בנוסף החזר num_adults ו-num_children כפי שצוינו בשיחה (אם לא צוינו — החזר null). שדות אלו ישמשו לקדם-מילוי טופס ההזמנה באופן אוטומטי אך עריך.
       - חילוץ תאריכים/אורחים בכל תגובה: גם כש-action="search" או "answer", אם הלקוח ציין תאריכים ו/או כמות אורחים בטקסט החופשי — פתור אותם לתאריכים קונקרטיים (YYYY-MM-DD לפי תאריך היום) והחזר את check_in/check_out/num_adults/num_children, כדי שטופס ההזמנה יוכל להתמלא מראש גם כשנפתח מתוך כרטיס הצימר. אם לא צוינו תאריכים/אורחים — החזר null/השמט.
 ${customerContext ? '- שאלה על הפרופיל/הזמנות/היסטוריה של הלקוח (ללא צימרים ספציפיים כלל) → action="answer" וענה לפי "מידע על הלקוח" למעלה.' : ''}
+- ${MIN_NIGHTS_PROMPT_RULE} בהזמנה — החזר check_in/check_out שעומדים במינימום.
 - שאלה ספציפית על צימר שאין לך מידע עליה → action="answer", unanswered_question=true, zimmer_id="<id>", message="אין לי מידע על כך כרגע, אעביר את שאלתך לבעל הצימר".
 - רק תשובות שאינן כוללות שום צימר ספציפי (שאלות כלליות, פרופיל, היסטוריה) → action="answer", message="...".
 JSON בלבד.`;
@@ -969,7 +972,7 @@ JSON בלבד.`;
         return updated;
       });
     } catch (e) {
-      addMessage('bot', 'text', 'מצטער, לא הצלחתי לשמור את הבקשה. נסה שוב.');
+      addMessage('bot', 'text', `⚠️ ${bookingErrorMessage(e, 'מצטער, לא הצלחתי לשמור את הבקשה. נסה שוב.')}`);
     }
   };
 

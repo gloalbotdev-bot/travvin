@@ -6,6 +6,7 @@ import ReviewsSection from '@/components/reviews/ReviewsSection';
 import MiniAvailabilityCalendar from '@/components/chat/MiniAvailabilityCalendar';
 import DescriptionCardsSection from '@/components/chat/DescriptionCardsSection';
 import AmenitiesGroups from '@/components/chat/AmenitiesGroups';
+import OutdoorAreaSection from '@/components/chat/OutdoorAreaSection';
 import ZimmerHostCard from '@/components/chat/ZimmerHostCard';
 import RoomsSummary from '@/components/chat/RoomsSummary';
 import PolicySection from '@/components/chat/PolicySection';
@@ -189,6 +190,9 @@ export default function ZimmerDetailDrawer({ zimmer, onClose, onBook, onAsk, onD
 
           {/* Amenities (3 groups) */}
           <AmenitiesGroups amenities={zimmer.amenities} />
+
+          {/* Outdoor area (yard) */}
+          <OutdoorAreaSection zimmer={zimmer} />
 
           {/* Host card */}
           <ZimmerHostCard zimmer={zimmer} />

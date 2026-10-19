@@ -9,12 +9,12 @@ const MAX_ZONES = 12;
 const INJECTION_LINE =
   /^\s*(ignore\s+(all\s+)?(previous|above|prior)\b|disregard\b|system\s*:|you\s+are\s+now\b|new\s+instructions\b|act\s+as\b|jailbreak\b|developer\s+mode\b|override\b)/i;
 
-export function sanitizeUntrustedText(text) {
+export function sanitizeUntrustedText(text, max = MAX_ZONE_CHARS) {
   if (!text) return '';
   let s = String(text)
     .replace(/\u0000/g, '')
     .replace(/[\u202a-\u202e\u2066-\u2069]/g, '')
-    .slice(0, MAX_ZONE_CHARS);
+    .slice(0, max);
 
   s = s
     .split('\n')
@@ -23,6 +23,13 @@ export function sanitizeUntrustedText(text) {
     .trim();
 
   return s;
+}
+
+export const MAX_OWNER_TEXT_CHARS = 4000;
+
+/** Owner's own chat text (messages / recent turns) — same filtering, long-form limit. */
+export function sanitizeOwnerText(text, max = MAX_OWNER_TEXT_CHARS) {
+  return sanitizeUntrustedText(text, max);
 }
 
 export function formatDataZonesForPrompt(zones) {

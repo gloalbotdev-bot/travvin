@@ -1,5 +1,6 @@
 import React from 'react';
-import { Clock, CreditCard, Cigarette, Ban } from 'lucide-react';
+import { Clock, CreditCard, Cigarette, Ban, Moon } from 'lucide-react';
+import { listMinNightsRules } from '@/lib/bookingPrice';
 
 const PAYMENT_LABELS = {
   'מזומן': 'מזומן',
@@ -15,8 +16,9 @@ export default function PolicySection({ zimmer }) {
   const cancel = zimmer.cancellation_policy_text;
   const payments = Array.isArray(zimmer.payment_methods) ? zimmer.payment_methods : [];
   const smoking = zimmer.smoking_policy;
+  const minNightsRules = listMinNightsRules(zimmer);
 
-  const hasAny = checkin || checkout || cancel || payments.length || smoking;
+  const hasAny = checkin || checkout || cancel || payments.length || smoking || minNightsRules.length;
   if (!hasAny) return null;
 
   return (
@@ -26,6 +28,14 @@ export default function PolicySection({ zimmer }) {
       {(checkin || checkout) && (
         <Row icon={Clock} label="צ'ק-אין / צ'ק-אאוט">
           <span>{checkin ? `כניסה ${checkin}` : ''}{checkin && checkout ? ' · ' : ''}{checkout ? `יציאה ${checkout}` : ''}</span>
+        </Row>
+      )}
+
+      {minNightsRules.length > 0 && (
+        <Row icon={Moon} label="מינימום לילות">
+          <ul className="space-y-0.5">
+            {minNightsRules.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
         </Row>
       )}
 

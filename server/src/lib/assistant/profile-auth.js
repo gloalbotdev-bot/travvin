@@ -19,6 +19,10 @@ const OWNER_PROFILES = new Set([
   'owner_tips',
   'generate_info_summary',
   'owner_zimmer_knowledge_summary',
+  'owner_calendar_day_advice',
+  'owner_calendar_suggestions',
+  'owner_home_suggestions',
+  'owner_reply_draft',
 ]);
 
 /** Internal/server-only profiles — not exposed on public chat in Phase 2. */

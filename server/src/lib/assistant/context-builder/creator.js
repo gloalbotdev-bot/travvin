@@ -1,9 +1,16 @@
 /**
  * Interactive creator/editor profiles — Phase 8.
  */
-import { sanitizeUntrustedText } from '../../sanitize-prompt-data.js';
+import { MAX_OWNER_TEXT_CHARS, sanitizeUntrustedText } from '../../sanitize-prompt-data.js';
 import { normalizeOneshotTurns } from './oneshot.js';
 import { resolveOwnerId } from './owner-assistant.js';
+import { describeMinNightsRules } from '../../booking-price.js';
+
+export const MAX_WIZARD_TURNS = 100;
+
+function wizardTurns(raw) {
+  return normalizeOneshotTurns(raw, MAX_WIZARD_TURNS, { maxChars: MAX_OWNER_TEXT_CHARS });
+}
 
 function requireString(value, field) {
   if (typeof value !== 'string' || !value.trim()) {
@@ -35,7 +42,7 @@ export async function buildAdminZimmerEditorContext(deps, { actor, clientState }
     throw err;
   }
 
-  const recentTurns = normalizeOneshotTurns(clientState?.recentTurns);
+  const recentTurns = wizardTurns(clientState?.recentTurns);
   const todayHe = new Date().toLocaleDateString('he-IL');
 
   return {
@@ -49,6 +56,9 @@ export async function buildAdminZimmerEditorContext(deps, { actor, clientState }
       num_rooms: zimmer.num_rooms,
       max_guests: zimmer.max_guests,
       description: zimmer.description,
+      min_nights_rules: zimmer.min_nights_rules || [],
+      amenities: zimmer.amenities || [],
+      outdoor_area: zimmer.outdoor_area || null,
       data_zones: zimmer.data_zones || [],
       images: zimmer.images || [],
     }),
@@ -82,13 +92,20 @@ export async function buildOwnerBookingCreatorContext(deps, { actor, clientState
       ? clientState.collectedData
       : {};
 
-  const recentTurns = normalizeOneshotTurns(clientState?.recentTurns, 30);
+  const recentTurns = wizardTurns(clientState?.recentTurns);
   const today = new Date().toISOString().split('T')[0];
 
   return {
     ownerId,
     zimmers,
     zimmerNames: zimmers.map((z) => z.name).join(', '),
+    minNightsLines: zimmers
+      .map((z) => {
+        const d = describeMinNightsRules(z);
+        return d ? `- ${z.name}: ${d}` : '';
+      })
+      .filter(Boolean)
+      .join('\n'),
     collectedData,
     collectedDataStr: JSON.stringify(collectedData),
     historyText: formatTurnsForPrompt(recentTurns, 'בעל המתחם', 'עוזר'),
@@ -107,12 +124,21 @@ export async function buildOwnerZimmerCreatorContext(deps, { actor, clientState 
       ? clientState.conversationData
       : {};
 
-  const recentTurns = normalizeOneshotTurns(clientState?.recentTurns, 40);
+  const recentTurns = wizardTurns(clientState?.recentTurns);
   const uploadedImageCount = Number(clientState?.uploadedImageCount) || 0;
+  const customBedTypes = (Array.isArray(clientState?.customBedTypes) ? clientState.customBedTypes : [])
+    .slice(0, 20)
+    .flatMap((t) => {
+      const label = sanitizeUntrustedText(String(t?.custom_label || ''), 60);
+      if (!label) return [];
+      const sleeps = Number(t?.sleeps);
+      return [{ custom_label: label, sleeps: Number.isFinite(sleeps) && sleeps > 0 ? sleeps : null }];
+    });
 
   return {
     conversationData,
     conversationDataStr: JSON.stringify(conversationData),
+    customBedTypes,
     historyText: recentTurns
       .map((m) =>
         m.role === 'user'
@@ -147,5 +173,6 @@ export async function buildOwnerZimmerKnowledgeContext(deps, { actor, clientStat
     zimmerId,
     zimmer,
     zonesText: zones || 'אין',
+    minNightsText: describeMinNightsRules(zimmer),
   };
 }

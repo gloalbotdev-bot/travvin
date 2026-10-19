@@ -3,12 +3,15 @@
  */
 import { REGION_KEYWORDS } from '../../regions.js';
 import {
+  checkMinNights,
+  describeMinNightsRules,
   formatILS,
   rankZimmersByFit,
   zimmerPriceSummary,
 } from '../../booking-price.js';
 import { formatZimmerKnowledgeForPrompt, sanitizeUntrustedText } from '../../sanitize-prompt-data.js';
 import { getBookedZimmerIds } from '../customer-availability.js';
+import { outdoorAreaSummary } from '../../outdoor-area.js';
 
 const MAX_RECENT_TURNS = 20;
 const MAX_TURN_CONTENT = 2000;
@@ -66,7 +69,9 @@ function filterByRegion(zimmers, regions, freeText) {
 }
 
 function formatZimmerContextLine(z, opts) {
-  const zones = formatZimmerKnowledgeForPrompt(z);
+  const yard = outdoorAreaSummary(z);
+  const knowledge = formatZimmerKnowledgeForPrompt(z);
+  const zones = yard ? `${yard}${knowledge ? `\n${knowledge}` : ''}` : knowledge;
   const {
     priceCheckIn,
     priceCheckOut,
@@ -90,8 +95,10 @@ function formatZimmerContextLine(z, opts) {
     }
   }
 
+  const minNightsStr = formatMinNightsForPrompt(z, priceCheckIn, priceCheckOut);
+
   if (compact) {
-    return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || '—'} | ${priceStr} | חדרים: ${z.num_rooms || '?'} | מקס אורחים: ${z.max_guests || '?'}\n${zones}`;
+    return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || '—'} | ${priceStr} | חדרים: ${z.num_rooms || '?'} | מקס אורחים: ${z.max_guests || '?'}${minNightsStr}\n${zones}`;
   }
 
   const price = priceCheckIn && priceCheckOut
@@ -107,7 +114,19 @@ function formatZimmerContextLine(z, opts) {
     ? ` | תפוסה לקבוצה: ${Math.max(0, (z.max_guests || 0) - numGuests)} מקומות עודפים`
     : '';
 
-  return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || 'לא צוין'} | ${priceLine} | חדרים: ${z.num_rooms || '?'} | אורחים מקס: ${z.max_guests || '?'}${spare} | ${zones}`;
+  return `--- ${z.name} (ID: ${z.id}) --- מיקום: ${z.location || 'לא צוין'} | ${priceLine} | חדרים: ${z.num_rooms || '?'} | אורחים מקס: ${z.max_guests || '?'}${spare}${minNightsStr} | ${zones}`;
+}
+
+/** " | מינימום לילות: ..." plus a warning when the searched stay is too short. */
+function formatMinNightsForPrompt(z, checkIn, checkOut) {
+  const rules = describeMinNightsRules(z);
+  if (!rules) return '';
+  let out = ` | מינימום לילות: ${rules}`;
+  if (checkIn && checkOut) {
+    const res = checkMinNights(z, checkIn, checkOut);
+    if (!res.ok) out += ` | ⚠️ לא ניתן להזמין בתאריכים שנבחרו (${res.nights} לילות) — דורש מינימום ${res.required} לילות`;
+  }
+  return out;
 }
 
 async function loadCustomerContext(store, actor, message, priorUserTurns) {

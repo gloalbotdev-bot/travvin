@@ -43,14 +43,20 @@ export function clampDiscount(pct) {
   return Math.min(80, Math.max(30, Math.round(Number(pct) || 0)));
 }
 
-function seasonalMultiplierForDate(seasonalPricing, dateStr) {
+function seasonalRuleForDate(seasonalPricing, dateStr) {
   for (const rule of seasonalPricing || []) {
     if (rule.start_date && rule.end_date && dateStr >= rule.start_date && dateStr <= rule.end_date) {
-      const pct = clampPercentage(rule.adjustment, rule.percentage);
-      return rule.adjustment === 'decrease' ? 1 - pct / 100 : 1 + pct / 100;
+      return rule;
     }
   }
-  return 1;
+  return null;
+}
+
+function seasonalMultiplierForDate(seasonalPricing, dateStr) {
+  const rule = seasonalRuleForDate(seasonalPricing, dateStr);
+  if (!rule) return 1;
+  const pct = clampPercentage(rule.adjustment, rule.percentage);
+  return rule.adjustment === 'decrease' ? 1 - pct / 100 : 1 + pct / 100;
 }
 
 function weekdayOrWeekendPrice(zimmer, dateStr) {
@@ -87,6 +93,12 @@ export function basePricePerNight(zimmer, numAdults = 0, numChildren = 0, dateSt
 
 export function effectivePricePerNight(zimmer, dateStr, numAdults = 0, numChildren = 0) {
   const base = basePricePerNight(zimmer, numAdults, numChildren, dateStr);
+  const rule = seasonalRuleForDate(zimmer?.seasonal_pricing, dateStr);
+  if (!rule) return Math.round(base);
+  // Absolute price for the date window overrides percentages (mirrors src/lib/bookingPrice.js).
+  if (rule.price_per_night != null && rule.price_per_night !== '' && !Number.isNaN(Number(rule.price_per_night))) {
+    return Math.round(Number(rule.price_per_night));
+  }
   return Math.round(base * seasonalMultiplierForDate(zimmer?.seasonal_pricing, dateStr));
 }
 
@@ -141,6 +153,107 @@ export function zimmerPriceSummary(zimmer, checkIn, checkOut, numAdults = 0, num
   const nights = calcNights(checkIn, checkOut);
   const avg = nights > 0 ? Math.round(total / nights) : 0;
   return { total, avg, nights, isPartial: isPartialPricing(zimmer, numAdults, numChildren) };
+}
+
+// ---- Minimum nights rules (חמשוש / אמצ"ש / תמיד) ----
+// zimmer.min_nights_rules: [{ scope: 'all'|'weekend'|'midweek', min_nights, start_date?, end_date?, label? }]
+// A rule without dates applies always. Weekend = stay includes a Thu/Fri night.
+// Mirrored in src/lib/bookingPrice.js.
+
+function isWeekendNight(dateStr) {
+  return WEEKEND_DAYS.has(getDayOfWeekIsrael(dateStr));
+}
+
+function stayNightDates(checkIn, checkOut) {
+  const nights = calcNights(checkIn, checkOut);
+  const out = [];
+  let ds = checkIn;
+  for (let i = 0; i < nights; i++) {
+    out.push(ds);
+    ds = addDaysIso(ds, 1);
+  }
+  return out;
+}
+
+function ruleCoversDate(rule, dateStr) {
+  if (rule.start_date && dateStr < rule.start_date) return false;
+  if (rule.end_date && dateStr > rule.end_date) return false;
+  return true;
+}
+
+function activeMinNightsRules(zimmer) {
+  return (Array.isArray(zimmer?.min_nights_rules) ? zimmer.min_nights_rules : []).filter(
+    (r) => r && Number(r.min_nights) > 1,
+  );
+}
+
+function fmtShortDate(dateStr) {
+  const [y, m, d] = String(dateStr).split('-');
+  return d && m && y ? `${d}/${m}/${y}` : String(dateStr);
+}
+
+function minNightsScopeText(scope) {
+  if (scope === 'weekend') return 'בסופ"ש (חמשוש)';
+  if (scope === 'midweek') return 'באמצע השבוע';
+  return 'בצימר זה';
+}
+
+function minNightsPeriodText(rule) {
+  if (!rule.start_date && !rule.end_date) return '';
+  const range =
+    rule.start_date && rule.end_date
+      ? `בין ${fmtShortDate(rule.start_date)} ל-${fmtShortDate(rule.end_date)}`
+      : rule.start_date
+        ? `החל מ-${fmtShortDate(rule.start_date)}`
+        : `עד ${fmtShortDate(rule.end_date)}`;
+  return rule.label ? `${rule.label} (${range})` : range;
+}
+
+export const MIN_NIGHTS_SCOPE_LABELS = {
+  all: 'כל הזמנה',
+  weekend: 'סופ"ש (חמשוש)',
+  midweek: 'אמצ"ש',
+};
+
+/** Highest min_nights among rules that apply to this stay, or null. */
+export function getMinNightsRequirement(zimmer, checkIn, checkOut) {
+  const rules = activeMinNightsRules(zimmer);
+  if (!rules.length || !checkIn || !checkOut) return null;
+  const nights = stayNightDates(checkIn, checkOut);
+  if (!nights.length) return null;
+  const stayHasWeekend = nights.some(isWeekendNight);
+  let best = null;
+  for (const rule of rules) {
+    const covered = nights.filter((ds) => ruleCoversDate(rule, ds));
+    if (!covered.length) continue;
+    if (rule.scope === 'weekend' && !covered.some(isWeekendNight)) continue;
+    if (rule.scope === 'midweek' && stayHasWeekend) continue;
+    const required = Math.round(Number(rule.min_nights));
+    if (!best || required > best.required) best = { required, rule };
+  }
+  return best;
+}
+
+export function checkMinNights(zimmer, checkIn, checkOut) {
+  const nights = calcNights(checkIn, checkOut);
+  const req = getMinNightsRequirement(zimmer, checkIn, checkOut);
+  if (!req || nights >= req.required) {
+    return { ok: true, required: req?.required ?? null, nights, message: '' };
+  }
+  const period = minNightsPeriodText(req.rule);
+  const message = `${minNightsScopeText(req.rule.scope)}${period ? ` (${period})` : ''} ניתן להזמין מינימום ${req.required} לילות`;
+  return { ok: false, required: req.required, nights, rule: req.rule, message };
+}
+
+/** Short Hebrew description of all rules, for display and AI prompts. '' when none. */
+export function describeMinNightsRules(zimmer) {
+  return activeMinNightsRules(zimmer)
+    .map((r) => {
+      const scope = MIN_NIGHTS_SCOPE_LABELS[r.scope] || MIN_NIGHTS_SCOPE_LABELS.all;
+      const period = minNightsPeriodText(r);
+      return `${scope}: מינימום ${Math.round(Number(r.min_nights))} לילות${period ? ` (${period})` : ' (תמיד)'}`;
+    })
+    .join('; ');
 }
 
 export function formatILS(n) {

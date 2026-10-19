@@ -7,7 +7,7 @@ import AiReplySuggestion from './AiReplySuggestion';
 
 const fmtTime = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
-export default function MessagesChatWindow({ thread, booking, zimmer, user }) {
+export default function MessagesChatWindow({ thread, booking, zimmer }) {
   const [messages, setMessages] = useState(thread?.messages || []);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -42,20 +42,12 @@ export default function MessagesChatWindow({ thread, booking, zimmer, user }) {
   };
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 
-  const buildPrompt = () => {
-    const zones = (zimmer?.data_zones || []).map(z => `[${z.source_type || 'מידע'}]: ${z.content || ''}`).join('\n');
-    const hist = messages.slice(-12).map(m => `${m.role === 'owner' ? 'בעלים' : 'לקוח'}: ${m.content}`).join('\n');
-    const lastCustomer = [...messages].reverse().find(m => m.role === 'customer');
-    return `אתה עוזר של בעל צימר. כתוב תשובה קצרה, אדיבה ומועילה בעברית ללקוח בצ'אט.
-צימר: ${zimmer?.name || thread?.zimmer_name || ''}
-פרטי הנכס:
-${zones || '(אין מידע נוסף)'}
-${booking ? `הזמנה: ${booking.check_in} עד ${booking.check_out}, ${booking.num_guests || ''} אורחים, סטטוס: ${booking.status}` : ''}
-היסטוריית צ'אט:
-${hist || '(תחילת שיחה)'}
-ההודעה האחרונה מהלקוח: ${lastCustomer?.content || ''}
-החזר JSON בלבד: {"reply":"תוכן התשובה"}`;
-  };
+  const replyDraftState = () => ({
+    kind: 'chat',
+    threadIds: [thread?.id].filter(Boolean),
+    zimmerId: zimmer?.id || thread?.zimmer_id || undefined,
+    bookingId: booking?.id || undefined,
+  });
 
   const statusBadge = booking?.status === 'אושרה'
     ? { label: 'הזמנה מאושרת', bg: '#16A34A' }
@@ -111,7 +103,7 @@ ${hist || '(תחילת שיחה)'}
       <AiReplySuggestion
         key={thread?.id}
         contextLabel="לפי פרטי הנכס והשיחה"
-        buildPrompt={buildPrompt}
+        getClientState={replyDraftState}
         onApply={(t) => { setInput(p => p ? p.replace(/\s+$/, '') + ' ' + t : t); resize(); inputRef.current?.focus(); }}
         disabled={sending}
       />

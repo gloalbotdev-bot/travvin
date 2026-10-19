@@ -29,24 +29,14 @@ export default function MessagesMergedQuestionsWindow({ contact, zimmers = {}, o
   );
 }
 
-function QuestionCard({ question, zimmer, onAnswered, onDismissed }) {
+function QuestionCard({ question, onAnswered, onDismissed }) {
   const [answer, setAnswer] = useState('');
   const [saving, setSaving] = useState(false);
   useEffect(() => { setAnswer(''); }, [question?.id]);
 
   const answered = question.status !== 'ממתינה';
 
-  const buildPrompt = () => {
-    const zones = (zimmer?.data_zones || []).map(z => `[${z.source_type || 'מידע'}]: ${z.content || ''}`).join('\n');
-    return `אתה עוזר של בעל צימר. ענה על שאלת הלקוח בעברית, בקצרה ובאדיבות, על סמך פרטי הנכס בלבד.
-צימר: ${question.zimmer_name || ''}
-שאלה: ${question.question}
-${question.customer_search_summary ? `סיכום חיפוש הלקוח: ${question.customer_search_summary}` : ''}
-פרטי הנכס:
-${zones || '(אין מידע נוסף)'}
-אם אין מידע מספיק, החזר תשובה קצרה שמזמינה את הלקוח לפנות ישירות לבעלים.
-החזר JSON בלבד: {"reply":"תוכן התשובה"}`;
-  };
+  const replyDraftState = () => ({ kind: 'question', questionId: question.id });
 
   const submit = async () => {
     if (!answer.trim()) return;
@@ -114,7 +104,7 @@ ${zones || '(אין מידע נוסף)'}
           <div className="flex items-center gap-2 text-[13px]" style={{ color: '#6B7280' }}>
             <BookOpen size={13} style={{ color: '#0B3838' }} /> השאלה והתשובה יישמרו כאזור מידע בצימר
           </div>
-          <AiReplySuggestion key={question.id} title="תשובה מוצעת" actionLabel="הוסף לתיבה" buildPrompt={buildPrompt} onApply={(t) => setAnswer(t)} disabled={saving} />
+          <AiReplySuggestion key={question.id} title="תשובה מוצעת" actionLabel="הוסף לתיבה" getClientState={replyDraftState} onApply={(t) => setAnswer(t)} disabled={saving} />
           <div className="flex gap-[12px]">
             <button type="button" onClick={() => onDismissed?.(question.id)} className="px-[20px] py-[12px] rounded-[35px] text-[14px] hover:bg-[#FAFAFA]"
               style={{ border: '1px solid rgba(11,56,56,0.21)', color: '#0B3838', fontWeight: 500 }}>דחה</button>

@@ -1,0 +1,18 @@
+---
+description: Change discipline for Figma UI work — Inspect → Plan → Implement → Verify → Compare → Fix → Test
+alwaysApply: true
+---
+
+# Change Discipline (Figma UI tasks)
+
+For every meaningful Figma/UI task, follow this order — do **not** jump from Inspect straight to Implement:
+
+1. **Inspect** — Figma node(s), existing components, related screens, APIs in use.
+2. **Plan** — what to reuse, what to change, Desktop/Mobile scope, assumptions if Figma is incomplete.
+3. **Implement** — minimal diff; tokens/components first; no unrelated edits.
+4. **Verify** — build / relevant checks still pass.
+5. **Compare with Figma** — visual fidelity (spacing, type, color, radius, shadows, breakpoints).
+6. **Fix** — close gaps found in the comparison.
+7. **Test** — existing tests and smoke the touched flows.
+
+Skip Plan only for trivial one-line fixes. For multi-screen or layout work, Plan is mandatory.

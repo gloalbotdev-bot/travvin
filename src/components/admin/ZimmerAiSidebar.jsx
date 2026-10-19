@@ -146,7 +146,7 @@ function useZimmerSuggestions(zimmer, missing, onEmpty) {
 }
 
 /* Figma 1776:19049 (Frame 112) — owner property sidebar: orb, checklist, Travvin suggestions, input bar. */
-function ZimmerAiSidebarFigma({ zimmer, onAddBooking, onUpdatePrice, onFillMissing, onEmpty }) {
+function ZimmerAiSidebarFigma({ zimmer, onAddBooking, onUpdatePrice, onFillMissing, onEmpty, onZimmerUpdated }) {
   const [draft, setDraft] = useState('');
   const [showMissing, setShowMissing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -337,6 +337,7 @@ function ZimmerAiSidebarFigma({ zimmer, onAddBooking, onUpdatePrice, onFillMissi
               zimmer={zimmer}
               initialPrompt={chatPrompt}
               onClose={() => { setChatOpen(false); setChatPrompt(''); }}
+              onApplied={onZimmerUpdated}
             />
           </div>
         )}
@@ -416,7 +417,7 @@ export default function ZimmerAiSidebar(props) {
   return props.variant === 'figma' ? <ZimmerAiSidebarFigma {...props} /> : <ZimmerAiSidebarLegacy {...props} />;
 }
 
-function ZimmerAiSidebarLegacy({ zimmer, onAddBooking, onBlockDate, onUpdatePrice, onOpenCheckin, onFillMissing, onEmpty }) {
+function ZimmerAiSidebarLegacy({ zimmer, onAddBooking, onBlockDate, onUpdatePrice, onOpenCheckin, onFillMissing, onEmpty, onZimmerUpdated }) {
   const [draft, setDraft] = useState('');
   const [showMissing, setShowMissing] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
@@ -604,6 +605,7 @@ function ZimmerAiSidebarLegacy({ zimmer, onAddBooking, onBlockDate, onUpdatePric
               zimmer={zimmer}
               initialPrompt={chatPrompt}
               onClose={() => { setChatOpen(false); setChatPrompt(''); }}
+              onApplied={onZimmerUpdated}
             />
           </div>
         ) : (

@@ -3,6 +3,7 @@
  */
 import {
   calcBookingTotalForZimmer,
+  checkMinNights,
   clampDiscount,
   datesOverlap,
 } from './booking-price.js';
@@ -101,6 +102,13 @@ export async function assertNoApprovedOverlap(
  * Compute authoritative total_price (optional active promo discount).
  */
 export async function computeBookingTotalPrice(prisma, booking) {
+  // Owner-agreed price (set only by owner/admin — entity-store strips it for others).
+  const override = Number(booking.price_override);
+  // 0 is treated as "no override" so list-price calculation runs.
+  if (booking.price_override != null && booking.price_override !== '' && Number.isFinite(override) && override > 0) {
+    return Math.round(override);
+  }
+
   const zimmer = await loadZimmerData(prisma, booking.zimmer_id);
   if (!zimmer) {
     return booking.total_price != null ? Number(booking.total_price) : 0;
@@ -231,6 +239,48 @@ export function assertCheckOutAfterCheckIn(payload) {
     err.status = 400;
     throw err;
   }
+}
+
+/**
+ * Reject stays shorter than the zimmer's min_nights_rules (חמשוש etc.).
+ * Admins and the zimmer owner may book shorter stays manually.
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} prisma
+ */
+export async function assertMinNights(prisma, booking, user) {
+  if (!booking?.zimmer_id || !booking.check_in || !booking.check_out) return;
+  if (user?.role === 'admin') return;
+  const zimmer = await loadZimmerData(prisma, booking.zimmer_id);
+  if (!zimmer) return;
+  if (user?.id && zimmer.owner_id === user.id) return;
+  const res = checkMinNights(zimmer, booking.check_in, booking.check_out);
+  if (res.ok) return;
+  // Owner-defined promo windows are exempt (the owner chose those exact dates).
+  const promos = await prisma.record.findMany({
+    where: {
+      entityType: 'Promotion',
+      AND: [
+        { data: { path: ['zimmer_id'], equals: booking.zimmer_id } },
+        { data: { path: ['status'], equals: 'פעיל' } },
+      ],
+    },
+    take: 50,
+  });
+  if (
+    promos
+      .map(rowToPublic)
+      .some((p) => p.check_in === booking.check_in && p.check_out === booking.check_out)
+  ) {
+    return;
+  }
+  const err = new Error(res.message);
+  err.status = 400;
+  err.body = {
+    error: 'min_nights',
+    message: res.message,
+    required: res.required,
+    nights: res.nights,
+  };
+  throw err;
 }
 
 /**

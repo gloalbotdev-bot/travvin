@@ -104,8 +104,21 @@ function mockInvoke(payload) {
       };
     }
 
+    if (props.recommendations) {
+      return { summary: 'סיכום mock', recommendations: [] };
+    }
+    if (props.suggestions) {
+      return { suggestions: [] };
+    }
+    if (props.reply) {
+      return { reply: 'טיוטת mock' };
+    }
+
     if (props.operation) {
-      const prompt = String(payload.prompt || '');
+      // Thread memory repeats earlier turns — only the latest MOCK_ token counts.
+      const full = String(payload.prompt || '');
+      const at = full.lastIndexOf('MOCK_');
+      const prompt = at >= 0 ? full.slice(at, at + 40) : '';
       if (prompt.includes('MOCK_EXECUTE_CREATE_ZIMMER')) {
         return {
           message: 'יוצר צימר חדש לבדיקה',
@@ -120,6 +133,22 @@ function mockInvoke(payload) {
           actions: [],
         };
       }
+      if (prompt.includes('MOCK_EXECUTE_BLOCK_DATES')) {
+        return {
+          message: 'חוסם תאריכים',
+          operation: {
+            type: 'block_dates',
+            zimmer_name: 'צימר Mock בדיקה',
+            start_date: '2031-02-10',
+            end_date: '2031-02-12',
+            reason: 'שיפוץ',
+          },
+          actions: [],
+        };
+      }
+      if (prompt.includes('MOCK_OPEN_FORM_BLOCK')) {
+        return { message: 'פותח טופס חסימה', operation: null, actions: [], open_form: 'block' };
+      }
       if (prompt.includes('MOCK_EXECUTE_UPDATE_ZIMMER')) {
         return {
           message: 'מעדכן מחיר',
@@ -127,6 +156,17 @@ function mockInvoke(payload) {
             type: 'update_zimmer',
             zimmer_id: 'REPLACE_AT_RUNTIME',
             fields: { price_per_night: 777 },
+          },
+          actions: [],
+        };
+      }
+      if (prompt.includes('MOCK_EXECUTE_UPDATE_BOOKING')) {
+        return {
+          message: 'מעדכן הזמנה',
+          operation: {
+            type: 'update_booking',
+            guest_name: 'אורח Mock לעדכון',
+            notes: 'עודכן ב-mock',
           },
           actions: [],
         };

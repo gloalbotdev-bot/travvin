@@ -66,8 +66,33 @@ function mainUnit() {
   const bookingParsed = parseOwnerBookingCreatorResponse({
     action: 'create',
     message: 'מוכן',
-    booking: { guest_name: 'x' },
+    booking: { guest_name: 'x', status: 'אושרה', num_guests: 2, price_override: 1500 },
   });
+  assert(bookingParsed.parsed.booking?.price_override === 1500, 'booking parser keeps price_override');
+  const zeroPrice = parseOwnerBookingCreatorResponse({
+    action: 'create',
+    message: 'מוכן',
+    booking: { guest_name: 'x', status: 'אושרה', num_guests: 2, price_override: 0 },
+  });
+  assert(zeroPrice.parsed.booking?.price_override == null, 'booking parser drops price_override 0');
+  const noStatus = parseOwnerBookingCreatorResponse({
+    action: 'create',
+    message: 'מוכן',
+    booking: { guest_name: 'x', num_guests: 2 },
+  });
+  assert(
+    noStatus.parsed.action === 'ask' && /מאושרת|ממתינה/.test(noStatus.content),
+    'booking without status asks approved/pending',
+  );
+  const noGuests = parseOwnerBookingCreatorResponse({
+    action: 'create',
+    message: 'מוכן',
+    booking: { guest_name: 'x', status: 'אושרה' },
+  });
+  assert(
+    noGuests.parsed.action === 'ask' && /אורחים/.test(noGuests.content),
+    'booking without num_guests asks for guest count',
+  );
   assert(
     bookingParsed.uiEffects.some((e) => e.type === 'booking_preview'),
     'booking parser emits booking preview',

@@ -15,14 +15,15 @@ import ZimmerDatabase from '@/components/owner/ZimmerDatabase';
 import ReviewsPanel from '@/components/owner/ReviewsPanel';
 import QuestionsPanel from '@/components/owner/QuestionsPanel';
 import PromotionsPanel from '@/components/owner/PromotionsPanel';
-import OwnerInfoAssistant from '@/components/owner/OwnerInfoAssistant';
 import OwnerUpdatesPanel from '@/components/owner/OwnerUpdatesPanel';
 import OwnerCheckinSettings from '@/components/owner/OwnerCheckinSettings';
 import OwnerVideos from '@/components/owner/OwnerVideos';
 import OwnerTopBar from '@/components/owner/OwnerTopBar';
 import OwnerHamburger from '@/components/owner/OwnerHamburger';
 import OwnerTodayHome from '@/components/owner/OwnerTodayHome';
+import OwnerInfoAssistant from '@/components/owner/OwnerInfoAssistant';
 import { useOwnerSystemUnread } from '@/hooks/useOwnerSystemUnread';
+import { ensureOwnerPanelVisitStart } from '@/hooks/useOwnerAssistantThread';
 
 export default function OwnerPanel() {
   const [tab, setTab] = useState('home');
@@ -62,6 +63,7 @@ export default function OwnerPanel() {
   }, []);
 
   useEffect(() => { loadOwner(); }, [loadOwner]);
+  useEffect(() => { ensureOwnerPanelVisitStart(); }, []);
 
   const openNotificationAction = (actionType, entityId) => {
     if (!actionType || !entityId) { setTab('updates'); return; }
@@ -161,12 +163,8 @@ export default function OwnerPanel() {
   const primaryIds = ['home', 'calendar', 'zimmers', 'updates', 'bookings'];
   const primaryNav = primaryIds.map(id => navItems.find(n => n.id === id)).filter(Boolean);
 
+  /** Spark / assistant tab open the dedicated assistant UI; Today keeps its own screen — both share surface 'home'. */
   const handleNav = (id) => { setTab(id); setSidebarOpen(false); };
-  const handleHomeChat = (text, attachments = []) => {
-    setAssistantPrompt(text);
-    setAssistantAttachments(attachments);
-    setTab('assistant');
-  };
   const handleCalendarAI = (iso, zimmerName) => {
     const z = zimmerName ? ` עבור הנכס "${zimmerName}"` : '';
     setAssistantPrompt(`הצעות מבוססות שוק לתאריך ${iso}${z}. אנא הצע המלצות מחיר וזמינות.`);
@@ -178,10 +176,15 @@ export default function OwnerPanel() {
     else if (type === 'update_price') { if (zimmers[0]) setEditingZimmer(zimmers[0]); }
     else if (type === 'create_promo') setTab('promotions');
   };
+  const OPEN_FORM_ACTIONS = { block: 'block_date', price: 'update_price', booking: 'add_booking' };
+  const handleOpenForm = (effect) => {
+    const action = OPEN_FORM_ACTIONS[effect?.form];
+    if (action) handleQuickAction(action);
+  };
 
   return (
     <div
-      className={`flex flex-col ${tab === 'home' || tab === 'updates' || tab === 'calendar' || viewingZimmer || usingCreatorChat ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}
+      className={`flex flex-col ${tab === 'home' || tab === 'assistant' || tab === 'updates' || tab === 'calendar' || viewingZimmer || usingCreatorChat ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}
       dir="rtl"
       style={{ background: '#FAFAFA', fontFamily: 'Heebo, sans-serif' }}
     >
@@ -222,20 +225,22 @@ export default function OwnerPanel() {
       ) : usingCreatorChat ? (
         <ZimmerCreatorChat
           embedded
+          ownerId={currentUser?.id}
           onSave={async (data) => { await handleSave(data); setUsingCreatorChat(false); }}
+          onCreated={async () => { await loadZimmers(currentUser?.id); setUsingCreatorChat(false); }}
           onCancel={() => setUsingCreatorChat(false)}
         />
       ) : (
-      <div className={`flex flex-1 ${tab === 'home' || tab === 'updates' || tab === 'calendar' ? 'min-h-0 overflow-hidden' : 'overflow-hidden'}`}>
+      <div className={`flex flex-1 ${tab === 'home' || tab === 'assistant' || tab === 'updates' || tab === 'calendar' ? 'min-h-0 overflow-hidden' : 'overflow-hidden'}`}>
       <main
         className={`flex-1 min-h-0 ${
           tab === 'home'
             ? 'overflow-hidden bg-white'
-            : tab === 'updates'
+            : tab === 'updates' || tab === 'assistant'
               ? 'overflow-hidden'
               : tab === 'calendar'
               ? 'overflow-hidden bg-white p-4 sm:p-6 lg:p-0'
-              : tab === 'assistant' || tab === 'bookings'
+              : tab === 'bookings'
               ? 'overflow-auto'
               : 'overflow-auto p-4 sm:p-6 lg:p-8'
         }`}
@@ -248,7 +253,8 @@ export default function OwnerPanel() {
             onAction={openNotificationAction}
             onNavigate={(t) => setTab(t)}
             onEditZimmer={(z) => setEditingZimmer(z)}
-            onChat={handleHomeChat}
+            onAssistantMutated={() => loadZimmers(currentUser?.id)}
+            onOpenForm={handleOpenForm}
           />
         )}
         {tab === 'assistant' && (
@@ -260,6 +266,7 @@ export default function OwnerPanel() {
             initialAttachments={assistantAttachments}
             onPromptConsumed={() => { setAssistantPrompt(''); setAssistantAttachments([]); }}
             onMutated={() => loadZimmers(currentUser?.id)}
+            onOpenForm={handleOpenForm}
             onNavigate={(target) => {
               if (target === 'booking_creator') setShowBookingCreator(true);
               else if (target === 'new_zimmer') setUsingCreatorChat(true);

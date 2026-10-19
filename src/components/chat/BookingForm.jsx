@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/api/client';
 import { X } from 'lucide-react';
-import { calcBookingTotalForZimmer, formatILS, calcNights, promoStayTotal, clampDiscount } from '@/lib/bookingPrice';
+import { calcBookingTotalForZimmer, formatILS, calcNights, promoStayTotal, clampDiscount, checkMinNights } from '@/lib/bookingPrice';
 import { getBookedRangesForZimmer } from '@/components/chat/DateSearchWidget';
 import BookingDatePicker from '@/components/chat/BookingDatePicker';
 
@@ -95,10 +95,14 @@ export default function BookingForm({ zimmer, onSubmit, prefillDates, promo, onC
       ? promoStayTotal(zimmer, promo, parseInt(form.num_adults) || 0, parseInt(form.num_children) || 0)
       : calcBookingTotalForZimmer(zimmer, form.check_in, form.check_out, parseInt(form.num_adults) || 0, parseInt(form.num_children) || 0)
     : 0;
+  // Promo stays are owner-defined windows, so they are exempt from min nights.
+  const minNightsCheck = (!promo && form.check_in && form.check_out)
+    ? checkMinNights(zimmer, form.check_in, form.check_out)
+    : { ok: true };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (totalGuests < 1) return;
+    if (totalGuests < 1 || !minNightsCheck.ok) return;
     setSubmitting(true);
     await onSubmit({
       ...form,
@@ -166,7 +170,13 @@ export default function BookingForm({ zimmer, onSubmit, prefillDates, promo, onC
               checkIn={form.check_in}
               checkOut={form.check_out}
               onChange={({ check_in, check_out }) => setForm(f => ({ ...f, check_in, check_out }))}
+              zimmer={zimmer}
             />
+          )}
+          {!minNightsCheck.ok && (
+            <div role="alert" className="bg-amber-50 text-amber-800 text-xs rounded-lg px-3 py-2 mt-2 leading-relaxed">
+              {minNightsCheck.message} — נבחרו {minNightsCheck.nights} לילות. יש להאריך את השהייה.
+            </div>
           )}
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -207,7 +217,7 @@ export default function BookingForm({ zimmer, onSubmit, prefillDates, promo, onC
         )}
         <button
           type="submit"
-          disabled={submitting || totalGuests < 1 || !form.check_in || !form.check_out}
+          disabled={submitting || totalGuests < 1 || !form.check_in || !form.check_out || !minNightsCheck.ok}
           className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-60"
         >
           {submitting ? 'שולח...' : 'שלח בקשת הזמנה ✓'}

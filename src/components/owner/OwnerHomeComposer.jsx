@@ -109,31 +109,33 @@ export default function OwnerHomeComposer({ onSubmit, placeholder, autoFocus = f
         <p className="font-simona text-xs mt-1.5" style={{ color: '#D93025' }} role="alert">{uploadError}</p>
       )}
       <div className="flex items-center justify-between mt-auto" style={{ paddingTop: 10, marginRight: -8.3 }}>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading || attachments.length >= MAX_ATTACHMENTS}
-          title="העלאת קבצים"
-          aria-label="העלאת קבצים"
-          className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 disabled:cursor-default"
-          style={{ background: '#E9E9E9' }}
-        >
-          {uploading
-            ? <Loader2 size={13} className="animate-spin" style={{ color: '#0B3838' }} />
-            : (
-              <span className="overflow-hidden" style={{ width: 12, height: 12 }}>
-                <img src={iconPlus} alt="" width={12} height={12} className="block w-full h-full" />
-              </span>
-            )}
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept={ATTACHMENT_ACCEPT}
-          className="hidden"
-          onChange={handleFileUpload}
-        />
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading || attachments.length >= MAX_ATTACHMENTS}
+            title="העלאת קבצים"
+            aria-label="העלאת קבצים"
+            className="w-[29px] h-[29px] rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 disabled:cursor-default"
+            style={{ background: '#E9E9E9' }}
+          >
+            {uploading
+              ? <Loader2 size={13} className="animate-spin" style={{ color: '#0B3838' }} />
+              : (
+                <span className="overflow-hidden" style={{ width: 12, height: 12 }}>
+                  <img src={iconPlus} alt="" width={12} height={12} className="block w-full h-full" />
+                </span>
+              )}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={ATTACHMENT_ACCEPT}
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+        </div>
         <div className="flex items-center gap-3" dir="ltr">
           <button
             type="button"

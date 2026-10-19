@@ -3,7 +3,9 @@ import { api } from '@/api/client';
 import { X, Check, Loader2, User, Phone, Home, CalendarDays, Users, CreditCard } from 'lucide-react';
 import { useAutoResize } from '@/hooks/useAutoResize';
 import MicButton from '@/components/chat/MicButton';
-import { calcBookingTotal, formatILS } from '@/lib/bookingPrice';
+import { calcBookingTotalForZimmer, formatILS, checkMinNights } from '@/lib/bookingPrice';
+import { buildCreatorRecentTurns, getAssistantParsed } from '@/lib/assistantCreator';
+import { decideOwnerAction, findConfirmAction, ownerActionErrorText } from '@/lib/ownerActions';
 import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
 import iconSend from '@/assets/owner/home/icon-send.svg';
 import iconMic from '@/assets/owner/home/icon-mic.svg';
@@ -19,6 +21,7 @@ export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId 
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [pendingBooking, setPendingBooking] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
   const [saving, setSaving] = useState(false);
   const [collectedData, setCollectedData] = useState({}); // accumulated booking fields across turns
   const messagesEndRef = useRef(null);
@@ -44,116 +47,101 @@ export default function BookingCreatorChat({ onClose, onSaved, zimmers, ownerId 
     addMsg('user', text);
     setIsTyping(true);
 
-    const zimmerNames = zimmers.map(z => z.name).join(', ');
-    const today = new Date().toISOString().split('T')[0];
-
-    // The whole thread so far — for conversational continuity.
-    const history = messages
-      .filter(m => m.content)
-      .map(m => (m.role === 'user' ? 'בעל המתחם' : 'עוזר') + ': ' + m.content)
-      .join('\n');
-
-    const prevDataStr = JSON.stringify(collectedData);
-
-    const response = await api.integrations.Core.InvokeLLM({
-      prompt: `אתה עוזר לבעל צימר להוסיף הזמנה אחת למערכת.
-הצימרים הזמינים (חובה לבחור אחד מהם לפי השם): ${zimmerNames}
-תאריך היום: ${today}
-
-כללים חשובים:
-1. כל צ'אט מיועד להזמנה אחת בלבד.
-2. חובה לקרוא את ההודעה הנוכחית של הבעלים בעיון ולחלץ ממנה את כל הפרטים שנמסרו בה — גם אם נמסרו מספר פרטים בהודעה אחת (שם + טלפון + תאריכים + צימר...). אסור לקחת רק פרט אחד ולהתעלם מהשאר.
-3. שמור בזיכרון את הפרטים שכבר נאספו בסבבים קודמים (מסופקים לך למטה כ- accumulated). מזג (merge) אותם עם החדשים מההודעה הנוכחית.
-4. אל תבקש פרט שכבר יש לך (גם אם מ-accumulated וגם מההודעה הנוכחית). בקש רק את החסר.
-5. ב-booking החזר את התמונה המלאה והמעודכנת אחרי המיזוג (גם הפרטים שכבר היו + החדשים). אם נתון לא ידוע — רשום null/מחרוזת ריקה.
-
-שדות חובה: guest_name, guest_phone, check_in (YYYY-MM-DD), check_out (YYYY-MM-DD), zimmer_name (אחד מהרשימה למעלה).
-שדות רשות: num_guests, notes.
-
-פרטים שכבר נאספו עד כה:
-${prevDataStr}
-
-שיחה עד כה:
-${history}
-
-ההודעה הנוכחית של הבעלים: "${text}"
-
-ממן את מה שחסר:
-- אם יש את כל שדות החובה (אחרי מיזוג כל מקורות המידע) → החזר action=create עם booking מלא, ו-message קצר.
-- אם חסר משהו → החזר action=ask, booking מלא עם מה שיש (כך נשמור את ההתקדמות), ו-message ששואל רק על החסר (שאלה אחת ממוקדת, לא רשימה שלמה). לעולם אל תבקש מחדש פרט שכבר נמסר.
-
-ענה JSON בלבד:
-{
-  "action": "create" | "ask",
-  "message": "...",
-  "booking": {
-    "guest_name": "...",
-    "guest_phone": "...",
-    "check_in": "YYYY-MM-DD",
-    "check_out": "YYYY-MM-DD",
-    "zimmer_name": "...",
-    "num_guests": number or null,
-    "notes": "..."
-  }
-}`,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          action: { type: 'string' },
-          message: { type: 'string' },
-          booking: {
-            type: 'object',
-            properties: {
-              guest_name: { type: 'string' },
-              guest_phone: { type: 'string' },
-              check_in: { type: 'string' },
-              check_out: { type: 'string' },
-              zimmer_name: { type: 'string' },
-              num_guests: { type: 'number' },
-              notes: { type: 'string' }
-            }
-          }
-        }
-      }
-    });
-
+    let response;
+    try {
+      response = await api.assistant.chat({
+        profile: 'owner_booking_creator',
+        message: text,
+        clientState: {
+          ownerId,
+          collectedData,
+          recentTurns: buildCreatorRecentTurns(messages),
+        },
+      });
+    } catch {
+      setIsTyping(false);
+      addMsg('bot', 'מצטער, אירעה שגיאה. נסה שוב.');
+      return;
+    }
     setIsTyping(false);
 
+    const parsed = getAssistantParsed(response);
+    const replyText = response?.message?.content || parsed.message;
+
     // Merge any booking fields the LLM returned into our accumulated state (handles partial data across turns).
-    const merged = { ...collectedData, ...(response.booking || {}) };
+    const merged = { ...collectedData, ...(parsed.booking || {}) };
     const cleanedMerged = Object.fromEntries(
       Object.entries(merged).filter(([_, v]) => v !== null && v !== undefined && v !== '')
     );
     setCollectedData(cleanedMerged);
 
-    if (response.action === 'create' && response.booking) {
+    if (parsed.action === 'create' && parsed.booking) {
       const matchedZimmer = zimmers.find(z =>
-        z.name.includes(response.booking.zimmer_name) ||
-        response.booking.zimmer_name?.includes(z.name)
+        z.name.includes(parsed.booking.zimmer_name) ||
+        parsed.booking.zimmer_name?.includes(z.name)
       ) || zimmers[0];
 
+      const override = Number(parsed.booking.price_override);
+      const hasOverride = parsed.booking.price_override != null && Number.isFinite(override) && override > 0;
+      const guests = Number(parsed.booking.num_guests);
+      const hasGuests = parsed.booking.num_guests != null && Number.isFinite(guests) && guests > 0;
       const booking = {
-        ...response.booking,
+        ...parsed.booking,
         zimmer_id: matchedZimmer?.id || '',
-        zimmer_name: matchedZimmer?.name || response.booking.zimmer_name,
+        zimmer_name: matchedZimmer?.name || parsed.booking.zimmer_name,
         owner_id: ownerId || matchedZimmer?.owner_id || '',
-        status: 'אושרה',
-        total_price: calcBookingTotal(response.booking.check_in, response.booking.check_out, matchedZimmer?.price_per_night),
+        status: parsed.booking.status === 'ממתינה' ? 'ממתינה' : 'אושרה',
+        ...(hasGuests ? { num_guests: Math.round(guests) } : { num_guests: null }),
+        ...(hasOverride ? { price_override: Math.round(override) } : {}),
+        total_price: hasOverride
+          ? Math.round(override)
+          : calcBookingTotalForZimmer(matchedZimmer, parsed.booking.check_in, parsed.booking.check_out),
       };
+      setConfirmAction(findConfirmAction(response));
       setPendingBooking(booking);
-      addMsg('bot', response.message || 'מצוין! הנה ההזמנה שאני מתכוון להוסיף:');
+      addMsg('bot', replyText || 'מצוין! הנה ההזמנה שאני מתכוון להוסיף:');
     } else {
-      addMsg('bot', response.message || 'ספר לי עוד פרטים.');
+      addMsg('bot', replyText || 'ספר לי עוד פרטים.');
     }
   };
+
+  const pendingZimmer = pendingBooking ? zimmers.find(z => z.id === pendingBooking.zimmer_id) : null;
+  const pendingMinNights = pendingZimmer
+    ? checkMinNights(pendingZimmer, pendingBooking.check_in, pendingBooking.check_out)
+    : null;
 
   const handleSave = async () => {
     if (!pendingBooking) return;
     setSaving(true);
-    await api.entities.BookingRequest.create(pendingBooking);
+    try {
+      if (confirmAction) {
+        await decideOwnerAction({
+          profile: 'owner_booking_creator',
+          actionId: confirmAction.actionId,
+          confirm: true,
+          ownerId,
+        });
+      } else {
+        // Admin sessions have no owner thread — legacy direct save.
+        await api.entities.BookingRequest.create(pendingBooking);
+      }
+    } catch (err) {
+      setSaving(false);
+      addMsg('bot', ownerActionErrorText(err));
+      return;
+    }
     setSaving(false);
     onSaved();
     onClose();
+  };
+
+  const handleEditPending = () => {
+    if (confirmAction) {
+      decideOwnerAction({ profile: 'owner_booking_creator', actionId: confirmAction.actionId, confirm: false, ownerId }).catch(() => {});
+    }
+    setConfirmAction(null);
+    setPendingBooking(null);
+    addMsg('bot', 'בסדר, מה צריך לשנות?');
   };
 
   return (
@@ -229,8 +217,15 @@ ${history}
                 {pendingBooking.total_price ? (
                   <PreviewRow icon={CreditCard}>
                     תשלום: <span className="font-simpler" style={{ fontWeight: 600 }}>{formatILS(pendingBooking.total_price)}</span>
+                    {pendingBooking.price_override != null && <span style={{ color: '#717171' }}> (מחיר מוסכם)</span>}
                   </PreviewRow>
                 ) : null}
+                <PreviewRow icon={Check}>{pendingBooking.status === 'ממתינה' ? 'ממתינה לאישור' : 'מאושרת'}</PreviewRow>
+                {pendingMinNights && !pendingMinNights.ok && (
+                  <p role="status" className="rounded-[10px] px-3 py-2 text-xs leading-relaxed" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                    ⚠️ {pendingMinNights.message} (בהזמנה זו {pendingMinNights.nights} לילות). כבעל הצימר אפשר לשמור בכל זאת.
+                  </p>
+                )}
                 {pendingBooking.notes && <p className="rounded-[10px] px-3 py-2 text-xs whitespace-pre-wrap" style={{ background: '#F5F5F5', color: '#717171' }}>{pendingBooking.notes}</p>}
               </div>
               <div className="flex gap-2 mt-4">
@@ -246,7 +241,7 @@ ${history}
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setPendingBooking(null); addMsg('bot', 'בסדר, מה צריך לשנות?'); }}
+                  onClick={handleEditPending}
                   className="font-simona px-5 py-2.5 rounded-xl text-sm transition-all hover:opacity-90"
                   style={{ background: 'rgba(11,56,56,0.08)', color: '#0B3838', border: '1.5px solid rgba(11,56,56,0.12)' }}
                 >

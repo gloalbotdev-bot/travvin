@@ -4,13 +4,14 @@ import { api } from '@/api/client';
 import aiSpark from '@/assets/owner/messages/ai-spark.svg';
 import iconChevron from '@/assets/owner/messages/icon-chevron.svg';
 
-// "תשובה מוצעת לאורח" block. Generates a reply via the LLM using the caller's
-// buildPrompt(); the action button hands the text to onApply (it never sends).
+// "תשובה מוצעת לאורח" block. Generates a reply via the server owner_reply_draft profile
+// from getClientState() ({ kind: 'chat', threadIds, zimmerId, bookingId } or
+// { kind: 'question', questionId }); the action button hands the text to onApply (it never sends).
 // Auto mode: pass autoKey — a new truthy key triggers generation, null hides the block.
 // Manual mode: omit autoKey — the owner asks for a draft with a button.
 // IMPORTANT: scope to a single thread/question by passing a key={id} from
 // the parent so the component remounts (and resets its state) on switch.
-export default function AiReplySuggestion({ buildPrompt, onApply, disabled, autoKey, title = 'תשובה מוצעת לאורח', actionLabel = 'שליחה' }) {
+export default function AiReplySuggestion({ getClientState, onApply, disabled, autoKey, title = 'תשובה מוצעת לאורח', actionLabel = 'שליחה' }) {
   const auto = autoKey !== undefined;
   const [loading, setLoading] = useState(false);
   const [suggestion, setSuggestion] = useState('');
@@ -25,12 +26,13 @@ export default function AiReplySuggestion({ buildPrompt, onApply, disabled, auto
     setErr('');
     setSuggestion('');
     try {
-      const res = await api.integrations.Core.InvokeLLM({
-        prompt: buildPrompt(),
-        response_json_schema: { type: 'object', properties: { reply: { type: 'string' } } },
+      const res = await api.assistant.chat({
+        profile: 'owner_reply_draft',
+        message: 'ניסוח תשובה',
+        clientState: getClientState(),
       });
       if (id !== reqId.current) return;
-      const text = (res && (res.reply || res.message)) || (typeof res === 'string' ? res : '');
+      const text = res?.meta?.parsed?.reply || res?.message?.content || '';
       if (!text) setErr('לא הצלחתי לייצר תשובה כרגע');
       else setSuggestion(text);
     } catch {
@@ -46,7 +48,6 @@ export default function AiReplySuggestion({ buildPrompt, onApply, disabled, auto
     lastAutoKey.current = autoKey;
     if (!autoKey) { reqId.current++; setSuggestion(''); setErr(''); setLoading(false); return; }
     generate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoKey]);
 
   if (auto && !autoKey) return null;

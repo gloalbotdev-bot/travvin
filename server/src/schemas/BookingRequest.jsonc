@@ -71,6 +71,11 @@
       "type": "number",
       "title": "סך תשלום מחושב"
     },
+    "price_override": {
+      "type": "number",
+      "title": "מחיר מוסכם (בעלים/אדמין בלבד — דורס את החישוב)",
+      "minimum": 0
+    },
     "calendar_event_id": {
       "type": "string",
       "title": "מזהה אירוע ביומן"

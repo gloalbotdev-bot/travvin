@@ -3,7 +3,7 @@ import { api } from '@/api/client';
 import { BookOpen, Send } from 'lucide-react';
 import AiReplySuggestion from './AiReplySuggestion';
 
-export default function MessagesQuestionWindow({ question, zimmer, onAnswered, onDismissed }) {
+export default function MessagesQuestionWindow({ question, onAnswered, onDismissed }) {
   const [answer, setAnswer] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -12,17 +12,7 @@ export default function MessagesQuestionWindow({ question, zimmer, onAnswered, o
   if (!question) return null;
   const answered = question.status !== 'ממתינה';
 
-  const buildPrompt = () => {
-    const zones = (zimmer?.data_zones || []).map(z => `[${z.source_type || 'מידע'}]: ${z.content || ''}`).join('\n');
-    return `אתה עוזר של בעל צימר. ענה על שאלת הלקוח בעברית, בקצרה ובאדיבות, על סמך פרטי הנכס בלבד.
-צימר: ${question.zimmer_name || ''}
-שאלה: ${question.question}
-${question.customer_search_summary ? `סיכום חיפוש הלקוח: ${question.customer_search_summary}` : ''}
-פרטי הנכס:
-${zones || '(אין מידע נוסף)'}
-אם אין מידע מספיק, החזר תשובה קצרה שמזמינה את הלקוח לפנות ישירות לבעלים.
-החזר JSON בלבד: {"reply":"תוכן התשובה"}`;
-  };
+  const replyDraftState = () => ({ kind: 'question', questionId: question.id });
 
   const submit = async () => {
     if (!answer.trim()) return;
@@ -88,7 +78,7 @@ ${zones || '(אין מידע נוסף)'}
 
       {!answered && (
         <>
-          <AiReplySuggestion key={question.id} contextLabel="לפי פרטי הנכס והשאלה" buildPrompt={buildPrompt} onApply={(t) => setAnswer(t)} disabled={saving} />
+          <AiReplySuggestion key={question.id} contextLabel="לפי פרטי הנכס והשאלה" getClientState={replyDraftState} onApply={(t) => setAnswer(t)} disabled={saving} />
           <div className="px-4 pb-4 pt-3 flex gap-2 border-t" style={{ borderColor: '#F0EEE8' }}>
             <button onClick={() => onDismissed?.(question.id)} className="px-4 py-2.5 rounded-xl text-sm font-semibold" style={{ border: '1.5px solid #E8E5E0', color: '#6B7280' }}>דחה</button>
             <button onClick={submit} disabled={!answer.trim() || saving} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2" style={{ background: '#F97316' }}>

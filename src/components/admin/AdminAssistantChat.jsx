@@ -4,6 +4,9 @@ import { X, Check } from 'lucide-react';
 import { useAutoResize } from '@/hooks/useAutoResize';
 import MicButton from '@/components/chat/MicButton';
 import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
+import { describeMinNightsRules } from '@/lib/bookingPrice';
+import { buildCreatorRecentTurns, getAssistantParsed } from '@/lib/assistantCreator';
+import { decideOwnerAction, findConfirmAction, ownerActionErrorText } from '@/lib/ownerActions';
 import iconSend from '@/assets/owner/home/icon-send.svg';
 import iconMic from '@/assets/owner/home/icon-mic.svg';
 
@@ -29,6 +32,7 @@ export default function AdminAssistantChat({ onClose, onRefresh }) {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [pendingChanges, setPendingChanges] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
   const messagesEndRef = useRef(null);
   const { ref: inputRef, resize: resizeInput } = useAutoResize(input, 240);
 
@@ -64,93 +68,30 @@ export default function AdminAssistantChat({ onClose, onRefresh }) {
     setIsTyping(true);
 
     try {
-      const zimmerJson = JSON.stringify({
-        id: selectedZimmer.id,
-        name: selectedZimmer.name,
-        location: selectedZimmer.location,
-        price_per_night: selectedZimmer.price_per_night,
-        num_rooms: selectedZimmer.num_rooms,
-        max_guests: selectedZimmer.max_guests,
-        description: selectedZimmer.description,
-        data_zones: selectedZimmer.data_zones || [],
-        images: selectedZimmer.images || []
+      const res = await api.assistant.chat({
+        profile: 'admin_zimmer_editor',
+        message: text,
+        clientState: {
+          zimmerId: selectedZimmer.id,
+          recentTurns: buildCreatorRecentTurns(messages),
+        },
       });
-
-      const historyText = messages.slice(-12)
-        .filter(m => m.type === 'text')
-        .map(m => `${m.role === 'user' ? 'מנהל' : 'מערכת'}: ${m.content}`)
-        .join('\n');
-
-      const prompt = `אתה עוזר ניהול לבעל צימר.
-צימר נוכחי:
-${zimmerJson}
-
-היסטוריית השיחה:
-${historyText}
-
-בקשת המנהל: "${text}"
-
-המשימה שלך:
-- נתח מה המנהל רוצה לשנות
-- בנה עדכון מלא לצימר (שדות בסיסיים + data_zones)
-- data_zones הם מערך של אובייקטים עם: content (string), source_label (string), source_type (string - אחד מ: "טקסט חופשי", "שיחת טלפון", "שיחת וואטסאפ"), source_date (תאריך היום: ${new Date().toLocaleDateString('he-IL')})
-- אם המנהל רוצה להוסיף כמה אזורי מידע בבת אחת — צור אזור מידע לכל פריט
-- שמור data_zones קיימים ורק הוסף/שנה לפי הבקשה
-- אם הבקשה לא ברורה — שאל שאלת הבהרה ספציפית
-
-ענה JSON:
-{
-  "action": "update" | "clarify" | "confirm",
-  "message": "הודעה למנהל",
-  "changes": {
-    "name": "...",
-    "location": "...",
-    "price_per_night": number,
-    "num_rooms": number,
-    "max_guests": number,
-    "description": "...",
-    "data_zones": [{"content":"...","source_label":"עריכה ידנית","source_type":"טקסט חופשי","source_date":"${new Date().toLocaleDateString('he-IL')}"}]
-  }
-}
-
-אם action=clarify: אל תכניס changes.
-אם action=update או confirm: הכנס changes עם כל שדות הצימר (גם אלה שלא השתנו).`;
-
-      const response = await api.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            action: { type: 'string' },
-            message: { type: 'string' },
-            changes: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-                location: { type: 'string' },
-                price_per_night: { type: 'number' },
-                num_rooms: { type: 'number' },
-                max_guests: { type: 'number' },
-                description: { type: 'string' },
-                data_zones: { type: 'array', items: { type: 'object' } }
-              }
-            }
-          }
-        }
-      });
+      const response = getAssistantParsed(res);
+      const replyText = res?.message?.content || response.message;
 
       setIsTyping(false);
 
       if (response.action === 'clarify') {
-        addMsg('bot', 'text', response.message);
-      } else if (response.action === 'update' && response.changes) {
+        addMsg('bot', 'text', replyText);
+      } else if ((response.action === 'update' || response.action === 'confirm') && response.changes) {
+        setConfirmAction(findConfirmAction(res));
         setPendingChanges(response.changes);
-        addMsg('bot', 'text', response.message || 'הנה השינויים שאני מתכנן לבצע:');
+        addMsg('bot', 'text', replyText || 'הנה השינויים שאני מתכנן לבצע:');
         addMsg('bot', 'changes_preview', response.changes);
       } else {
-        addMsg('bot', 'text', response.message || 'לא הצלחתי לעבד את הבקשה.');
+        addMsg('bot', 'text', replyText || 'לא הצלחתי לעבד את הבקשה.');
       }
-    } catch (e) {
+    } catch {
       setIsTyping(false);
       addMsg('bot', 'text', 'מצטער, אירעה שגיאה. נסה שוב.');
     }
@@ -160,23 +101,33 @@ ${historyText}
     if (!pendingChanges || !selectedZimmer) return;
     setIsTyping(true);
     try {
-      await api.entities.Zimmer.update(selectedZimmer.id, pendingChanges);
+      if (confirmAction) {
+        await decideOwnerAction({ profile: 'admin_zimmer_editor', actionId: confirmAction.actionId, confirm: true });
+      } else {
+        // Admin sessions have no owner thread — legacy direct save.
+        await api.entities.Zimmer.update(selectedZimmer.id, pendingChanges);
+      }
       const user = await api.auth.me();
       const updated = await api.entities.Zimmer.filter({ owner_id: user.id });
       setZimmers(updated);
       const updatedZimmer = updated.find(z => z.id === selectedZimmer.id);
       if (updatedZimmer) setSelectedZimmer(updatedZimmer);
       setPendingChanges(null);
+      setConfirmAction(null);
       setIsTyping(false);
       addMsg('bot', 'text', 'השינויים נשמרו בהצלחה! מה עוד תרצה לעשות?');
       if (onRefresh) onRefresh();
     } catch (e) {
       setIsTyping(false);
-      addMsg('bot', 'text', 'מצטער, לא הצלחתי לשמור. נסה שוב.');
+      addMsg('bot', 'text', confirmAction ? ownerActionErrorText(e) : 'מצטער, לא הצלחתי לשמור. נסה שוב.');
     }
   };
 
   const rejectChanges = () => {
+    if (confirmAction) {
+      decideOwnerAction({ profile: 'admin_zimmer_editor', actionId: confirmAction.actionId, confirm: false }).catch(() => {});
+    }
+    setConfirmAction(null);
     setPendingChanges(null);
     addMsg('bot', 'text', 'בסדר, ביטלתי. מה תרצה לשנות?');
   };
@@ -324,6 +275,7 @@ function AssistantBubble({ msg, onSelectZimmer, selectedZimmer, onApply, onRejec
       ch.price_per_night != null && ['מחיר/לילה', `₪${ch.price_per_night}`],
       ch.num_rooms != null && ['חדרים', ch.num_rooms],
       ch.max_guests != null && ['אורחים מקס׳', ch.max_guests],
+      Array.isArray(ch.min_nights_rules) && ['מינימום לילות', describeMinNightsRules(ch) || 'ללא'],
     ].filter(Boolean);
     return (
       <div className="flex items-start gap-2">

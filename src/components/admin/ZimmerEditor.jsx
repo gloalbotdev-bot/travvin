@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { api } from '@/api/client';
 import { ArrowRight, Plus, Trash2, Upload, X } from 'lucide-react';
 import RoomsDetailEditor from '@/components/chat/RoomsDetailEditor';
+import OutdoorAreaEditor from '@/components/chat/OutdoorAreaEditor';
 import DateRangeField from '@/components/common/DateRangeField';
 import ZimmerLocationTab from '@/components/admin/ZimmerLocationTab';
+import { normalizeRoomForSave, normalizeOutdoorAreaForSave, outdoorAreaDraft } from '@/lib/rooms';
+import { useOwnerCustomBedTypes } from '@/hooks/useOwnerCustomBedTypes';
 
 const SOURCE_TYPES = ['שיחת טלפון', 'שיחת וואטסאפ', 'טקסט חופשי', 'שאלות ותשובות'];
 
@@ -37,11 +40,13 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel, onDelete, initi
     price_per_adult: zimmer.price_per_adult ?? '',
     price_per_child: zimmer.price_per_child ?? '',
     seasonal_pricing: zimmer.seasonal_pricing || [],
+    min_nights_rules: (zimmer.min_nights_rules || []).map(r => ({ ...r, _period: !!(r.start_date || r.end_date) })),
     rooms_detail: Array.isArray(zimmer.rooms_detail) ? zimmer.rooms_detail : [],
     additional_bathrooms_count: zimmer.additional_bathrooms_count ?? 0,
     contact_phone: zimmer.contact_phone ?? '',
     expose_availability_calendar: zimmer.expose_availability_calendar || false,
     amenities: Array.isArray(zimmer.amenities) ? zimmer.amenities : [],
+    outdoor_area: outdoorAreaDraft(zimmer),
     size_sqm: zimmer.size_sqm ?? '',
     max_guests_event: zimmer.max_guests_event ?? '',
     extra_guest_fee: zimmer.extra_guest_fee ?? '',
@@ -51,6 +56,7 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel, onDelete, initi
     smoking_policy: zimmer.smoking_policy ?? '',
     nearby_landmarks: zimmer.nearby_landmarks || []
   });
+  const customBedTypes = useOwnerCustomBedTypes(zimmer.owner_id);
   const [tab, setTab] = useState(initialTab);
   const [saving, setSaving] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
@@ -70,6 +76,17 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel, onDelete, initi
     return { ...f, seasonal_pricing: rules };
   });
   const removeSeasonal = (idx) => setForm(f => ({ ...f, seasonal_pricing: (f.seasonal_pricing || []).filter((_, i) => i !== idx) }));
+
+  const addMinNights = () => setForm(f => ({
+    ...f,
+    min_nights_rules: [...(f.min_nights_rules || []), { scope: 'weekend', min_nights: 2, start_date: '', end_date: '', label: '', _period: false }]
+  }));
+  const updateMinNights = (idx, patch) => setForm(f => {
+    const rules = [...(f.min_nights_rules || [])];
+    rules[idx] = { ...rules[idx], ...patch };
+    return { ...f, min_nights_rules: rules };
+  });
+  const removeMinNights = (idx) => setForm(f => ({ ...f, min_nights_rules: (f.min_nights_rules || []).filter((_, i) => i !== idx) }));
 
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -125,6 +142,8 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel, onDelete, initi
   // Rooms detail (beds per room, bed type, bathroom, amenities)
   const updateRooms = (rooms) => setForm(f => ({ ...f, rooms_detail: rooms }));
   const updateAdditionalBathrooms = (n) => setForm(f => ({ ...f, additional_bathrooms_count: n }));
+  const addRoomPhotoToGallery = (url) => setForm(f =>
+    f.images.includes(url) || f.images.length >= 20 ? f : ({ ...f, images: [...f.images, url] }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -144,24 +163,19 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel, onDelete, initi
       price_per_adult: form.partial_pricing_enabled ? num(form.price_per_adult) : null,
       price_per_child: form.partial_pricing_enabled ? num(form.price_per_child) : null,
       seasonal_pricing: (form.seasonal_pricing || []).map(r => ({ ...r, label: (r.label || '').trim() || null, percentage: r.percentage === '' ? null : Number(r.percentage) })),
-      rooms_detail: (form.rooms_detail || []).map(r => {
-        const beds = Array.isArray(r.beds) && r.beds.length
-          ? r.beds.map(b => ({ bed_type: b.bed_type || 'queen', count: Math.max(1, Number(b.count) || 1) }))
-          : [{ bed_type: r.bed_type || 'queen', count: Math.max(1, Number(r.beds_count) || 1) }];
-        const beds_count = beds.reduce((s, b) => s + b.count, 0);
-        return {
-          room_name: r.room_name || null,
-          beds,
-          beds_count,
-          bed_type: beds[0]?.bed_type || 'queen',
-          max_guests_in_room: r.max_guests_in_room === '' || r.max_guests_in_room == null ? null : Number(r.max_guests_in_room),
-          has_bathroom: !!r.has_bathroom,
-          room_photo: r.room_photo || null,
-          amenities: (r.amenities || []).filter(a => String(a).trim())
-        };
-      }),
+      min_nights_rules: (form.min_nights_rules || [])
+        .map(({ _period, ...r }) => ({
+          scope: r.scope || 'weekend',
+          min_nights: Math.max(1, Math.round(Number(r.min_nights) || 1)),
+          start_date: _period && r.start_date ? r.start_date : null,
+          end_date: _period && r.end_date ? r.end_date : null,
+          label: _period ? ((r.label || '').trim() || null) : null,
+        }))
+        .filter(r => r.min_nights > 1),
+      rooms_detail: (form.rooms_detail || []).map(normalizeRoomForSave),
       additional_bathrooms_count: Math.max(0, Number(form.additional_bathrooms_count) || 0),
       amenities: (form.amenities || []).filter(a => String(a).trim()),
+      outdoor_area: normalizeOutdoorAreaForSave(form.outdoor_area),
       cancellation_policy_text: (form.cancellation_policy_text || '').trim() || null,
       payment_methods: form.payment_methods || [],
       smoking_policy: form.smoking_policy || null,
@@ -304,6 +318,17 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel, onDelete, initi
                   onChange={updateRooms}
                   additionalBathrooms={form.additional_bathrooms_count}
                   onAdditionalBathroomsChange={updateAdditionalBathrooms}
+                  onRoomPhotoUploaded={addRoomPhotoToGallery}
+                  customBedTypes={customBedTypes}
+                />
+              </section>
+
+              {/* Outdoor area (yard) */}
+              <section className="rounded-2xl p-6" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
+                <h2 className="font-bold text-xs uppercase tracking-widest mb-5" style={{ color: '#0B3838' }}>מתחם חיצוני (חצר)</h2>
+                <OutdoorAreaEditor
+                  value={form.outdoor_area}
+                  onChange={(area) => update('outdoor_area', area)}
                 />
               </section>
 
@@ -347,7 +372,7 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel, onDelete, initi
                     ))}
                   </div>
                   <p className="text-[11px] mt-2" style={{ color: '#9CA3AF' }}>
-                    המתקנים מסווגים אוטומטית ל-3 קבוצות בדף הצימר (בנכס / בחוץ / בסביבה) לפי מילות מפתח.
+                    המתקנים מסווגים אוטומטית ל-3 קבוצות בדף הצימר (בנכס / בחוץ / בסביבה) לפי מילות מפתח. לפירוט מלא של מה שבחוץ השתמש באזור "מתחם חיצוני".
                   </p>
                 </div>
               </section>
@@ -540,6 +565,94 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel, onDelete, initi
                         </div>
                       );
                     })}
+                  </div>
+                )}
+              </section>
+
+              {/* Minimum nights (חמשוש) */}
+              <section className="rounded-2xl p-6" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-bold text-xs uppercase tracking-widest" style={{ color: '#F97316' }}>מינימום לילות ({(form.min_nights_rules || []).length})</h2>
+                  <button type="button" onClick={addMinNights}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+                    style={{ background: 'rgba(249,115,22,0.1)', color: '#EA580C' }}>
+                    <Plus size={13} /> הוסף כלל
+                  </button>
+                </div>
+                <p className="text-xs mb-4 leading-relaxed" style={{ color: '#9CA3AF' }}>
+                  הגדר מינימום לילות להזמנה — בסופ"ש (חמשוש: שהייה שכוללת לילה של חמישי או שישי), באמצע השבוע או לכל הזמנה. ניתן להחיל תמיד או רק בתקופה מסוימת.
+                </p>
+                {(form.min_nights_rules || []).length === 0 ? (
+                  <div className="text-center py-6" style={{ color: '#9CA3AF' }}>
+                    <p className="text-sm">אין הגבלת מינימום לילות</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {(form.min_nights_rules || []).map((rule, idx) => (
+                      <div key={idx} className="rounded-xl p-4" style={{ background: '#F8F7F4', border: '1.5px solid #F0EEE8' }}>
+                        <div className="flex items-center justify-between mb-3 gap-2">
+                          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="חל על">
+                            {[['weekend', 'סופ"ש (חמשוש)'], ['midweek', 'אמצ"ש'], ['all', 'כל הזמנה']].map(([val, lbl]) => {
+                              const active = (rule.scope || 'weekend') === val;
+                              return (
+                                <button key={val} type="button" role="radio" aria-checked={active}
+                                  onClick={() => updateMinNights(idx, { scope: val })}
+                                  className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+                                  style={active ? { background: '#F97316', color: '#fff' } : { background: '#fff', color: '#6B7280', border: '1.5px solid #E8E5E0' }}>
+                                  {lbl}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <button type="button" onClick={() => removeMinNights(idx)} className="transition-colors flex-shrink-0" style={{ color: '#EF4444' }} aria-label="מחק כלל">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-medium block mb-1" style={{ color: '#6B7280' }}>מינימום לילות</label>
+                            <input type="number" min={2} max={30} value={rule.min_nights ?? ''} onChange={e => updateMinNights(idx, { min_nights: e.target.value })}
+                              className="w-full px-3 py-2 text-xs outline-none" style={{ ...inputStyle, borderRadius: '10px' }} onFocus={inputFocus} onBlur={inputBlur} placeholder="2" />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium block mb-1" style={{ color: '#6B7280' }}>מתי חל</label>
+                            <div className="flex gap-1.5">
+                              {[[false, 'תמיד'], [true, 'תקופה מסוימת']].map(([val, lbl]) => {
+                                const active = !!rule._period === val;
+                                return (
+                                  <button key={lbl} type="button" aria-pressed={active}
+                                    onClick={() => updateMinNights(idx, val ? { _period: true } : { _period: false, start_date: '', end_date: '', label: '' })}
+                                    className="flex-1 text-xs font-semibold px-3 py-2 rounded-lg transition-all"
+                                    style={active ? { background: 'rgba(249,115,22,0.12)', color: '#EA580C', border: '1.5px solid #F97316' } : { background: '#fff', color: '#6B7280', border: '1.5px solid #E8E5E0' }}>
+                                    {lbl}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        {rule._period && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                            <div>
+                              <label className="text-xs font-medium block mb-1" style={{ color: '#6B7280' }}>תקופה</label>
+                              <DateRangeField
+                                start={rule.start_date || ''}
+                                end={rule.end_date || ''}
+                                allowPast
+                                onChange={(s, e) => updateMinNights(idx, { start_date: s, end_date: e })}
+                                placeholder="בחר תקופה"
+                                compact
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium block mb-1" style={{ color: '#6B7280' }}>שם תקופה (לא חובה)</label>
+                              <input type="text" value={rule.label || ''} onChange={e => updateMinNights(idx, { label: e.target.value })}
+                                className="w-full px-3 py-2 text-xs outline-none" style={{ ...inputStyle, borderRadius: '10px' }} onFocus={inputFocus} onBlur={inputBlur} placeholder="למשל: קיץ" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </section>

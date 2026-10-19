@@ -1,53 +1,48 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Send, Mic, Paperclip, Sparkles } from 'lucide-react';
-import { api } from '@/api/client';
+import ConfirmActionCard from '@/components/owner/ConfirmActionCard';
+import useOwnerAssistantThread, { confirmCardStatus } from '@/hooks/useOwnerAssistantThread';
 
-// Lightweight AI chat box at the bottom of the sidebar. Sends the owner's
-// question + a compact summary of their bookings to InvokeLLM and renders
-// the reply inline.
-export default function AiChatBox({ bookings, zimmers }) {
-  const [messages, setMessages] = useState([]);
+// Lightweight AI chat box at the bottom of the sidebar — the shared owner assistant
+// on the bookings surface; the server loads the bookings itself.
+export default function AiChatBox({ ownerId, onMutated }) {
   const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
   const scrollRef = useRef(null);
+  const chat = useOwnerAssistantThread({ ownerId, surface: 'bookings', onMutated });
+  const { messages, isTyping: busy } = chat;
 
-  const buildSummary = () => {
-    const zMap = Object.fromEntries(zimmers.map(z => [z.id, z]));
-    const lines = bookings.slice(0, 40).map(b => {
-      const z = zMap[b.zimmer_id];
-      return `• ${b.guest_name} | ${b.zimmer_name || z?.name} | ${b.check_in}→${b.check_out} | ${b.num_guests || 1} אורחים | סטטוס: ${b.status} | ₪${b.total_price || 0}`;
-    });
-    return `יש ${bookings.length} הזמנות.\n${lines.join('\n')}`;
-  };
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages.length, busy]);
 
-  const send = async () => {
+  const send = () => {
     const text = input.trim();
     if (!text || busy) return;
     setInput('');
-    const userMsg = { role: 'user', content: text };
-    setMessages(prev => [...prev, userMsg]);
-    setBusy(true);
-    try {
-      const prompt = `אתה עוזר אישי לבעל צימרים. ענה בעברית, בקצרה ובעניין, רק על הזמנות/ניהול נכסים.\nתאריך היום: ${new Date().toISOString().split('T')[0]}\nהנתונים:\n${buildSummary()}\nשאלה: ${text}`;
-      const res = await api.integrations.Core.InvokeLLM({ prompt });
-      setMessages(prev => [...prev, { role: 'bot', content: typeof res === 'string' ? res : (res?.message || 'מצטער, לא הצלחתי לענות כעת.') }]);
-    } catch {
-      setMessages(prev => [...prev, { role: 'bot', content: 'מצטער, שגיאה בשליחת השאלה. נסה שוב.' }]);
-    }
-    setBusy(false);
-    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 50);
+    chat.send(text);
   };
 
   return (
     <div className="flex flex-col" style={{ borderTop: '1px solid #ECEFF1' }}>
       {messages.length > 0 && (
         <div ref={scrollRef} className="max-h-40 overflow-y-auto px-3 py-2 space-y-2">
-          {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-              <div className="max-w-[85%] text-xs px-3 py-2 rounded-xl"
+          {messages.map((m) => (
+            <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-start' : 'items-end'}`}>
+              <div className="max-w-[85%] text-xs px-3 py-2 rounded-xl whitespace-pre-wrap"
                 style={m.role === 'user' ? { background: '#F5F5F5', color: '#212121' } : { background: '#E53935', color: '#fff' }}>
                 {m.content}
               </div>
+              {m.role === 'bot' && m.pendingAction && (
+                <div className="w-full mt-1">
+                  <ConfirmActionCard
+                    compact
+                    action={m.pendingAction}
+                    status={confirmCardStatus(m.pendingAction, chat.busyActionId)}
+                    onConfirm={() => chat.confirm(m.pendingAction.id)}
+                    onCancel={() => chat.cancel(m.pendingAction.id)}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
