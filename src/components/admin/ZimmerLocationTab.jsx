@@ -67,12 +67,13 @@ export default function ZimmerLocationTab({ location, staySettings, onUpdate }) 
     const ln = next.lng != null ? next.lng : lng;
     const addr = buildAddress(c, s, h);
     const nav = (la != null && ln != null) ? `https://waze.com/ul?ll=${la},${ln}&navigate=yes` : (ss.nav_link || '');
-    onUpdate({ location: c || '', staySettings: { ...ss, address: addr, lat: la, lng: ln, nav_link: nav } });
+    const geo = next.geo_source || ss.geo_source;
+    onUpdate({ location: c || '', staySettings: { ...ss, address: addr, lat: la, lng: ln, nav_link: nav, ...(geo ? { geo_source: geo } : {}) } });
   };
 
   const onPick = async (la, ln) => {
     setLat(la); setLng(ln);
-    commit({ lat: la, lng: ln });
+    commit({ lat: la, lng: ln, geo_source: 'manual' });
     try {
       const res = await api.functions.invoke('searchIsraelAddresses', { mode: 'reverse', lat: la, lng: ln });
       const body = res?.data || res;
@@ -80,7 +81,7 @@ export default function ZimmerLocationTab({ location, staySettings, onUpdate }) 
       const s = body?.street || street;
       const h = body?.house || house;
       setCity(c); setStreet(s); setHouse(h);
-      commit({ city: c, street: s, house: h, lat: la, lng: ln });
+      commit({ city: c, street: s, house: h, lat: la, lng: ln, geo_source: 'manual' });
     } catch { /* keep coords only */ }
   };
 

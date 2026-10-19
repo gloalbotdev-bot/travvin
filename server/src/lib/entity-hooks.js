@@ -7,6 +7,7 @@ import { pushInAppNotification } from './push-in-app-notification.js';
 import { sendGuestMessage } from './send-guest-message.js';
 import { buildGuestSummary } from './build-guest-summary.js';
 import { SERVICE_ACTOR } from './service-role.js';
+import { maybeAutoGeocodeZimmer } from './zimmer-auto-geocode.js';
 
 export function notificationsEnabled() {
   return process.env.NOTIFICATIONS_ENABLED !== 'false';
@@ -20,6 +21,14 @@ export function notificationsEnabled() {
 export function createEntityHooks({ store, jobs }) {
   return {
     async afterCreate(entityType, record) {
+      if (entityType === 'Zimmer') {
+        try {
+          await maybeAutoGeocodeZimmer(store, record, null);
+        } catch (err) {
+          console.error('[entity-hooks] zimmer auto-geocode', err);
+        }
+        return;
+      }
       try {
         if (entityType === 'Review') {
           await onReviewCreate(store, jobs, record);
@@ -36,6 +45,14 @@ export function createEntityHooks({ store, jobs }) {
     },
 
     async afterUpdate(entityType, record, old) {
+      if (entityType === 'Zimmer') {
+        try {
+          await maybeAutoGeocodeZimmer(store, record, old);
+        } catch (err) {
+          console.error('[entity-hooks] zimmer auto-geocode', err);
+        }
+        return;
+      }
       try {
         if (entityType === 'BookingRequest') {
           await onBookingCheckoutSummary(store, record, old);
