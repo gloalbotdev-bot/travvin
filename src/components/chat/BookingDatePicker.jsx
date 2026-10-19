@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { addDays } from 'date-fns';
 import { he } from 'date-fns/locale';
+import { checkMinNights, describeMinNightsRules } from '@/lib/bookingPrice';
 
 const toISO = (d) => {
   const x = new Date(d); x.setHours(0, 0, 0, 0);
@@ -15,7 +16,9 @@ const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); retur
 
 // Disabled matcher list: past days + each booking's occupied nights [check_in, check_out)
 // (checkout day itself stays selectable so same-day turnover on departure is allowed).
-export default function BookingDatePicker({ bookedRanges = [], checkIn, checkOut, onChange }) {
+// With a zimmer, check-out days that break its min_nights_rules are disabled once check-in is picked.
+export default function BookingDatePicker({ bookedRanges = [], checkIn, checkOut, onChange, zimmer = null }) {
+  const minNightsHint = zimmer ? describeMinNightsRules(zimmer) : '';
   const range = useMemo(() => {
     if (!checkIn) return undefined;
     if (!checkOut) return { from: new Date(checkIn) };
@@ -30,8 +33,14 @@ export default function BookingDatePicker({ bookedRanges = [], checkIn, checkOut
       const last = new Date(r.check_out); last.setDate(last.getDate() - 1); last.setHours(0, 0, 0, 0);
       list.push(last.getTime() < ci.getTime() ? { from: ci, to: ci } : { from: ci, to: last });
     });
+    if (minNightsHint && checkIn && !checkOut) {
+      list.push((day) => {
+        const iso = toISO(day);
+        return iso > checkIn && !checkMinNights(zimmer, checkIn, iso).ok;
+      });
+    }
     return list;
-  }, [bookedRanges]);
+  }, [bookedRanges, minNightsHint, zimmer, checkIn, checkOut]);
 
   const isBookedNight = (day) => {
     const t = new Date(day); t.setHours(0, 0, 0, 0);
@@ -80,6 +89,9 @@ export default function BookingDatePicker({ bookedRanges = [], checkIn, checkOut
             ? `כניסה ${checkIn} — בחר תאריך יציאה`
             : 'בחר תאריכים (הימים התפוסים מבוטלים)'}
       </div>
+      {minNightsHint && (
+        <div className="text-xs mt-1 text-center" style={{ color: '#B45309' }}>מינימום לילות — {minNightsHint}</div>
+      )}
     </div>
   );
 }

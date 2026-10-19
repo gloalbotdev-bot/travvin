@@ -22,6 +22,7 @@ import {
 import {
   assertNoApprovedOverlap,
   assertCheckOutAfterCheckIn,
+  assertMinNights,
   captureOverlappingPromotions,
   computeBookingTotalPrice,
   resolveOwnerFromZimmer,
@@ -149,8 +150,10 @@ export function createEntityStore(prisma, hooks = {}) {
       }
 
       if (entityType === 'BookingRequest') {
+        if (!canSetPriceOverride(user, payload)) delete payload.price_override;
         const zimmerId = payload.zimmer_id;
         assertCheckOutAfterCheckIn(payload);
+        await assertMinNights(prisma, payload, user);
         const row = await withZimmerBookingLock(prisma, zimmerId, async (tx) => {
           await assertNoApprovedOverlap(tx, {
             zimmerId,
@@ -250,6 +253,7 @@ export function createEntityStore(prisma, hooks = {}) {
       let patch = stripAutoFields(validated);
       patch = stripImmutableOwnershipFields(entityType, patch, user);
       if (entityType === 'BookingRequest') {
+        if (!canSetPriceOverride(user, current)) delete patch.price_override;
         assertBookingCustomerPatch(user, current, patch);
         assertBookingStatusTransition(user, current, patch);
       }
@@ -269,6 +273,13 @@ export function createEntityStore(prisma, hooks = {}) {
 
       if (entityType === 'BookingRequest') {
         assertCheckOutAfterCheckIn(merged);
+        if (
+          ['check_in', 'check_out', 'zimmer_id'].some(
+            (k) => patch[k] !== undefined && patch[k] !== current[k],
+          )
+        ) {
+          await assertMinNights(prisma, merged, user);
+        }
         const zimmerId = merged.zimmer_id;
         const datesOrStatusChanged =
           patch.check_in !== undefined ||
@@ -277,7 +288,8 @@ export function createEntityStore(prisma, hooks = {}) {
           patch.status !== undefined ||
           patch.num_adults !== undefined ||
           patch.num_children !== undefined ||
-          patch.total_price !== undefined;
+          patch.total_price !== undefined ||
+          patch.price_override !== undefined;
 
         const row = await withZimmerBookingLock(prisma, zimmerId, async (tx) => {
           if (merged.status === 'אושרה') {
@@ -354,6 +366,12 @@ export function createEntityStore(prisma, hooks = {}) {
       return { id, deleted: true };
     },
   };
+}
+
+/** Agreed booking price — only the booking's owner or an admin may set it. */
+function canSetPriceOverride(user, booking) {
+  if (user?.role === 'admin') return true;
+  return user?.role === 'owner' && !!user.id && String(booking?.owner_id || '') === String(user.id);
 }
 
 function assertEntity(entityType) {

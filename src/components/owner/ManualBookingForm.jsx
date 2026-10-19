@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { api } from '@/api/client';
 import { X, Calendar, User, Phone, Users, Home, MessageSquare, Check } from 'lucide-react';
-import { calcNights, calcBookingTotal, formatILS } from '@/lib/bookingPrice';
+import { calcNights, calcBookingTotalForZimmer, formatILS, checkMinNights } from '@/lib/bookingPrice';
 import DateRangeField from '@/components/common/DateRangeField';
 
 export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, onSwitchToText, initialDate }) {
@@ -15,13 +15,21 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
     notes: '',
     status: 'אושרה',
   });
+  const [priceOverride, setPriceOverride] = useState('');
   const [saving, setSaving] = useState(false);
 
   const selectedZimmer = zimmers.find(z => z.id === form.zimmer_id);
   const nights = useMemo(() => calcNights(form.check_in, form.check_out), [form.check_in, form.check_out]);
-  const total = useMemo(
-    () => calcBookingTotal(form.check_in, form.check_out, selectedZimmer?.price_per_night),
+  const computedTotal = useMemo(
+    () => (selectedZimmer ? calcBookingTotalForZimmer(selectedZimmer, form.check_in, form.check_out) : 0),
     [form.check_in, form.check_out, selectedZimmer]
+  );
+  const hasOverride = priceOverride !== '' && Number(priceOverride) >= 0;
+  const total = hasOverride ? Number(priceOverride) : computedTotal;
+
+  const minNightsCheck = useMemo(
+    () => (selectedZimmer && nights > 0 ? checkMinNights(selectedZimmer, form.check_in, form.check_out) : { ok: true }),
+    [selectedZimmer, form.check_in, form.check_out, nights]
   );
 
   const update = (field, val) => setForm(f => ({ ...f, [field]: val }));
@@ -36,6 +44,7 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
       zimmer_name: selectedZimmer?.name || '',
       owner_id: ownerId,
       total_price: total,
+      ...(hasOverride ? { price_override: Number(priceOverride) } : {}),
     };
     try {
       await api.entities.BookingRequest.create(payload);
@@ -98,6 +107,11 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
               onChange={(s, e) => setForm(f => ({ ...f, check_in: s, check_out: e }))}
               placeholder="בחר תאריכי כניסה ויציאה"
             />
+            {!minNightsCheck.ok && (
+              <p role="status" className="text-xs mt-1.5 rounded-lg px-3 py-2 leading-relaxed" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                ⚠️ {minNightsCheck.message} (נבחרו {minNightsCheck.nights}). כבעל הצימר אפשר ליצור את ההזמנה בכל זאת.
+              </p>
+            )}
           </Field>
 
           {/* Guests */}
@@ -118,12 +132,19 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
               <div>
                 <div className="text-xs" style={{ color: '#6B7280' }}>חישוב תשלום</div>
                 <div className="text-sm font-medium" style={{ color: '#1A1A1A' }}>
-                  {nights} לילות × ₪{selectedZimmer?.price_per_night || 0}
+                  {hasOverride ? 'מחיר מוסכם' : `${nights} לילות לפי המחירון`}
                 </div>
               </div>
               <div className="text-xl font-black" style={{ color: '#EA580C' }}>{formatILS(total)}</div>
             </div>
           )}
+
+          <Field label="מחיר מוסכם (אופציונלי — דורס את המחירון)">
+            <input type="number" min={0} value={priceOverride} onChange={e => setPriceOverride(e.target.value)}
+              placeholder={computedTotal ? `לפי המחירון: ₪${computedTotal}` : 'סכום כולל בש״ח'}
+              aria-label="מחיר מוסכם להזמנה"
+              className="w-full px-3 py-2.5 text-sm outline-none rounded-xl" style={{ background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A' }} />
+          </Field>
           {form.check_in && form.check_out && nights <= 0 && (
             <p className="text-xs text-red-500">תאריך היציאה חייב להיות אחרי תאריך הכניסה</p>
           )}

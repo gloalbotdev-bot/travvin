@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
+import { bookingErrorMessage } from '@/lib/bookingErrors';
 import { ArrowRight, Heart, Play, ShoppingCart } from 'lucide-react';
 import BookingForm from '@/components/chat/BookingForm';
 import VideoErrorBoundary from '@/components/discover/VideoErrorBoundary';
@@ -161,7 +162,7 @@ export default function OwnerProfile() {
       });
       setBookingZimmer(null); setBookingSourceVideoId(null);
       setBookingMsg('✅ בקשת ההזמנה נשלחה! בעל הצימר יצור איתך קשר בקרוב.');
-    } catch (e) { showToast('שגיאה בשליחת ההזמנה. נסה שוב.', 'error'); }
+    } catch (e) { showToast(bookingErrorMessage(e, 'שגיאה בשליחת ההזמנה. נסה שוב.'), 'error'); }
     finally { setSubmittingBooking(false); }
   };
 

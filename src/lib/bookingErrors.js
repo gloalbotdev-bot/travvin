@@ -6,5 +6,8 @@ export function bookingErrorMessage(err, fallback = 'לא הצלחתי לשמו�
   if (err.status === 409 || err.data?.error === 'booking_overlap') {
     return err.data?.message || err.message || 'התאריכים תפוסים — קיימת הזמנה מאושרת חופפת';
   }
+  if (err.data?.error === 'min_nights') {
+    return err.data.message || 'מספר הלילות קטן מהמינימום שהוגדר לצימר';
+  }
   return err.message || fallback;
 }
