@@ -45,7 +45,8 @@
           "enum": [
             "sent",
             "failed",
-            "not_configured"
+            "not_configured",
+            "skipped"
           ]
         },
         "whatsapp_error": {

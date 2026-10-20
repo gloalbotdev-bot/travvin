@@ -2,7 +2,7 @@
  * B2B supplier WhatsApp dispatcher.
  */
 import { SERVICE_ACTOR } from './service-role.js';
-import { postWhatsApp } from './send-guest-message.js';
+import { composeWhatsAppText, deliverWhatsAppText } from './whatsapp/index.js';
 
 /**
  * @param {ReturnType<import('./entity-store.js').createEntityStore>} store
@@ -70,13 +70,18 @@ export async function sendSupplierMessage(store, payload = {}, actor = null) {
     { actor: SERVICE_ACTOR, createdById: SERVICE_ACTOR.id, createdBy: SERVICE_ACTOR.email },
   );
 
-  const delivery = await postWhatsApp(store, {
+  const delivery = await deliverWhatsAppText(store, {
     to: contactPhone,
-    contact_id: contactId,
-    contact_name: contactName,
-    title,
-    body,
-    ref_message_id: record.id,
+    text: composeWhatsAppText(title, body),
+    intent: `supplier.${payload.category || 'custom'}`,
+    vars: { contact_name: contactName, title, body },
+    context: {
+      contact_id: contactId,
+      contact_name: contactName,
+      title,
+      body,
+      ref_message_id: record.id,
+    },
   });
 
   await store.update('SupplierMessage', record.id, { delivery_status: delivery }, SERVICE_ACTOR);

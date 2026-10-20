@@ -1,0 +1,28 @@
+// AI agent conversation state per chat address (one row per WhatsApp number).
+// Written by the server only (SERVICE_ACTOR); readable by admins.
+{
+  "type": "object",
+  "name": "WhatsAppSession",
+  "properties": {
+    "channel": { "type": "string", "title": "ערוץ" },
+    "address": { "type": "string", "title": "כתובת (טלפון)" },
+    "user_id": { "type": "string", "title": "משתמש מזוהה" },
+    "role": { "type": "string", "title": "תפקיד" },
+    "display_name": { "type": "string", "title": "שם" },
+    "profile": { "type": "string", "title": "פרופיל AI" },
+    "conversation_id": { "type": "string", "title": "ChatSession מקושר" },
+    "mode": { "type": "string", "enum": ["info", "edit"], "default": "info", "title": "מצב בעל מתחם" },
+    "mode_expires_at": { "type": "string", "title": "תפוגת מצב עריכה" },
+    "recent_turns": { "type": "array", "items": { "type": "object" }, "default": [], "title": "היסטוריה אחרונה" },
+    "quick_options": { "type": "array", "items": { "type": "object" }, "default": [], "title": "אפשרויות מהירות" },
+    "opted_out": { "type": "boolean", "default": false, "title": "ביקש להפסיק" },
+    "last_inbound_at": { "type": "string", "title": "הודעה נכנסת אחרונה" }
+  },
+  "required": ["channel", "address"],
+  "rls": {
+    "read": { "user_condition": { "role": "admin" } },
+    "create": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}
