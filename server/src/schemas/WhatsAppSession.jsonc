@@ -16,7 +16,8 @@
     "recent_turns": { "type": "array", "items": { "type": "object" }, "default": [], "title": "היסטוריה אחרונה" },
     "quick_options": { "type": "array", "items": { "type": "object" }, "default": [], "title": "אפשרויות מהירות" },
     "opted_out": { "type": "boolean", "default": false, "title": "ביקש להפסיק" },
-    "last_inbound_at": { "type": "string", "title": "הודעה נכנסת אחרונה" }
+    "last_inbound_at": { "type": "string", "title": "הודעה נכנסת אחרונה" },
+    "pending_action_id": { "type": "string", "title": "פעולת בעלים ממתינה לאישור" }
   },
   "required": ["channel", "address"],
   "rls": {

@@ -40,7 +40,10 @@ export default function CustomersPanel() {
     setInviting(true);
     setInviteMsg('');
     try {
-      await api.users.inviteUser(inviteForm.email.trim(), 'user');
+      await api.users.inviteUser(inviteForm.email.trim(), 'user', {
+        full_name: inviteForm.full_name.trim(),
+        phone: inviteForm.phone.trim(),
+      });
       // Pre-create profile if extra details given
       if (inviteForm.full_name || inviteForm.phone) {
         await api.entities.CustomerProfile.create({

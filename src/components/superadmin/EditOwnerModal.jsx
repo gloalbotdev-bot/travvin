@@ -8,6 +8,7 @@ export default function EditOwnerModal({ owner, onClose, onSaved }) {
   const isAdminUser = owner.role === 'admin';
   const [form, setForm] = useState({
     full_name: owner.full_name || '',
+    phone: owner.phone || '',
     role: isAdminUser ? 'owner' : (owner.role || 'owner'),
   });
   const [saving, setSaving] = useState(false);
@@ -15,7 +16,7 @@ export default function EditOwnerModal({ owner, onClose, onSaved }) {
   const handleSave = async () => {
     setSaving(true);
     // M15 #19 — never send role:admin; do not demote existing admins via this modal
-    const patch = { full_name: form.full_name };
+    const patch = { full_name: form.full_name, phone: form.phone };
     if (!isAdminUser && (form.role === 'owner' || form.role === 'user')) {
       patch.role = form.role;
     }
@@ -37,6 +38,14 @@ export default function EditOwnerModal({ owner, onClose, onSaved }) {
             <label className="text-xs font-medium block mb-1.5" style={{ color: '#6B7280' }}>שם מלא</label>
             <input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
               className="w-full px-4 py-2.5 text-sm" style={inputStyle} placeholder="שם מלא" />
+          </div>
+          <div>
+            <label className="text-xs font-medium block mb-1.5" style={{ color: '#6B7280' }}>טלפון לוואטסאפ</label>
+            <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+              className="w-full px-4 py-2.5 text-sm" style={inputStyle} placeholder="050-0000000" dir="ltr" />
+            <p className="text-[11px] mt-1" style={{ color: '#9CA3AF' }}>
+              מספר זה מזהה את בעל המתחם בבוט הוואטסאפ.
+            </p>
           </div>
           <div>
             <label className="text-xs font-medium block mb-1.5" style={{ color: '#6B7280' }}>תפקיד</label>

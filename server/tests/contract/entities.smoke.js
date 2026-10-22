@@ -30,7 +30,7 @@ function assert(cond, msg) {
 
 async function main() {
   const names = listEntityNames();
-  assert(names.length === 25, `25 entities loaded (got ${names.length})`);
+  assert(names.length === 26, `26 entities loaded (got ${names.length})`);
   assert(names.includes('OwnerAssistantThread'), 'OwnerAssistantThread present');
   assert(names.includes('WhatsAppMessage') && names.includes('WhatsAppSession'), 'WhatsApp entities present');
   assert(names.includes('Review') && names.includes('SyncState'), 'Review + SyncState present');

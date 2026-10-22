@@ -22,7 +22,11 @@ export default function AddOwnerPanel({ onInvited }) {
     setLoading(true);
     setError('');
     try {
-      await api.users.inviteUser(form.email.trim(), 'owner');
+      await api.users.inviteUser(form.email.trim(), 'owner', {
+        full_name: form.full_name.trim(),
+        phone: form.phone.trim(),
+        business_name: form.business_name.trim(),
+      });
       // Pre-create OwnerRequest so they land with context
       await api.entities.OwnerRequest.create({
         user_id: '__pending__' + form.email.trim(),

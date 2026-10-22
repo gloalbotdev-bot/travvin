@@ -1,8 +1,9 @@
 /**
  * Agent core + WhatsApp bot smoke — fake brain / sessions / identities / provider.
  * No DB, no network, no LLM.
+ * v1: owners/admins only; identity by phone match (no OTP).
  */
-import { createAgent } from '../../src/lib/agent/core.js';
+import { createAgent, AGENT_CONFIRM_TOKEN, AGENT_CANCEL_TOKEN } from '../../src/lib/agent/core.js';
 import { parseCommand, resolveQuickOption } from '../../src/lib/agent/commands.js';
 import { createWhatsAppBot } from '../../src/lib/whatsapp-bot/index.js';
 
@@ -24,8 +25,22 @@ const SHARED = '972504444444';
 function fakeIdentities() {
   return {
     async resolve(_channel, address) {
-      if (address === OWNER) return { kind: 'user', actor: { id: 'u-owner', role: 'owner' }, user: { id: 'u-owner' }, name: 'דנה' };
-      if (address === CUSTOMER) return { kind: 'user', actor: { id: 'u-cust', role: 'user' }, user: { id: 'u-cust' }, name: 'יוסי' };
+      if (address === OWNER) {
+        return {
+          kind: 'user',
+          actor: { id: 'u-owner', role: 'owner', email: 'owner@ex.com' },
+          user: { id: 'u-owner', email: 'owner@ex.com' },
+          name: 'דנה',
+        };
+      }
+      if (address === CUSTOMER) {
+        return {
+          kind: 'user',
+          actor: { id: 'u-cust', role: 'user', email: 'cust@ex.com' },
+          user: { id: 'u-cust', email: 'cust@ex.com' },
+          name: 'יוסי',
+        };
+      }
       if (address === SHARED) return { kind: 'ambiguous' };
       return { kind: 'anonymous' };
     },
@@ -55,18 +70,31 @@ function fakeBrain() {
     calls,
     async chat(req, identity) {
       calls.push({ req: structuredClone(req), identity });
-      if (req.profile === 'customer_chat') {
+      if (req.clientState?.confirmActionId) {
         return {
-          conversationId: identity.kind === 'user' ? 'conv-1' : null,
-          message: { content: `מצאתי צימרים עבור: ${req.message}` },
+          conversationId: null,
+          message: { content: `בוצע: ${req.clientState.confirmActionId}` },
+          uiEffects: [],
+          executedActions: [{ id: req.clientState.confirmActionId }],
+        };
+      }
+      if (req.clientState?.cancelActionId) {
+        return {
+          conversationId: null,
+          message: { content: `בוטל: ${req.clientState.cancelActionId}` },
+          uiEffects: [],
+        };
+      }
+      if (req.message.includes('צור') && req.clientState.mode === 'edit') {
+        return {
+          conversationId: null,
+          message: { content: 'מוכן ליצור הזמנה' },
           uiEffects: [
-            { type: 'show_zimmers', zimmerIds: ['z1'] },
             {
-              type: 'quick_options',
-              options: [
-                { label: 'שאל על צימר', text: 'בנוגע לצימר "א": ' },
-                { label: 'הזמן', text: 'אני רוצה להזמין' },
-              ],
+              type: 'confirm_action',
+              actionId: 'act-1',
+              summary: 'יצירת הזמנה לדני',
+              details: ['מחר', 'צימר א'],
             },
           ],
         };
@@ -92,9 +120,10 @@ function setup() {
     identities: fakeIdentities(),
     now: () => new Date(clock),
     renderEffects: async (effects) => ({
-      lines: effects.filter((e) => e.type === 'show_zimmers').map(() => '🏡 *צימר א*'),
-      quickOptions: (effects.find((e) => e.type === 'quick_options')?.options || [])
-        .filter((o) => !o.text.trimEnd().endsWith(':')),
+      lines: effects
+        .filter((e) => e.type === 'confirm_action')
+        .map((e) => `⏳ לאישור: ${e.summary}`),
+      quickOptions: [],
     }),
   });
   return { agent, brain, sessions, advance: (ms) => { clock += ms; } };
@@ -109,29 +138,13 @@ function commandChecks() {
   assert(resolveQuickOption('7', [{ label: 'a', text: 'A' }]) === null, 'out-of-range number ignored');
 }
 
-async function customerChecks() {
+async function ownersOnlyChecks() {
   const { agent, brain } = setup();
-  const r1 = await agent.handleMessage({ channel: 'whatsapp', address: CUSTOMER, text: 'צימר בגליל לזוג' });
-  assert(brain.calls[0].req.profile === 'customer_chat', 'customer → customer_chat profile');
-  assert(brain.calls[0].identity.actor.id === 'u-cust', 'customer acts as their own account');
-  assert(r1.reply.includes('🏡 *צימר א*') && r1.reply.includes('1. הזמן'), 'effects rendered + numbered options');
-  assert(!r1.reply.includes('שאל על צימר'), 'fill-in-the-blank web options dropped');
+  const cust = await agent.handleMessage({ channel: 'whatsapp', address: CUSTOMER, text: 'צימר בגליל' });
+  assert(brain.calls.length === 0 && cust.reply.includes('בעלי מתחמים'), 'customer → refused, no AI');
 
-  const r2 = await agent.handleMessage({ channel: 'whatsapp', address: CUSTOMER, text: '1' });
-  assert(brain.calls[1].req.message === 'אני רוצה להזמין', '"1" resolves to the quick option text');
-  assert(brain.calls[1].req.conversationId === 'conv-1', 'conversation id carried to next turn');
-  assert(brain.calls[1].req.clientState.recentTurns.length === 2, 'recent turns carried to next turn');
-  assert(r2.session.recent_turns.length === 4, 'session keeps the history');
-
-  await agent.handleMessage({ channel: 'whatsapp', address: CUSTOMER, text: 'חדש' });
-  await agent.handleMessage({ channel: 'whatsapp', address: CUSTOMER, text: 'שוב' });
-  assert(brain.calls.length === 3 && brain.calls[2].req.clientState.recentTurns.length === 0
-    && brain.calls[2].req.conversationId === null, 'reset clears history without calling the AI');
-
-  const anon = await agent.handleMessage({ channel: 'whatsapp', address: STRANGER, text: 'יש משהו בצפון?' });
-  assert(brain.calls[3].identity.kind === 'anonymous' && brain.calls[3].req.profile === 'customer_chat',
-    'unknown number → anonymous guest on customer_chat');
-  assert(anon.reply.length > 0, 'anonymous guest gets an answer');
+  const anon = await agent.handleMessage({ channel: 'whatsapp', address: STRANGER, text: 'שלום' });
+  assert(brain.calls.length === 0 && anon.reply.includes('בעלי מתחמים'), 'anonymous → refused, no AI');
 }
 
 async function ownerChecks() {
@@ -153,7 +166,25 @@ async function ownerChecks() {
   assert(brain.calls[3].req.clientState.mode === 'info', 'edit mode expires after 30 minutes');
 
   const custEdit = await setup().agent.handleMessage({ channel: 'whatsapp', address: CUSTOMER, text: 'מצב עריכה' });
-  assert(custEdit.session.mode !== 'edit', 'customers cannot enable edit mode');
+  assert(custEdit.session.mode !== 'edit' && custEdit.reply.includes('בעלי מתחמים'),
+    'customers cannot enable edit mode');
+}
+
+async function confirmChecks() {
+  const { agent, brain } = setup();
+  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'מצב עריכה' });
+  const propose = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'צור הזמנה לדני מחר' });
+  assert(propose.session.pending_action_id === 'act-1', 'confirm_action stores pending_action_id');
+  assert(propose.reply.includes('אישור') && propose.reply.includes(AGENT_CONFIRM_TOKEN ? '1.' : '1.'),
+    'confirm options listed');
+  assert(propose.session.quick_options?.[0]?.text === AGENT_CONFIRM_TOKEN, 'confirm token on option 1');
+  assert(propose.session.quick_options?.[1]?.text === AGENT_CANCEL_TOKEN, 'cancel token on option 2');
+
+  const yes = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: '1' });
+  assert(brain.calls.some((c) => c.req.clientState.confirmActionId === 'act-1'),
+    'numbered 1 → confirmActionId to assistant');
+  assert(yes.reply.includes('בוצע: act-1'), 'confirm executes via shared assistant path');
+  assert(!yes.session.pending_action_id, 'pending cleared after confirm');
 }
 
 async function safetyChecks() {
@@ -161,17 +192,17 @@ async function safetyChecks() {
   const amb = await agent.handleMessage({ channel: 'whatsapp', address: SHARED, text: 'ההזמנות שלי' });
   assert(brain.calls.length === 0 && amb.reply.includes('יותר מחשבון אחד'), 'number on 2 accounts → refused, no AI call');
 
-  await agent.handleMessage({ channel: 'whatsapp', address: STRANGER, text: 'עצור' });
-  const silent = await agent.handleMessage({ channel: 'whatsapp', address: STRANGER, text: 'שלום?' });
+  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'עצור' });
+  const silent = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'שלום?' });
   assert(silent.reply === null && brain.calls.length === 0, 'opted-out sender gets no reply');
-  const back = await agent.handleMessage({ channel: 'whatsapp', address: STRANGER, text: 'הפעל' });
+  const back = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'הפעל' });
   assert(back.reply && !back.session.opted_out, 'start re-enables replies');
 
   // Phone moved to a different account: old history must not follow.
-  await agent.handleMessage({ channel: 'whatsapp', address: CUSTOMER, text: 'היסטוריה פרטית' });
-  const row = sessions.rows.get(`whatsapp:${CUSTOMER}`);
-  sessions.rows.set(`whatsapp:${CUSTOMER}`, { ...row, user_id: 'someone-else' });
-  await agent.handleMessage({ channel: 'whatsapp', address: CUSTOMER, text: 'מה ההזמנות שלי' });
+  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'היסטוריה פרטית' });
+  const row = sessions.rows.get(`whatsapp:${OWNER}`);
+  sessions.rows.set(`whatsapp:${OWNER}`, { ...row, user_id: 'someone-else' });
+  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'מה ההזמנות שלי' });
   const last = brain.calls[brain.calls.length - 1];
   assert(last.req.clientState.recentTurns.length === 0 && last.req.conversationId === null,
     'account change on a number wipes previous context');
@@ -196,13 +227,13 @@ async function botChecks() {
   const bot = createWhatsAppBot({ store: /** @type {any} */ (store), agent, provider: /** @type {any} */ (provider), env: {} });
 
   const msg = (id, text, extra = {}) => ({
-    type: 'message', id, from: CUSTOMER, fromName: 'יוסי', isGroup: false,
+    type: 'message', id, from: OWNER, fromName: 'דנה', isGroup: false,
     timestamp: new Date().toISOString(), kind: 'text', text, replyTo: '', media: null, ...extra,
   });
 
-  await bot.handleEvents([msg('in-1', 'צימר לזוג'), msg('in-1', 'צימר לזוג')]);
+  await bot.handleEvents([msg('in-1', 'כמה הזמנות?'), msg('in-1', 'כמה הזמנות?')]);
   await bot.idle();
-  assert(sent.length === 1 && sent[0].to === CUSTOMER, 'duplicate webhook delivery answered once');
+  assert(sent.length === 1 && sent[0].to === OWNER, 'duplicate webhook delivery answered once');
   assert(logged.some((r) => r.direction === 'in' && r.provider_message_id === 'in-1'), 'inbound logged');
   assert(logged.some((r) => r.direction === 'out' && r.source === 'bot'), 'reply logged as bot');
 
@@ -218,7 +249,7 @@ async function botChecks() {
     store: /** @type {any} */ (store),
     agent,
     provider: /** @type {any} */ (provider),
-    env: { WHATSAPP_BOT_ALLOWED_SENDERS: OWNER },
+    env: { WHATSAPP_BOT_ALLOWED_SENDERS: '972509999999' },
   });
   await limited.handleEvents([msg('in-4', 'שלום')]);
   await limited.idle();
@@ -226,8 +257,9 @@ async function botChecks() {
 }
 
 commandChecks();
-await customerChecks();
+await ownersOnlyChecks();
 await ownerChecks();
+await confirmChecks();
 await safetyChecks();
 await botChecks();
 

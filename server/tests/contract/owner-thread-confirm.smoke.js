@@ -18,6 +18,13 @@ import * as serverPrice from '../../src/lib/booking-price.js';
 import { toGeminiSchema } from '../../src/lib/llm/gemini.js';
 import { OWNER_ASSISTANT_SCHEMA } from '../../src/lib/assistant/profiles.js';
 import { createPendingAction } from '../../src/lib/assistant/owner-actions.js';
+import {
+  finalizeOwnerAssistantContent,
+  incompleteOperationMessage,
+  parseOwnerTextActionDecision,
+  stripConfirmCardLanguage,
+} from '../../src/lib/assistant/response-parser/owner-assistant.js';
+import { findLatestOpenPendingActionMessage } from '../../src/lib/assistant/owner-thread.js';
 import * as clientPrice from '../../../src/lib/bookingPrice.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,6 +113,48 @@ function unitChecks() {
     'owner schema: only message is required (operation/open_form stay optional for Gemini)',
   );
   assert(createPendingAction({ type: 'create_zimmer' }, [], 'owner_assistant') === null, 'bare create_zimmer is not proposed');
+  assert(
+    !finalizeOwnerAssistantContent('עודכן בהצלחה. אשר בכרטיס למטה.', { hasPendingAction: false }).includes('כרטיס'),
+    'finalize without pending strips card language',
+  );
+  assert(
+    finalizeOwnerAssistantContent('מעדכן את המחיר ללילה', { hasPendingAction: true }).includes('כרטיס'),
+    'finalize with pending adds card hint',
+  );
+  assert(
+    finalizeOwnerAssistantContent('הצימרים שלך בצפון: א ו-ב', {
+      hasPendingAction: false,
+      incompleteOperation: { type: 'create_zimmer' },
+    }) === 'הצימרים שלך בצפון: א ו-ב',
+    'finalize keeps Q&A when incomplete op is spurious',
+  );
+  assert(
+    finalizeOwnerAssistantContent('אשר בכרטיס למטה', {
+      hasPendingAction: false,
+      incompleteOperation: { type: 'create_zimmer' },
+    }).includes('חסר שם'),
+    'finalize asks missing fields when propose text has no card and incomplete op',
+  );
+  assert(
+    stripConfirmCardLanguage('ממתין לאישור בכרטיס למטה — עד אז לא בוצע').includes('כרטיס') === false,
+    'stripConfirmCardLanguage removes card hint',
+  );
+  assert(parseOwnerTextActionDecision('אישור') === 'confirm', 'parseOwnerTextActionDecision confirm');
+  assert(parseOwnerTextActionDecision('ביטול') === 'cancel', 'parseOwnerTextActionDecision cancel');
+  assert(parseOwnerTextActionDecision('כן אני רוצה הזמנה חדשה') === null, 'long text is not a decision');
+  assert(
+    incompleteOperationMessage({ type: 'create_booking' }).includes('חסרים'),
+    'incompleteOperationMessage for create_booking',
+  );
+  assert(
+    findLatestOpenPendingActionMessage({
+      messages: [
+        { pending_action: { id: 'old', status: 'done' } },
+        { pending_action: { id: 'open', status: 'pending' } },
+      ],
+    })?.pending_action?.id === 'open',
+    'findLatestOpenPendingActionMessage skips resolved',
+  );
   assert(createPendingAction({ type: 'create_booking', guest_name: 'x' }, [], 'owner_assistant') === null, 'booking without dates is not proposed');
   assert(createPendingAction({ type: 'block_dates', start_date: '2031-02-10' }, [], 'owner_assistant') !== null, 'block with a start date is proposed');
   assert(
@@ -215,11 +264,43 @@ async function main() {
     zimmers = await store.filter('Zimmer', { owner_id: ownerA.id }, '-created_date', 10, actorA);
     assert(zimmers.filter((z) => z.name === 'צימר Mock בדיקה').length === 1, 'zimmer created exactly once');
 
-    // 4. Cancel flow (block_dates).
-    const proposeBlock = await chat(base, tokA, {
+    // 3b. Free-text cancel/confirm without action ids in clientState.
+    const proposeTextCancel = await chat(base, tokA, {
+      profile: 'owner_assistant',
+      message: 'MOCK_EXECUTE_BLOCK_DATES',
+      clientState: { surface: 'calendar', focus: { date: '2031-03-15' } },
+    });
+    assert(confirmEffect(proposeTextCancel)?.opType === 'block_dates', 'text-decision setup: block_dates proposal');
+    const textCancel = await chat(base, tokA, {
+      profile: 'owner_assistant',
+      message: 'ביטול',
+      clientState: { surface: 'calendar' },
+    });
+    assert(textCancel.status === 200 && textCancel.json?.executedActions?.length === 0, 'text ביטול cancels open pending');
+
+    const proposeTextConfirm = await chat(base, tokA, {
       profile: 'owner_assistant',
       message: 'MOCK_EXECUTE_BLOCK_DATES',
       clientState: { surface: 'calendar', focus: { date: '2031-02-10' } },
+    });
+    const textConfirm = await chat(base, tokA, {
+      profile: 'owner_assistant',
+      message: 'אישור',
+      clientState: { surface: 'calendar' },
+    });
+    assert(textConfirm.status === 200, `text אישור without actionId → 200 (got ${textConfirm.status})`);
+    assert(
+      textConfirm.json?.executedActions?.[0]?.kind === 'block_dates',
+      'text אישור executes open pending action',
+    );
+    const blocks = await store.filter('BookingRequest', { owner_id: ownerA.id, is_block: true }, '-created_date', 5, actorA);
+    assert(blocks.length === 1 && blocks[0].status === 'חסום', 'block row persisted');
+
+    // 4. Cancel via explicit cancelActionId still works.
+    const proposeBlock = await chat(base, tokA, {
+      profile: 'owner_assistant',
+      message: 'MOCK_EXECUTE_BLOCK_DATES',
+      clientState: { surface: 'calendar', focus: { date: '2031-04-01' } },
     });
     const blockEff = confirmEffect(proposeBlock);
     assert(blockEff?.opType === 'block_dates', 'block_dates proposal');
@@ -235,20 +316,6 @@ async function main() {
       clientState: { confirmActionId: blockEff?.actionId },
     });
     assert(afterCancel.status === 409, 'confirm after cancel → 409');
-
-    const proposeBlock2 = await chat(base, tokA, {
-      profile: 'owner_assistant',
-      message: 'MOCK_EXECUTE_BLOCK_DATES',
-      clientState: { surface: 'calendar' },
-    });
-    const confirmBlock = await chat(base, tokA, {
-      profile: 'owner_assistant',
-      message: 'אישור',
-      clientState: { confirmActionId: confirmEffect(proposeBlock2)?.actionId, surface: 'calendar' },
-    });
-    assert(confirmBlock.json?.executedActions?.[0]?.kind === 'block_dates', 'block_dates executes on confirm');
-    const blocks = await store.filter('BookingRequest', { owner_id: ownerA.id, is_block: true }, '-created_date', 5, actorA);
-    assert(blocks.length === 1 && blocks[0].status === 'חסום', 'block row persisted');
 
     // 5. Calendar surface answers chat questions + open_form.
     const calQ = await chat(base, tokA, {

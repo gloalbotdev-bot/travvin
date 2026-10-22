@@ -1,7 +1,9 @@
 /**
  * Travvin binding for the agent core — the only file in lib/agent that imports app code.
- * Plugs the existing assistant (owner_assistant / customer_chat profiles), the users table,
- * WhatsAppSession storage and zimmer data into createAgent().
+ * Plugs the existing assistant (owner_assistant), users table, WhatsAppSession storage
+ * and zimmer data into createAgent().
+ *
+ * Identity = sender phone matched to users.phone (same as WhatssapBot). No OTP gate.
  */
 import { handleAssistantChat } from '../assistant/assistant-service.js';
 import { SERVICE_ACTOR } from '../service-role.js';
@@ -13,6 +15,7 @@ import { createAgent } from './core.js';
 const SESSION_FIELDS = [
   'channel', 'address', 'user_id', 'role', 'display_name', 'profile', 'conversation_id',
   'mode', 'mode_expires_at', 'recent_turns', 'quick_options', 'opted_out', 'last_inbound_at',
+  'pending_action_id',
 ];
 const MAX_ZIMMERS_LISTED = 5;
 
@@ -127,11 +130,54 @@ async function renderEffects(store, effects) {
       case 'owner_action_links':
         if (appUrl) lines.push(`🔗 לפרטים המלאים בפאנל: ${appUrl}/owner`);
         break;
+      case 'confirm_action': {
+        const details = Array.isArray(e.details) ? e.details.filter(Boolean) : [];
+        const block = [`⏳ *לאישור:* ${e.summary || 'פעולה'}`];
+        if (details.length) block.push(details.map((d) => `• ${d}`).join('\n'));
+        block.push('_השיבו *1* לאישור או *2* לביטול_');
+        lines.push(block.join('\n'));
+        break;
+      }
+      case 'booking_preview': {
+        const b = e.booking || {};
+        lines.push(
+          [
+            '📋 *תצוגת הזמנה*',
+            b.guest_name ? `אורח: ${b.guest_name}` : '',
+            b.guest_phone ? `טלפון: ${b.guest_phone}` : '',
+            b.check_in || b.check_out ? `תאריכים: ${b.check_in || '?'} → ${b.check_out || '?'}` : '',
+            b.zimmer_name ? `צימר: ${b.zimmer_name}` : '',
+            b.num_guests ? `אורחים: ${b.num_guests}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        );
+        break;
+      }
+      case 'zimmer_preview':
+      case 'zimmer_changes_preview': {
+        const data = e.zimmerData || e.changes || {};
+        const name = data.name || data.title || 'צימר';
+        lines.push(`🏡 *${name}*\n${summarizeObject(data)}`);
+        break;
+      }
+      case 'open_form':
+        if (appUrl) lines.push(`📝 להשלמה בפאנל: ${appUrl}/owner`);
+        break;
       default:
         break;
     }
   }
   return { lines, quickOptions };
+}
+
+function summarizeObject(obj) {
+  if (!obj || typeof obj !== 'object') return '';
+  return Object.entries(obj)
+    .filter(([k, v]) => v != null && v !== '' && k !== 'type' && typeof v !== 'object')
+    .slice(0, 12)
+    .map(([k, v]) => `• ${k}: ${v}`)
+    .join('\n');
 }
 
 async function loadZimmers(store, ids) {

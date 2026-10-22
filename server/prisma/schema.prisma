@@ -46,6 +46,8 @@ model User {
   notifications Json?
   googleId      String?  @unique @map("google_id")
   emailVerified Boolean  @default(false) @map("email_verified")
+  /// Set after the owner completes WhatsApp OTP linking for `phone`.
+  whatsappVerifiedAt DateTime? @map("whatsapp_verified_at") @db.Timestamptz(3)
   registered    Boolean  @default(true)
   createdDate   DateTime @default(now()) @map("created_date") @db.Timestamptz(3)
   updatedDate   DateTime @updatedAt @map("updated_date") @db.Timestamptz(3)

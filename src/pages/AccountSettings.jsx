@@ -30,8 +30,11 @@ export default function AccountSettings({ embedded = false }) {
   }, []);
 
   const handleSave = async () => {
-    if (tab === 'profile') await api.auth.updateMe({ phone: profile.phone, business_name: profile.business_name, avatar_url: profile.avatar_url });
-    else if (tab === 'notifications') await api.auth.updateMe({ notifications });
+    if (tab === 'profile') {
+      const updated = await api.auth.updateMe({ phone: profile.phone, business_name: profile.business_name, avatar_url: profile.avatar_url });
+      setUser(updated);
+      setProfile((p) => ({ ...p, phone: updated.phone || '', business_name: updated.business_name || '' }));
+    } else if (tab === 'notifications') await api.auth.updateMe({ notifications });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -130,9 +133,12 @@ export default function AccountSettings({ embedded = false }) {
               <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>השם מנוהל דרך חשבון ההתחברות שלך</p>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: '#6B7280' }}>טלפון</label>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: '#6B7280' }}>טלפון לוואטסאפ</label>
               <input value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))}
-                className="w-full px-4 py-3 text-sm" style={inputStyle} onFocus={inputFocus} onBlur={inputBlur} placeholder="050-0000000" />
+                className="w-full px-4 py-3 text-sm" style={inputStyle} onFocus={inputFocus} onBlur={inputBlur} placeholder="050-0000000" dir="ltr" />
+              <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>
+                המספר שממנו תתכתבו עם בוט הוואטסאפ — המערכת מזהה אותך לפי המספר בפרופיל.
+              </p>
             </div>
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: '#6B7280' }}>שם העסק</label>

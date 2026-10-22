@@ -19,6 +19,8 @@ scripts/whatsapp.js        CLI: health | usage | check | send | webhook | chat
 
 The AI bot that answers incoming messages is in `lib/whatsapp-bot/` and `lib/agent/` (see `lib/agent/README.md`).
 
+**v1 product rules:** owners/admins only; identity = match sender phone to `users.phone` (no OTP).
+
 ## Rules
 
 1. **App code imports only `lib/whatsapp/index.js`.** Never `providers/*`, never `fetch` to a WhatsApp host.

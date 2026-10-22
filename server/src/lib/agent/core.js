@@ -5,6 +5,8 @@
  * who is talking, keeps the conversation going, asks the AI "brain" and returns plain text.
  * Knows nothing about WhatsApp, HTTP or the database — those arrive as injected ports
  * (see contract below and ./travvin.js for the app binding).
+ *
+ * v1 product rule: owners/admins only. Guests and customers are refused on this channel.
  */
 import { parseCommand, resolveQuickOption } from './commands.js';
 
@@ -32,6 +34,7 @@ import { parseCommand, resolveQuickOption } from './commands.js';
  * @property {{ label: string, text: string }[]} [quick_options]
  * @property {boolean} [opted_out]
  * @property {string} [last_inbound_at]
+ * @property {string} [pending_action_id]
  */
 
 /**
@@ -56,6 +59,8 @@ const OWNER_ROLES = new Set(['owner', 'admin']);
 const MAX_TURNS = { owner: 8, customer: 20 };
 const MAX_TURN_CHARS = 1500;
 const EDIT_MODE_MINUTES = 30;
+const CONFIRM_TOKEN = '__confirm_action__';
+const CANCEL_TOKEN = '__cancel_action__';
 
 /** Reply texts. Hebrew first — the product language. */
 const TEXT = {
@@ -68,13 +73,6 @@ const TEXT = {
     '• *חדש* — שיחה חדשה',
     '• *עצור* — הפסקת הודעות',
   ].join('\n'),
-  helpCustomer: [
-    '🤖 *העוזר החכם לחופשה*',
-    'ספרו לי מה אתם מחפשים — אזור, תאריכים, כמה אורחים, תקציב — ואמצא צימר מתאים.',
-    '',
-    '• *חדש* — שיחה חדשה',
-    '• *עצור* — הפסקת הודעות',
-  ].join('\n'),
   reset: '🔄 התחלנו שיחה חדשה. איך אפשר לעזור?',
   editOn: `✏️ מצב עריכה פעיל ל-${EDIT_MODE_MINUTES} דקות — העוזר יכול לבצע פעולות בחשבון שלך. כתבו *מצב מידע* כדי לחזור.`,
   editOff: 'ℹ️ חזרנו למצב מידע — העוזר עונה על שאלות בלבד.',
@@ -82,6 +80,8 @@ const TEXT = {
   stop: '🔕 הפסקנו. לא נשלח הודעות נוספות. כתבו *הפעל* כדי לחזור.',
   start: '🔔 חזרנו! כתבו *עזרה* לרשימת אפשרויות.',
   ambiguous: 'המספר הזה משויך ליותר מחשבון אחד במערכת, ולכן אי אפשר לזהות אותך כאן. פנו לתמיכה או השתמשו באפליקציה.',
+  ownersOnly:
+    'הבוט בוואטסאפ זמין כרגע רק לבעלי מתחמים. עדכנו את מספר הטלפון בפרופיל בעל המתחם באפליקציה, ואז כתבו שוב מכאן.',
   error: '⚠️ משהו השתבש אצלנו. נסו שוב בעוד רגע.',
   editModeHint: '\n\n_כדי שאבצע את הפעולה כתבו *מצב עריכה*._',
 };
@@ -109,18 +109,27 @@ export function createAgent(ports) {
       recent_turns: [],
       quick_options: [],
       opted_out: false,
+      pending_action_id: '',
     };
 
     // A number can change owner (phone re-assigned / account changed) — never leak context.
     const userId = identity.kind === 'user' ? identity.actor?.id || '' : '';
     if ((session.user_id || '') !== userId) {
-      session = { ...session, user_id: userId, conversation_id: '', recent_turns: [], quick_options: [], mode: 'info' };
+      session = {
+        ...session,
+        user_id: userId,
+        conversation_id: '',
+        recent_turns: [],
+        quick_options: [],
+        mode: 'info',
+        pending_action_id: '',
+      };
     }
     session.role = identity.kind === 'user' ? identity.actor?.role || '' : '';
     session.display_name = identity.name || displayName || session.display_name || '';
     session.last_inbound_at = now().toISOString();
 
-    const isOwner = OWNER_ROLES.has(session.role || '');
+    const isOwner = identity.kind === 'user' && OWNER_ROLES.has(identity.actor?.role || '');
     const command = parseCommand(text);
 
     if (identity.kind === 'ambiguous') {
@@ -132,17 +141,30 @@ export function createAgent(ports) {
       return { reply: null, session: await sessions.save(session), identity, command };
     }
 
+    // v1: WhatsApp bot is owners/admins only.
+    if (!isOwner) {
+      if (command === 'stop') {
+        session.opted_out = true;
+        return finish(TEXT.stop, command);
+      }
+      if (command === 'start') {
+        session.opted_out = false;
+        return finish(TEXT.ownersOnly, command);
+      }
+      return finish(TEXT.ownersOnly, command === 'help' ? command : null);
+    }
+
     if (command) {
       switch (command) {
         case 'help':
-          return finish(isOwner ? TEXT.helpOwner : TEXT.helpCustomer, command);
+          return finish(TEXT.helpOwner, command);
         case 'reset':
           session.recent_turns = [];
           session.quick_options = [];
           session.conversation_id = '';
+          session.pending_action_id = '';
           return finish(TEXT.reset, command);
         case 'edit_on':
-          if (!isOwner) return finish(TEXT.editNotAllowed, command);
           session.mode = 'edit';
           session.mode_expires_at = new Date(now().getTime() + EDIT_MODE_MINUTES * 60000).toISOString();
           return finish(TEXT.editOn, command);
@@ -168,13 +190,40 @@ export function createAgent(ports) {
       session.mode_expires_at = '';
     }
 
-    const message = resolveQuickOption(text, session.quick_options || []) || String(text || '').trim();
-    if (!message) return finish(isOwner ? TEXT.helpOwner : TEXT.helpCustomer, 'help');
+    let message = resolveQuickOption(text, session.quick_options || []) || String(text || '').trim();
+    if (!message) return finish(TEXT.helpOwner, 'help');
 
-    const profile = isOwner ? 'owner_assistant' : 'customer_chat';
+    /** @type {object} */
+    const clientState = {
+      mode: session.mode === 'edit' ? 'edit' : 'info',
+      recentTurns: (session.recent_turns || []).slice(-MAX_TURNS.owner),
+      surface: 'home',
+    };
+
+    // Confirm / cancel a pending owner action (same path as the web confirmActionId flow).
+    const pendingId = session.pending_action_id || '';
+    if (pendingId) {
+      const decision = resolveActionDecision(message);
+      if (decision === 'confirm') {
+        clientState.confirmActionId = pendingId;
+        message = 'אישור פעולה';
+        session.pending_action_id = '';
+        session.quick_options = [];
+      } else if (decision === 'cancel') {
+        clientState.cancelActionId = pendingId;
+        message = 'ביטול פעולה';
+        session.pending_action_id = '';
+        session.quick_options = [];
+      }
+    }
+
+    const profile = 'owner_assistant';
     session.profile = profile;
-    const turnCap = isOwner ? MAX_TURNS.owner : MAX_TURNS.customer;
+    const turnCap = MAX_TURNS.owner;
     const recentTurns = (session.recent_turns || []).slice(-turnCap);
+    if (!clientState.confirmActionId && !clientState.cancelActionId) {
+      clientState.recentTurns = recentTurns;
+    }
 
     /** @type {BrainResult} */
     let result;
@@ -184,9 +233,7 @@ export function createAgent(ports) {
           profile,
           message,
           conversationId: session.conversation_id || null,
-          clientState: isOwner
-            ? { mode: session.mode === 'edit' ? 'edit' : 'info', recentTurns }
-            : { surface: 'customer', recentTurns },
+          clientState,
         },
         identity,
       );
@@ -204,19 +251,32 @@ export function createAgent(ports) {
       return { lines: [], quickOptions: [] };
     });
 
+    let quickOptions = rendered.quickOptions || [];
+    const confirmFx = effects.find((e) => e?.type === 'confirm_action' && e.actionId);
+    if (confirmFx) {
+      session.pending_action_id = String(confirmFx.actionId);
+      quickOptions = [
+        { label: 'אישור ✅', text: CONFIRM_TOKEN },
+        { label: 'ביטול ❌', text: CANCEL_TOKEN },
+        ...quickOptions.filter((o) => o.text !== CONFIRM_TOKEN && o.text !== CANCEL_TOKEN),
+      ];
+    }
+
     let reply = [content, ...rendered.lines].filter(Boolean).join('\n\n');
     if (effects.some((e) => e?.type === 'edit_mode_required')) reply += TEXT.editModeHint;
-    if (rendered.quickOptions.length) {
-      reply += `\n\n${rendered.quickOptions.map((o, i) => `${i + 1}. ${o.label}`).join('\n')}`;
+    if (quickOptions.length) {
+      reply += `\n\n${quickOptions.map((o, i) => `${i + 1}. ${o.label}`).join('\n')}`;
     }
 
     session.conversation_id = result?.conversationId || session.conversation_id || '';
-    session.quick_options = rendered.quickOptions;
-    session.recent_turns = [
-      ...recentTurns,
-      { role: 'user', content: message.slice(0, MAX_TURN_CHARS) },
-      { role: 'bot', content: content.slice(0, MAX_TURN_CHARS) },
-    ].slice(-turnCap);
+    session.quick_options = quickOptions;
+    if (!clientState.confirmActionId && !clientState.cancelActionId) {
+      session.recent_turns = [
+        ...recentTurns,
+        { role: 'user', content: message.slice(0, MAX_TURN_CHARS) },
+        { role: 'bot', content: content.slice(0, MAX_TURN_CHARS) },
+      ].slice(-turnCap);
+    }
 
     return finish(reply || TEXT.error, null);
 
@@ -229,11 +289,26 @@ export function createAgent(ports) {
   return { handleMessage };
 }
 
+/** @param {string} message */
+function resolveActionDecision(message) {
+  const n = String(message || '')
+    .trim()
+    .toLowerCase();
+  if (n === CONFIRM_TOKEN || n === 'כן' || n === 'אישור' || n === 'confirm' || n === 'yes') return 'confirm';
+  if (n === CANCEL_TOKEN || n === 'לא' || n === 'ביטול' || n === 'cancel' || n === 'no') return 'cancel';
+  return null;
+}
+
 /** @param {AgentIdentity} identity */
 function describeIdentity(identity) {
   if (identity.kind !== 'user') {
     return 'את/ה מחובר/ת כאורח/ת (המספר לא משויך לחשבון). כדי לקבל עזרה אישית — עדכנו את מספר הטלפון בפרופיל באפליקציה.';
   }
-  const roleLabel = { owner: 'בעל/ת מתחם', admin: 'מנהל/ת מערכת', user: 'לקוח/ה' }[identity.actor?.role || ''] || identity.actor?.role;
+  const roleLabel =
+    { owner: 'בעל/ת מתחם', admin: 'מנהל/ת מערכת', user: 'לקוח/ה' }[identity.actor?.role || ''] ||
+    identity.actor?.role;
   return `את/ה מזוהה כ-*${identity.name || identity.user?.email || ''}* (${roleLabel}).`;
 }
+
+export const AGENT_CONFIRM_TOKEN = CONFIRM_TOKEN;
+export const AGENT_CANCEL_TOKEN = CANCEL_TOKEN;

@@ -14,6 +14,7 @@ import { buildOwnerAssistantPrompt } from './prompt-builder/owner-assistant.js';
 import {
   finalizeOwnerAssistantContent,
   parseOwnerAssistantResponse,
+  parseOwnerTextActionDecision,
 } from './response-parser/owner-assistant.js';
 import {
   confirmActionEffect,
@@ -22,7 +23,12 @@ import {
   isActionDecision,
   rememberPendingForAdmin,
 } from './owner-actions.js';
-import { appendOwnerThreadTurns } from './owner-thread.js';
+import {
+  appendOwnerThreadTurns,
+  findLatestOpenPendingActionMessage,
+  loadOwnerThread,
+  threadWritable,
+} from './owner-thread.js';
 import {
   ONESHOT_PROFILES,
   handleOneshotProfile,
@@ -229,6 +235,30 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
     throw err;
   }
 
+  // Free-text confirm/cancel when a pending card is already open on the thread.
+  const textDecision = parseOwnerTextActionDecision(req.message);
+  if (textDecision && threadWritable(actor, ownerId) && !isActionDecision(req.clientState)) {
+    const thread = await loadOwnerThread(deps.store, ownerId, actor);
+    const pendingMsg = findLatestOpenPendingActionMessage(thread);
+    const actionId = pendingMsg?.pending_action?.id;
+    if (actionId) {
+      return handleOwnerActionDecision(
+        {
+          ...req,
+          clientState: {
+            ...(req.clientState || {}),
+            ...(textDecision === 'confirm'
+              ? { confirmActionId: actionId }
+              : { cancelActionId: actionId }),
+          },
+        },
+        profile,
+        actor,
+        deps,
+      );
+    }
+  }
+
   const ctx = await buildOwnerAssistantContext(deps, {
     actor,
     ownerId,
@@ -253,16 +283,21 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
   const uiEffects = [...parsed.uiEffects];
 
   let pending = null;
+  let incompleteOp = null;
   if (parsed.operation) {
     pending = createPendingAction(parsed.operation, ctx.zimmers, profile.id);
     if (pending) {
       uiEffects.push(confirmActionEffect(pending));
       rememberPendingForAdmin(pending, ownerId, actor);
+    } else {
+      incompleteOp = parsed.operation;
     }
   }
 
   const content = finalizeOwnerAssistantContent(parsed.content, {
     hasPendingAction: Boolean(pending),
+    // Only used when the model was proposing (done/card language); never wipes Q&A answers.
+    incompleteOperation: !pending ? incompleteOp : null,
   });
 
   await appendOwnerActionLog(deps.store, actor, {

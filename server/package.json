@@ -13,6 +13,7 @@
     "db:apply-auth": "node scripts/apply-auth-sql.js",
     "db:apply-calendar": "node scripts/apply-calendar-sql.js",
     "db:apply-delayed-jobs": "node scripts/apply-delayed-jobs-sql.js",
+    "db:apply-whatsapp-verified": "node scripts/apply-whatsapp-verified-sql.js",
     "seed": "node src/seed/run.js",
     "seed:fresh": "node src/seed/run.js --fresh",
     "whatsapp": "node scripts/whatsapp.js",

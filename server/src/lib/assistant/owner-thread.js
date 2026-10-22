@@ -138,6 +138,20 @@ export function findPendingActionMessage(thread, actionId) {
   return (thread.messages || []).find((m) => m.pending_action?.id === actionId) || null;
 }
 
+/** Most recent bot turn with a still-open pending_action (status pending / missing). */
+export function findLatestOpenPendingActionMessage(thread) {
+  const msgs = Array.isArray(thread?.messages) ? thread.messages : [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const pa = msgs[i]?.pending_action;
+    if (!pa?.id) continue;
+    const status = pa.status || 'pending';
+    if (status !== 'pending') continue;
+    if (pa.expiresAt && Date.parse(pa.expiresAt) < Date.now()) continue;
+    return msgs[i];
+  }
+  return null;
+}
+
 /**
  * Tagged memory across all bubbles for the prompt, e.g. "[יומן] בעל המתחם: ...".
  * @param {object|null} thread

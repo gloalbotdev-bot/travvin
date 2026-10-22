@@ -52,8 +52,8 @@ async function main() {
   const invited = await users.invite(`invite-${Date.now()}@example.com`, 'owner');
   assert(invited.role === 'owner', 'inviteUser sets role');
 
-  const updated = await users.update(row.id, { role: 'owner', phone: '050' });
-  assert(updated.role === 'owner' && updated.phone === '050', 'updateMe fields (entity shape)');
+  const updated = await users.update(row.id, { role: 'owner', phone: '050-1234567' });
+  assert(updated.role === 'owner' && updated.phone === '972501234567', 'updateMe fields (phone normalized)');
 
   const list = await users.list('-created_date', 10);
   assert(Array.isArray(list) && list.some((u) => u.id === row.id), 'User.list');

@@ -15,14 +15,14 @@ export function createUsersRouter(prisma) {
       if (req.user.role !== 'admin') {
         return res.status(403).json({ error: 'Forbidden' });
       }
-      const { email, role } = req.body || {};
+      const { email, role, full_name, phone, business_name } = req.body || {};
       if (!email || !role) {
         return res.status(400).json({ error: 'email and role required' });
       }
       if (!['user', 'owner', 'admin'].includes(role)) {
         return res.status(400).json({ error: 'Invalid role' });
       }
-      const invited = await users.invite(email, role);
+      const invited = await users.invite(email, role, { full_name, phone, business_name });
       res.json(invited);
     } catch (err) {
       res.status(err.status || 500).json({ error: err.message || String(err) });
