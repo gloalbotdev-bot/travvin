@@ -17,6 +17,8 @@ import {
   parseOwnerAssistantResponse,
 } from '../../src/lib/assistant/response-parser/owner-assistant.js';
 import { prepareOwnerAssistantOperation } from '../../src/lib/assistant/action-dispatcher.js';
+import { threadMemoryText } from '../../src/lib/assistant/owner-thread.js';
+import { createPendingAction } from '../../src/lib/assistant/owner-actions.js';
 import { mergeAmenitiesList } from '../../src/lib/owner-assistant-ops.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -62,6 +64,17 @@ function mainUnit() {
     {},
   );
   assert(parsed.operation?.type === 'create_zimmer', 'parser keeps operation (no mode)');
+  const fromTool = parseOwnerAssistantResponse({
+    message: 'מוצע לחסום',
+    functionCalls: [{ name: 'block_dates', args: { zimmer_id: 'z', start_date: '2031-01-01' } }],
+  });
+  assert(fromTool.operation?.type === 'block_dates' && fromTool.operation.start_date === '2031-01-01', 'function call becomes an operation');
+  const silentTool = parseOwnerAssistantResponse({
+    message: '',
+    functionCalls: [{ name: 'block_dates', args: { zimmer_id: 'z', start_date: '2031-01-02' } }],
+  });
+  assert(!/mock/.test(silentTool.content), 'a function call without text is not the mock fallback');
+  assert(/כרטיס|אישור/.test(silentTool.content), 'a function call without text points at confirmation');
   assert(
     !parsed.uiEffects.some((e) => e.type === 'edit_mode_required'),
     'no edit_mode_required effect anymore',
@@ -82,18 +95,117 @@ function mainUnit() {
   );
   assert(prepared.zimmer_id === 'z-1', 'prepareOwnerAssistantOperation resolves zimmer_id');
 
-  const falseDone = finalizeOwnerAssistantContent('בוצע — הוספתי מזגן לצימר', { hasPendingAction: false });
-  assert(!/בוצע|הוספתי/.test(falseDone), 'false-done copy stripped without pending action');
-  assert(/לא ביצעתי|עדיין לא/.test(falseDone), 'false-done explains nothing was written');
+  const falseDone = finalizeOwnerAssistantContent('ההזמנה של כהן נוספה ב-12/10', { hasPendingAction: false });
+  assert(falseDone.includes('נוספה'), 'informational past tense is kept');
+  assert(!/עדיין לא ביצעתי/.test(falseDone), 'info answer is not replaced');
 
   const pendingCopy = finalizeOwnerAssistantContent('בוצע עדכון תאריך יציאה', { hasPendingAction: true });
   assert(/כרטיס|אישור/.test(pendingCopy), 'pending action copy points at confirm card');
   assert(!/^בוצע/.test(pendingCopy), 'pending action copy does not claim completion');
 
+  const stripped = finalizeOwnerAssistantContent('הכנתי עדכון — אשרי בכרטיס למטה.', { hasPendingAction: false });
+  assert(!stripped.includes('בכרטיס למטה'), 'card phrase removed when no card exists');
+
   const merged = mergeAmenitiesList(['Wi-Fi', 'מזגן'], ['בריכה']);
   assert(merged.includes('Wi-Fi') && merged.includes('מזגן') && merged.includes('בריכה'), 'amenities merge keeps existing + new');
   const replaced = mergeAmenitiesList(['Wi-Fi', 'מזגן', 'טלוויזיה'], ['Wi-Fi', 'מזגן', 'טלוויזיה', 'כספת']);
   assert(replaced.length === 4 && replaced.includes('כספת'), 'amenities full-list replace when overlap is high');
+  const removed = mergeAmenitiesList(['Wi-Fi', 'מזגן', 'טלוויזיה', 'בריכה'], ['Wi-Fi', 'מזגן', 'טלוויזיה']);
+  assert(!removed.includes('בריכה') && removed.length === 3, 'explicit amenity removal is kept');
+  const memory = threadMemoryText({
+    messages: [{
+      role: 'bot',
+      content: 'הכנתי הצעה',
+      surface: 'calendar',
+      pending_action: { summary: 'לחסום את צימר ספסופה שלי ב-20.11', status: 'pending' },
+    }],
+  });
+  assert(memory.includes('הוצע: לחסום את צימר ספסופה שלי ב-20.11'), 'memory includes the proposal');
+  assert(memory.includes('סטטוס: ממתין'), 'memory includes the card status');
+  assert(createPendingAction({ type: 'create_zimmer', name: '...' }, [], 'owner_assistant') === null, 'placeholder zimmer name is not proposed');
+  assert(createPendingAction({ type: 'create_zimmer', name: 'name', location: 'צפת' }, [], 'owner_assistant') === null, 'literal name is not proposed');
+  assert(createPendingAction({ type: 'create_zimmer', name: 'בקתת הארז', price_per_night: 0 }, [], 'owner_assistant') === null, 'zero price zimmer is not proposed');
+  assert(createPendingAction({ type: 'create_zimmer', name: 'בקתת הארז' }, [], 'owner_assistant') === null, 'create without location is not proposed');
+  assert(
+    createPendingAction({ type: 'create_zimmer', name: 'בקתת הארז', location: 'דלתון' }, [], 'owner_assistant')?.op?.name === 'בקתת הארז',
+    'create with name+location is proposed',
+  );
+  assert(
+    createPendingAction(
+      { type: 'create_zimmer', name: 'בקתת הארז', location: 'דלתון' },
+      [{ id: 'z1', name: 'בקתת הארז' }],
+      'owner_assistant',
+    ) === null,
+    'duplicate create name is not proposed',
+  );
+  assert(
+    createPendingAction(
+      {
+        type: 'create_zimmer',
+        name: 'בקתת הארז',
+        location: 'דלתון',
+        data_zones: [{ title: 'חדרים', content: 'מיטה זוגית בכל חדר' }],
+      },
+      [],
+      'owner_assistant',
+    ) === null,
+    'beds dumped into data_zones without rooms_detail are not proposed',
+  );
+  assert(
+    createPendingAction(
+      { type: 'create_booking', guest_name: 'דני', check_in: '2026-12-10', check_out: '2026-12-12' },
+      [],
+      'owner_assistant',
+    ) === null,
+    'booking without phone/zimmer/status/guests is not proposed',
+  );
+  assert(
+    createPendingAction(
+      {
+        type: 'create_booking',
+        guest_name: 'דני',
+        guest_phone: '050-1234567',
+        zimmer_name: 'בקתת הארז',
+        check_in: '2026-12-10',
+        check_out: '2026-12-12',
+        num_guests: 2,
+        status: 'אושרה',
+      },
+      [{ id: 'z1', name: 'בקתת הארז' }],
+      'owner_assistant',
+    )?.op?.type === 'create_booking',
+    'full booking is proposed',
+  );
+  assert(
+    createPendingAction(
+      { type: 'block_dates', start_date: '2026-11-05' },
+      [],
+      'owner_assistant',
+    ) === null,
+    'block without zimmer is not proposed',
+  );
+  assert(
+    createPendingAction(
+      { type: 'add_seasonal_price', zimmer_id: 'z1', start_date: '2026-07-01', end_date: '2026-08-31', percentage: 10 },
+      [{ id: 'z1', name: 'בקתת הארז' }],
+      'owner_assistant',
+    ) === null,
+    'seasonal percent-only is not proposed',
+  );
+  assert(
+    createPendingAction(
+      { type: 'add_seasonal_price', zimmer_id: 'z1', start_date: '2026-07-01', end_date: '2026-08-31', price_per_night: 900 },
+      [{ id: 'z1', name: 'בקתת הארז' }],
+      'owner_assistant',
+    )?.op?.type === 'add_seasonal_price',
+    'seasonal fixed price is proposed',
+  );
+  const filled = createPendingAction(
+    { type: 'create_zimmer', name: 'צימר מחיר אחד', location: 'צפת', price_per_night: 800 },
+    [],
+    'owner_assistant',
+  );
+  assert(filled?.op?.weekday_price === 800 && filled?.op?.weekend_price === 800, 'single price fills weekday and weekend');
 }
 
 async function mainHttp() {
@@ -160,6 +272,58 @@ async function mainHttp() {
     { id: ownerRow.id, email: ownerEmail, role: 'owner' },
   );
   assert(!zimmers.some((z) => z.name === 'צימר Mock בדיקה'), 'zimmer not persisted before confirmation');
+
+  const infoMode = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'MOCK_EXECUTE_CREATE_ZIMMER',
+    clientState: { ownerId: ownerRow.id, mode: 'info' },
+  });
+  assert(
+    !infoMode.json?.uiEffects?.some((e) => e.type === 'confirm_action'),
+    'info mode does not propose a card',
+  );
+
+  const yes = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'כן',
+    clientState: { ownerId: ownerRow.id },
+  });
+  assert(yes.json?.executedActions?.[0]?.kind === 'create_zimmer', 'bare yes confirms the latest card');
+  const afterYes = await store.filter(
+    'Zimmer',
+    { owner_id: ownerRow.id },
+    '-created_date',
+    10,
+    { id: ownerRow.id, email: ownerEmail, role: 'owner' },
+  );
+  assert(afterYes.filter((z) => z.name === 'צימר Mock בדיקה').length === 1, 'bare yes creates the zimmer once');
+
+  const older = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'MOCK_EXECUTE_BLOCK_DATES',
+    clientState: { ownerId: ownerRow.id, surface: 'calendar' },
+  });
+  assert(older.json?.uiEffects?.some((e) => e.opType === 'block_dates'), 'older card is proposed');
+  const newer = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'MOCK_EXECUTE_CREATE_ZIMMER_ALT',
+    clientState: { ownerId: ownerRow.id },
+  });
+  assert(newer.json?.uiEffects?.some((e) => e.opType === 'create_zimmer'), 'newer card is proposed');
+  const yesLatest = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'אישור',
+    clientState: { ownerId: ownerRow.id },
+  });
+  assert(yesLatest.json?.executedActions?.[0]?.kind === 'create_zimmer', 'yes confirms only the latest card');
+  const blocks = await store.filter(
+    'BookingRequest',
+    { owner_id: ownerRow.id, is_block: true },
+    '-created_date',
+    5,
+    { id: ownerRow.id, email: ownerEmail, role: 'owner' },
+  );
+  assert(blocks.length === 0, 'the older block card was not executed');
 
   const denied = await chat(base, customerTok, {
     profile: 'owner_assistant',

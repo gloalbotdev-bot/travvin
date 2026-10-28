@@ -26,14 +26,18 @@ const FALLBACK_MODELS = (
  * @param {object} [opts.response_json_schema]
  * @param {boolean} [opts.add_context_from_internet]
  * @param {Array<{ inlineData: { mimeType: string, data: string } }>} [opts.files]
+ * @param {object[]} [opts.tools] Gemini functionDeclarations (function calling)
  * @param {typeof fetch} [opts.fetchImpl]
  */
+const LLM_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 60000);
+
 export async function invokeGemini({
   prompt,
   model,
   response_json_schema,
   add_context_from_internet = false,
   files = [],
+  tools = [],
   fetchImpl = fetch,
 }) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -49,11 +53,13 @@ export async function invokeGemini({
     ...FALLBACK_MODELS.filter((m) => m !== primary),
   ];
 
+  const useTools = Array.isArray(tools) && tools.length > 0;
   const body = buildRequestBody({
     prompt,
-    response_json_schema,
+    response_json_schema: useTools ? undefined : response_json_schema,
     add_context_from_internet,
     files,
+    tools: useTools ? tools : [],
   });
 
   const JSON_PARSE_ATTEMPTS = 3;
@@ -62,13 +68,16 @@ export async function invokeGemini({
     const mapped = candidates[i];
     for (let attempt = 0; attempt < JSON_PARSE_ATTEMPTS; attempt += 1) {
       try {
-        return await callGeminiOnce({
+        const result = await callGeminiOnce({
           apiKey,
           model: mapped,
           body,
-          response_json_schema,
+          response_json_schema: useTools ? undefined : response_json_schema,
+          expectTools: useTools,
           fetchImpl,
         });
+        console.info(`[llm] answered by ${mapped}`);
+        return result;
       } catch (err) {
         lastErr = err;
         if (isParseError(err) && attempt < JSON_PARSE_ATTEMPTS - 1) {
@@ -94,6 +103,7 @@ function buildRequestBody({
   response_json_schema,
   add_context_from_internet,
   files = [],
+  tools = [],
 }) {
   let userText = String(prompt || '');
   const userParts = (text) => [{ text }, ...files];
@@ -102,7 +112,10 @@ function buildRequestBody({
     contents: [{ role: 'user', parts: userParts(userText) }],
   };
 
-  if (add_context_from_internet) {
+  if (tools.length) {
+    body.tools = [{ functionDeclarations: tools }];
+    body.toolConfig = { functionCallingConfig: { mode: 'AUTO' } };
+  } else if (add_context_from_internet) {
     body.tools = [{ google_search: {} }];
   }
 
@@ -129,15 +142,29 @@ async function callGeminiOnce({
   model,
   body,
   response_json_schema,
+  expectTools = false,
   fetchImpl,
 }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const timeout = AbortSignal.timeout(LLM_TIMEOUT_MS);
 
-  const res = await fetchImpl(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let res;
+  try {
+    res = await fetchImpl(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: timeout,
+    });
+  } catch (err) {
+    if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+      const timeoutErr = new Error('המודל לא ענה בזמן. נסו שוב.');
+      timeoutErr.status = 504;
+      timeoutErr.code = 'LLM_TIMEOUT';
+      throw timeoutErr;
+    }
+    throw err;
+  }
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -155,6 +182,22 @@ async function callGeminiOnce({
   const text = Array.isArray(parts)
     ? parts.map((p) => p.text || '').join('')
     : '';
+  if (expectTools) {
+    const functionCalls = Array.isArray(parts)
+      ? parts
+          .filter((p) => p?.functionCall?.name)
+          .map((p) => ({
+            name: p.functionCall.name,
+            args: p.functionCall.args && typeof p.functionCall.args === 'object' ? p.functionCall.args : {},
+          }))
+      : [];
+    if (!text && !functionCalls.length) {
+      const err = new Error('Gemini returned empty content');
+      err.status = 502;
+      throw err;
+    }
+    return { message: text.trim(), functionCalls, model };
+  }
   if (!text) {
     const err = new Error('Gemini returned empty content');
     err.status = 502;

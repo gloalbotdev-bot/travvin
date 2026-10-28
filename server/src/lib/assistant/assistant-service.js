@@ -20,7 +20,10 @@ import {
   createPendingAction,
   handleOwnerActionDecision,
   isActionDecision,
+  isBareConfirmMessage,
+  operationAllowedByMode,
   rememberPendingForAdmin,
+  takeLatestPendingActionId,
 } from './owner-actions.js';
 import { appendOwnerThreadTurns } from './owner-thread.js';
 import {
@@ -44,6 +47,7 @@ import {
 } from './conversation-service.js';
 import { invokeLlm } from '../llm/index.js';
 import { loadAttachmentParts } from '../llm/attachments.js';
+import { OWNER_ASSISTANT_TOOLS } from './profiles.js';
 
 const CUSTOMER_PROFILES = new Set(['customer_date_search', 'customer_chat']);
 const OWNER_ASSISTANT_PROFILE = 'owner_assistant';
@@ -62,6 +66,26 @@ export async function handleAssistantChat(body, actor, deps = {}) {
   if (OWNER_PANEL_PROFILES.has(profile.id) && isActionDecision(req.clientState)) {
     assertStore(deps);
     return handleOwnerActionDecision(req, profile, actor, deps);
+  }
+
+  if (
+    OWNER_PANEL_PROFILES.has(profile.id) &&
+    isBareConfirmMessage(req.message) &&
+    deps.store
+  ) {
+    const latestId = await takeLatestPendingActionId(deps.store, actor, req.clientState);
+    if (latestId) {
+      return handleOwnerActionDecision(
+        {
+          ...req,
+          message: 'אישור',
+          clientState: { ...(req.clientState || {}), confirmActionId: latestId },
+        },
+        profile,
+        actor,
+        deps,
+      );
+    }
   }
 
   if (CUSTOMER_PROFILES.has(profile.id)) {
@@ -244,25 +268,37 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
   const llmStarted = Date.now();
   const llmRaw = await invokeLlm({
     prompt,
-    response_json_schema: profile.responseJsonSchema,
+    tools: OWNER_ASSISTANT_TOOLS,
     files,
   });
   const llmMs = Date.now() - llmStarted;
 
   const parsed = parseOwnerAssistantResponse(llmRaw, { focus: ctx.focus });
+  parsed.operation = operationAllowedByMode(req.clientState, parsed.operation);
+  if (req.clientState?.mode === 'info') {
+    parsed.uiEffects = [];
+    parsed.actions = [];
+    parsed.openForm = null;
+  }
+  if (parsed.parsed) parsed.parsed.operation = parsed.operation;
   const uiEffects = [...parsed.uiEffects];
 
   let pending = null;
+  let incompleteOp = null;
   if (parsed.operation) {
     pending = createPendingAction(parsed.operation, ctx.zimmers, profile.id);
     if (pending) {
       uiEffects.push(confirmActionEffect(pending));
       rememberPendingForAdmin(pending, ownerId, actor);
+    } else {
+      incompleteOp = parsed.operation;
     }
   }
 
   const content = finalizeOwnerAssistantContent(parsed.content, {
     hasPendingAction: Boolean(pending),
+    incompleteOperation: incompleteOp,
+    zimmers: ctx.zimmers,
   });
 
   await appendOwnerActionLog(deps.store, actor, {
@@ -311,6 +347,7 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
         promptChars: typeof prompt === 'string' ? prompt.length : undefined,
         snapshotChars: ctx.timing?.promptChars,
         llmMs,
+        llmModel: llmRaw?.model,
         threadWriteMs,
         zimmerCount: ctx.timing?.zimmerCount,
         bookingCount: ctx.timing?.bookingCount,
