@@ -13,7 +13,6 @@ import {
 import {
   buildAdminZimmerEditorPrompt,
   buildOwnerBookingCreatorPrompt,
-  buildOwnerZimmerCreatorPrompt,
   buildOwnerZimmerKnowledgePrompt,
 } from './prompt-builder/creator.js';
 import {
@@ -23,16 +22,18 @@ import {
 } from './response-parser/creator.js';
 import { appendOwnerActionLog } from './conversation-service.js';
 import { buildOwnerBaseContext } from './context-builder/owner-base.js';
-import { resolveOwnerId } from './context-builder/owner-assistant.js';
+import { buildOwnerAssistantContext, resolveOwnerId } from './context-builder/owner-assistant.js';
 import { buildOwnerBasePrompt } from './prompt-builder/owner-base.js';
-import { appendOwnerThreadTurns, threadWritable } from './owner-thread.js';
-import { confirmActionEffect, createPendingAction } from './owner-actions.js';
-import { invokeLlm } from '../llm/index.js';
+import { buildOwnerAssistantPrompt } from './prompt-builder/owner-assistant.js';
 import {
-  ADMIN_ZIMMER_EDITOR_SCHEMA,
-  BOOKING_CREATOR_SCHEMA,
-  ZIMMER_CREATOR_SCHEMA,
-} from './profiles.js';
+  finalizeOwnerAssistantContent,
+  parseOwnerAssistantResponse,
+} from './response-parser/owner-assistant.js';
+import { appendOwnerThreadTurns, threadWritable } from './owner-thread.js';
+import { confirmActionEffect, createPendingAction, operationAllowedByMode } from './owner-actions.js';
+import { findDuplicateZimmerName, isActionableOperation } from '../owner-assistant-ops.js';
+import { invokeLlm } from '../llm/index.js';
+import { OWNER_ASSISTANT_TOOLS, ADMIN_ZIMMER_EDITOR_SCHEMA, BOOKING_CREATOR_SCHEMA } from './profiles.js';
 
 export const CREATOR_PROFILES = new Set([
   'admin_zimmer_editor',
@@ -186,45 +187,110 @@ async function handleOwnerBookingCreator(req, profile, actor, deps) {
   return buildCreatorResponse(profile, { ...parsed, uiEffects: [...parsed.uiEffects, ...extraEffects] });
 }
 
+function wizardDataParagraph(wizard) {
+  const raw = typeof wizard.conversationDataStr === 'string' ? wizard.conversationDataStr : '{}';
+  const collected = raw.length > 6000 ? `${raw.slice(0, 6000)}…` : raw;
+  const beds = wizard.customBedTypes?.length
+    ? wizard.customBedTypes
+        .map((t) => `${t.custom_label}${t.sleeps ? ` (${t.sleeps} ישנים)` : ''}`)
+        .join(', ')
+    : 'אין';
+  return `
+נתוני המסך צימר חדש:
+מה שכבר נאסף: ${collected}
+תמונות שהועלו: ${wizard.uploadedImageCount || 0}
+סוגי מיטה שהבעל כבר הגדיר: ${beds}`;
+}
+
+function zimmerDataFromOperation(op) {
+  if (!op || op.type !== 'create_zimmer') return null;
+  const { type: _type, ...fields } = op;
+  return parseOwnerZimmerCreatorResponse({
+    action: 'build',
+    message: 'הצעה',
+    zimmer_data: fields,
+  }).parsed.zimmer_data;
+}
+
 async function handleOwnerZimmerCreator(req, profile, actor, deps) {
   const ownerId = resolveOwnerId(actor, req.clientState);
-  const ctx = await buildOwnerZimmerCreatorContext(deps, {
+  if (!ownerId) {
+    const err = new Error('owner context required');
+    err.status = 400;
+    err.code = 'VALIDATION';
+    throw err;
+  }
+  const wizard = await buildOwnerZimmerCreatorContext(deps, {
     actor,
     clientState: req.clientState,
   });
-  const { prefix } = await ownerBasePrefix(deps, actor, ownerId, req.message, 'zimmer_creator');
-  const prompt = `${prefix}\n${buildOwnerZimmerCreatorPrompt(ctx, req.message)}`;
+  const ctx = await buildOwnerAssistantContext(deps, {
+    actor,
+    ownerId,
+    message: req.message,
+    clientState: { ...(req.clientState || {}), surface: 'zimmer_creator' },
+  });
+  const prompt = `${buildOwnerAssistantPrompt(ctx, req.message)}${wizardDataParagraph(wizard)}`;
   const llmRaw = await invokeLlm({
     prompt,
-    response_json_schema: ZIMMER_CREATOR_SCHEMA,
+    tools: OWNER_ASSISTANT_TOOLS,
   });
-  const parsed = parseOwnerZimmerCreatorResponse(llmRaw);
+  const parsed = parseOwnerAssistantResponse(llmRaw, { focus: ctx.focus });
+  parsed.operation = operationAllowedByMode(req.clientState, parsed.operation);
+  if (req.clientState?.mode === 'info') {
+    parsed.uiEffects = [];
+    parsed.actions = [];
+    parsed.openForm = null;
+  }
+
+  const isCreate = parsed.operation?.type === 'create_zimmer';
+  const mergedOp = isCreate
+    ? {
+        ...(wizard.conversationData || {}),
+        ...parsed.operation,
+        type: 'create_zimmer',
+        name: parsed.operation.name || wizard.conversationData?.name,
+      }
+    : parsed.operation;
+  const zimmerData = isCreate ? zimmerDataFromOperation(mergedOp) : null;
+  const duplicateCreate =
+    isCreate && Boolean(findDuplicateZimmerName(mergedOp?.name, ctx.zimmers || []));
+  const willCard =
+    Boolean(mergedOp) &&
+    isActionableOperation(mergedOp) &&
+    !duplicateCreate &&
+    threadWritable(actor, ownerId);
+  const canPreview = Boolean(zimmerData?.name) && (willCard || !threadWritable(actor, ownerId));
+  const content = finalizeOwnerAssistantContent(parsed.content, {
+    hasPendingAction: willCard,
+    incompleteOperation: (isCreate && !canPreview) || duplicateCreate ? mergedOp : null,
+    zimmers: ctx.zimmers,
+  });
 
   await appendOwnerActionLog(deps.store, actor, {
     profile: profile.id,
-    actionType: parsed.parsed.action,
+    actionType: canPreview ? 'build' : 'collect',
     summary: req.message,
   }).catch(() => {});
 
-  const zd = parsed.parsed.zimmer_data;
-  const name = zd?.name || ctx.conversationData?.name;
   const extraEffects = await finishWizardTurn(deps, actor, ownerId, {
     surface: 'zimmer_creator',
     userMessage: req.message,
-    botMessage: parsed.content,
-    op: parsed.parsed.action === 'build' && zd && typeof name === 'string' && name.trim()
-      ? (({ unclear_placement: _unclear, ...rest }) => ({
-          ...ctx.conversationData,
-          ...rest,
-          type: 'create_zimmer',
-          name,
-        }))(zd)
-      : null,
-    zimmers: [],
+    botMessage: content,
+    op: willCard ? mergedOp : null,
+    zimmers: ctx.zimmers || [],
     profileId: profile.id,
   });
+  const action = canPreview ? 'build' : 'collect';
+  const shownData = canPreview ? zimmerData : null;
+  const uiEffects = [...parsed.uiEffects];
+  if (canPreview) uiEffects.push({ type: 'zimmer_preview', zimmerData: shownData });
 
-  return buildCreatorResponse(profile, { ...parsed, uiEffects: [...parsed.uiEffects, ...extraEffects] });
+  return buildCreatorResponse(profile, {
+    content,
+    uiEffects: [...uiEffects, ...extraEffects],
+    parsed: { action, message: content, zimmer_data: shownData },
+  });
 }
 
 async function handleOwnerZimmerKnowledgeSummary(req, profile, actor, deps) {

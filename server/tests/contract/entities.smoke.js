@@ -30,7 +30,7 @@ function assert(cond, msg) {
 
 async function main() {
   const names = listEntityNames();
-  assert(names.length === 23, `23 entities loaded (got ${names.length})`);
+  assert(names.length === 24, `24 entities loaded (got ${names.length})`);
   assert(names.includes('OwnerAssistantThread'), 'OwnerAssistantThread present');
   assert(names.includes('Review') && names.includes('SyncState'), 'Review + SyncState present');
   for (const e of ['GuestProfile', 'ZimmerVideo', 'VideoLike']) {

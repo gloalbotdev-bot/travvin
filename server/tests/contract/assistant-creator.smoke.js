@@ -177,6 +177,11 @@ async function mainHttp() {
   assert(zimmerRes.status === 200, 'owner_zimmer_creator → 200');
   assert(zimmerRes.json?.meta?.phase === 8, 'owner_zimmer_creator meta.phase === 8');
   assert(zimmerRes.json?.meta?.parsed?.action === 'build', 'zimmer creator mock returns build');
+  assert(zimmerRes.json?.meta?.parsed?.zimmer_data?.name === 'צימר Mock חדש', 'zimmer creator fills zimmer_data from the shared action');
+  assert(
+    zimmerRes.json?.uiEffects?.some((e) => e.type === 'confirm_action' && e.opType === 'create_zimmer'),
+    'zimmer creator proposes a confirm card',
+  );
 
   const knowledgeRes = await chat(base, ownerTok, {
     profile: 'owner_zimmer_knowledge_summary',

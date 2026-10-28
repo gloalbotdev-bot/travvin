@@ -139,6 +139,244 @@ export const OWNER_ASSISTANT_SCHEMA = {
   required: ['message'],
 };
 
+const G_STR = { type: 'STRING' };
+const G_NUM = { type: 'NUMBER' };
+const G_BOOL = { type: 'BOOLEAN' };
+
+const G_MIN_NIGHTS = {
+  type: 'ARRAY',
+  description: 'רשימה מלאה (קיימים + שינוי). scope: weekend = סופ"ש/חמשוש, midweek = אמצע שבוע, all = תמיד.',
+  items: {
+    type: 'OBJECT',
+    properties: {
+      scope: { type: 'STRING', enum: ['all', 'weekend', 'midweek'] },
+      min_nights: G_NUM,
+      start_date: G_STR,
+      end_date: G_STR,
+      label: G_STR,
+    },
+    required: ['scope', 'min_nights'],
+  },
+};
+
+const G_OUTDOOR = {
+  type: 'OBJECT',
+  description: 'החצר כולה (קיים + שינוי). בריכה, מנגל, ג\'קוזי חיצוני וכו\' נכנסים ל-items.',
+  properties: {
+    description: G_STR,
+    size_sqm: G_NUM,
+    privacy: { type: 'STRING', enum: ['private', 'shared'] },
+    items: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          name: G_STR,
+          privacy: { type: 'STRING', enum: ['private', 'shared'] },
+          heated: G_BOOL,
+          covered: G_BOOL,
+          size: G_STR,
+          hours: G_STR,
+          note: G_STR,
+        },
+        required: ['name'],
+      },
+    },
+  },
+  required: ['items'],
+};
+
+const G_ROOMS = {
+  type: 'ARRAY',
+  items: {
+    type: 'OBJECT',
+    properties: {
+      room_name: G_STR,
+      beds: {
+        type: 'ARRAY',
+        items: {
+          type: 'OBJECT',
+          properties: {
+            bed_type: { type: 'STRING', enum: ['king', 'queen', 'single', 'bunk', 'sofa_bed', 'mattress', 'other'] },
+            count: G_NUM,
+            sleeps: G_NUM,
+            custom_label: G_STR,
+          },
+          required: ['bed_type', 'count'],
+        },
+      },
+      has_bathroom: G_BOOL,
+      amenities: { type: 'ARRAY', items: G_STR },
+    },
+  },
+};
+
+const G_ZONES = {
+  type: 'ARRAY',
+  description: 'כל פרט שאין לו שדה משלו: ביטולים, חיות מחמד, צ\'ק-אין/אאוט, חניה. פריט אחד לכל נושא.',
+  items: {
+    type: 'OBJECT',
+    properties: { content: G_STR },
+    required: ['content'],
+  },
+};
+
+/**
+ * Owner assistant function declarations. One declaration per action so Gemini
+ * fills only that action's fields. Replaces OWNER_ASSISTANT_SCHEMA on this profile.
+ */
+export const OWNER_ASSISTANT_TOOLS = [
+  {
+    name: 'create_zimmer',
+    description:
+      'הצעה ליצור צימר חדש. חובה name+location. מיטות רק ב-rooms_detail (לא data_zones). מתקנים→amenities, חצר→outdoor_area, מדיניות→data_zones. אם שם כפול אצל הבעלים — אל תקרא. אל תמציא.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        name: G_STR,
+        location: G_STR,
+        price_per_night: G_NUM,
+        weekday_price: G_NUM,
+        weekend_price: G_NUM,
+        num_rooms: G_NUM,
+        max_guests: G_NUM,
+        description: { type: 'STRING', description: 'ניסוח קצר ממה שנאמר בלבד. בלי מתקנים.' },
+        amenities: { type: 'ARRAY', items: G_STR, description: 'מתקנים בתוך הנכס (כולל חניה).' },
+        additional_bathrooms_count: G_NUM,
+        contact_phone: G_STR,
+        min_nights_rules: G_MIN_NIGHTS,
+        rooms_detail: G_ROOMS,
+        outdoor_area: G_OUTDOOR,
+        data_zones: G_ZONES,
+      },
+      required: ['name', 'location'],
+    },
+  },
+  {
+    name: 'update_zimmer',
+    description:
+      'הצעה לעדכן צימר קיים. כלול רק שדות שמשתנים. מיטות→rooms_detail (לא data_zones). amenities/min_nights_rules/outdoor_area/rooms_detail מחליפים את כל הרשימה.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        zimmer_id: { type: 'STRING', description: 'id מתוך נתוני הצימרים.' },
+        zimmer_name: { type: 'STRING', description: 'שם צימר אם אין id.' },
+        fields: {
+          type: 'OBJECT',
+          properties: {
+            price_per_night: G_NUM,
+            weekday_price: G_NUM,
+            weekend_price: G_NUM,
+            description: G_STR,
+            num_rooms: G_NUM,
+            max_guests: G_NUM,
+            location: G_STR,
+            amenities: { type: 'ARRAY', items: G_STR },
+            min_nights_rules: G_MIN_NIGHTS,
+            outdoor_area: G_OUTDOOR,
+            rooms_detail: G_ROOMS,
+            data_zones: G_ZONES,
+            contact_phone: G_STR,
+            additional_bathrooms_count: G_NUM,
+          },
+        },
+      },
+      required: ['fields'],
+    },
+  },
+  {
+    name: 'create_booking',
+    description: 'הצעה להוסיף הזמנה. חובה שם אורח, טלפון, צימר, תאריכים, מספר אורחים וסטטוס — אחרת שאל ואל תקרא.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        guest_name: G_STR,
+        guest_phone: G_STR,
+        zimmer_name: G_STR,
+        check_in: { type: 'STRING', description: 'YYYY-MM-DD' },
+        check_out: { type: 'STRING', description: 'YYYY-MM-DD, יום היציאה' },
+        num_guests: G_NUM,
+        notes: G_STR,
+        status: { type: 'STRING', enum: ['אושרה', 'ממתינה'] },
+        price_override: { type: 'NUMBER', description: 'סכום כולל רק אם נאמר במפורש. אל תשלח 0.' },
+      },
+      required: ['guest_name', 'guest_phone', 'zimmer_name', 'check_in', 'check_out', 'num_guests', 'status'],
+    },
+  },
+  {
+    name: 'update_booking',
+    description: 'הצעה לעדכן הזמנה קיימת. כלול רק שדות שמשתנים. חובה booking_id או guest_name.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        booking_id: G_STR,
+        guest_name: G_STR,
+        guest_phone: G_STR,
+        check_in: G_STR,
+        check_out: G_STR,
+        num_guests: G_NUM,
+        notes: G_STR,
+        status: { type: 'STRING', enum: ['אושרה', 'ממתינה', 'נדחתה'] },
+        price_override: G_NUM,
+        zimmer_name: G_STR,
+      },
+    },
+  },
+  {
+    name: 'block_dates',
+    description: 'הצעה לחסום תאריכים. חובה צימר + start_date. ליום אחד מספיק start_date; לטווח גם end_date. reason אופציונלי. end_date = יום היציאה.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        zimmer_id: G_STR,
+        zimmer_name: G_STR,
+        start_date: G_STR,
+        end_date: G_STR,
+        reason: G_STR,
+      },
+      required: ['start_date'],
+    },
+  },
+  {
+    name: 'add_seasonal_price',
+    description: 'הצעה לתמחור עונתי עם מחיר קבוע לעונה (price_per_night). חובה צימר + טווח תאריכים + מחיר.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        zimmer_id: G_STR,
+        zimmer_name: G_STR,
+        start_date: G_STR,
+        end_date: G_STR,
+        price_per_night: G_NUM,
+        label: G_STR,
+      },
+      required: ['start_date', 'end_date', 'price_per_night'],
+    },
+  },
+  {
+    name: 'show_view',
+    description: 'קישור לתצוגה בלבד, בלי לשנות נתונים.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        view: { type: 'STRING', enum: ['calendar', 'bookings', 'questions', 'reviews', 'new_zimmer', 'edit_zimmer'] },
+      },
+      required: ['view'],
+    },
+  },
+  {
+    name: 'open_form',
+    description: 'פתיחת טופס ידני רק כשחסרים פרטים רבים ובעל המתחם רוצה למלא לבד.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        form: { type: 'STRING', enum: ['block', 'price', 'booking'] },
+      },
+      required: ['form'],
+    },
+  },
+];
+
 /** Calendar day popup — price advice for one date. */
 export const CALENDAR_DAY_ADVICE_SCHEMA = {
   type: 'object',
@@ -364,7 +602,7 @@ export const AI_PROFILE_BASELINES = [
     responseJsonSchema: OWNER_ASSISTANT_SCHEMA,
     contractKeys: ['message', 'operation', 'actions', 'open_form'],
     actionValues: ['create_zimmer', 'update_zimmer', 'create_booking', 'update_booking', 'block_dates', 'add_seasonal_price'],
-    mutationPath: 'pending_action → confirm_action → clientState.confirmActionId',
+    mutationPath: 'pending_action → confirm_action → clientState.confirmActionId (function calling)',
     geminiSchemaStrict: true,
   },
   {

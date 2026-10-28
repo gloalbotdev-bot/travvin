@@ -22,6 +22,9 @@ export function prepareOwnerAssistantOperation(op, zimmers) {
   if (out.price_per_night != null && out.fields.price_per_night == null) {
     out.fields.price_per_night = out.price_per_night;
   }
+  for (const key of ['weekday_price', 'weekend_price', 'description', 'amenities', 'min_nights_rules', 'outdoor_area']) {
+    if (out[key] != null && out.fields[key] == null) out.fields[key] = out[key];
+  }
   if (out.zimmer_id) return out;
 
   const hint = out.zimmer_name || out.name;
@@ -29,7 +32,7 @@ export function prepareOwnerAssistantOperation(op, zimmers) {
     ? zimmers.find(
         (z) => z.name === hint || z.name.includes(hint) || hint.includes(z.name),
       )
-    : zimmers[0];
+    : null;
   if (matched) out.zimmer_id = matched.id;
   return out;
 }
