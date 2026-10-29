@@ -26,6 +26,10 @@ const MUTATION_CALLS = new Set([
 
 const CARD_HINT_RE = /כרטיס|ממתין לאישור|אשר\/?י בכרטיס|לאישור בכרטיס/;
 
+/** Confirm-card wording that must not survive when no card was actually proposed. */
+const CONFIRM_CARD_RESIDUE_RE =
+  /כרטיס\s+האישור|אשר(?:\/?י)?\s+בכרטיס|בכרטיס(?:\s+האישור)?(?:\s+למטה)?|ממתין לאישור בכרטיס|לאישור בכרטיס|אישור בכרטיס/;
+
 const FALSE_DONE_RE =
   /(?:^|[\s.,;:!?\-—])(?:בוצע|בוצעה|עודכן|עודכנה|נוסף|נוספה|נוספו|נשמר|נשמרה|הושלם|הושלמה|שיניתי|עדכנתי|הוספתי|יצרתי|ביצעתי|אישרתי|נפתר)(?:$|[\s.,;:!?\-—])/;
 
@@ -36,14 +40,26 @@ const FALSE_DONE_RE =
 export function stripConfirmCardLanguage(text) {
   let out = String(text || '');
   out = out.replace(/\n*\s*⏳\s*ממתין לאישור בכרטיס למטה[^\n]*/g, '');
-  out = out.replace(/אשר\/?י בכרטיס למטה\s*—?\s*[^.…\n]*/g, '');
+  out = out.replace(/אנא\s+אשר(?:\/?י)?\s+בכרטיס(?:\s+האישור)?(?:\s+למטה)?[^.…\n]*/g, '');
+  out = out.replace(/[^.…\n]*אשר(?:\/?י)?[^.…\n]*כרטיס[^.…\n]*/g, '');
+  out = out.replace(/[^.…\n]*כרטיס[^.…\n]*(?:האישור|למטה)[^.…\n]*/g, '');
+  out = out.replace(/אשר\/?י בכרטיס(?:\s+האישור)?(?:\s+למטה)?\s*—?\s*[^.…\n]*/g, '');
   out = out.replace(/ממתין לאישור בכרטיס למטה/g, '');
-  out = out.replace(/בכרטיס למטה/g, '');
+  out = out.replace(/בכרטיס(?:\s+האישור)?(?:\s+למטה)?/g, '');
+  out = out.replace(/כרטיס\s+האישור/g, '');
   out = out.replace(/לאישור בכרטיס/g, 'לאישור');
   out = out.replace(/אישור בכרטיס/g, 'אישור');
   out = out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   out = out.replace(/\s+\.$/, '.').replace(/\s{2,}/g, ' ').trim();
+  out = out.replace(/^[—\-–\s.]+|[—\-–\s.]+$/g, '').trim();
   return out;
+}
+
+/** @param {string} text @param {string} fallback */
+function textWithoutConfirmCard(text, fallback) {
+  const cleaned = stripConfirmCardLanguage(text);
+  if (!cleaned || CONFIRM_CARD_RESIDUE_RE.test(cleaned)) return fallback;
+  return cleaned;
 }
 
 /**
@@ -76,8 +92,8 @@ export function finalizeOwnerAssistantContent(content, opts = {}) {
       zimmers.some((z) => String(z?.name || '').trim() === name);
     if (isDuplicateCreate) return gateMsg;
     if (CARD_HINT_RE.test(text)) {
-      const cleaned = stripConfirmCardLanguage(text);
-      if (!cleaned || cleaned.length < 20 || looksDone) return gateMsg;
+      const cleaned = textWithoutConfirmCard(text, gateMsg);
+      if (cleaned === gateMsg || cleaned.length < 20 || looksDone) return gateMsg;
       return cleaned;
     }
     if (looksDone || text.length < 20) return gateMsg;
@@ -85,8 +101,7 @@ export function finalizeOwnerAssistantContent(content, opts = {}) {
   }
 
   if (CARD_HINT_RE.test(text)) {
-    const cleaned = stripConfirmCardLanguage(text);
-    return cleaned || 'אשמח לעזור — פרטי מה תרצי לעדכן או לשאול.';
+    return textWithoutConfirmCard(text, 'אשמח לעזור — פרטי מה תרצי לעדכן או לשאול.');
   }
   return text;
 }

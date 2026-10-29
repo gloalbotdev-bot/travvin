@@ -144,12 +144,41 @@ export function sanitizeOperation(raw) {
 const hasText = (v) => typeof v === 'string' && v.trim() !== '';
 const hasValue = (v) => v !== undefined && v !== null && v !== '';
 
+/** JSON-schema example tokens models invent when they call a tool without real fields. */
+const SCHEMA_PLACEHOLDERS = new Set([
+  'string',
+  'number',
+  'integer',
+  'boolean',
+  'null',
+  'undefined',
+  'none',
+  'placeholder',
+  'object',
+  'array',
+  'true',
+  'false',
+  'foo',
+  'bar',
+  'xxx',
+  'todo',
+  'tbd',
+  'n/a',
+  'na',
+  'name',
+  'test',
+]);
+
+function isSchemaPlaceholder(value) {
+  const n = String(value || '').trim().toLowerCase();
+  return SCHEMA_PLACEHOLDERS.has(n);
+}
+
 function badZimmerName(name) {
   const n = String(name || '').trim();
   if (n.length < 2) return true;
   if (/^[.\-…_\s]+$/.test(n)) return true;
-  const lower = n.toLowerCase();
-  if (lower === 'name' || lower === 'test') return true;
+  if (isSchemaPlaceholder(n)) return true;
   return false;
 }
 
@@ -217,7 +246,7 @@ export function isActionableOperation(op) {
   switch (op.type) {
     case 'create_zimmer':
       if (!hasText(op.name) || badZimmerName(op.name)) return false;
-      if (!hasText(op.location)) return false;
+      if (!hasText(op.location) || isSchemaPlaceholder(op.location)) return false;
       if ([op.price_per_night, op.weekday_price, op.weekend_price].some(zeroPrice)) return false;
       if (zonesDumpBeds(opDataZones(op)) && !opHasRoomsDetail(op)) return false;
       return true;
@@ -231,6 +260,9 @@ export function isActionableOperation(op) {
     }
     case 'create_booking': {
       const guests = Number(op.num_guests);
+      if (isSchemaPlaceholder(op.guest_name)) return false;
+      if (hasText(op.zimmer_name) && isSchemaPlaceholder(op.zimmer_name)) return false;
+      if (hasText(op.zimmer_id) && isSchemaPlaceholder(op.zimmer_id)) return false;
       return (
         hasText(op.guest_name) &&
         hasText(op.guest_phone) &&

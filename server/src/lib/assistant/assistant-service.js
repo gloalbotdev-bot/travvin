@@ -22,14 +22,13 @@ import {
   handleOwnerActionDecision,
   isActionDecision,
   isBareConfirmMessage,
-  operationAllowedByMode,
   rememberPendingForAdmin,
-  takeLatestPendingActionId,
+  shouldProposeOperation,
 } from './owner-actions.js';
 import {
   appendOwnerThreadTurns,
-  findLatestOpenPendingActionMessage,
   loadOwnerThread,
+  pendingActionOnLastBotMessage,
   threadWritable,
 } from './owner-thread.js';
 import {
@@ -79,13 +78,17 @@ export async function handleAssistantChat(body, actor, deps = {}) {
     isBareConfirmMessage(req.message) &&
     deps.store
   ) {
-    const latestId = await takeLatestPendingActionId(deps.store, actor, req.clientState);
-    if (latestId) {
+    const ownerId = resolveOwnerId(actor, req.clientState);
+    const pending =
+      ownerId && threadWritable(actor, ownerId)
+        ? pendingActionOnLastBotMessage(await loadOwnerThread(deps.store, ownerId, actor))
+        : null;
+    if (pending?.id) {
       return handleOwnerActionDecision(
         {
           ...req,
           message: 'אישור',
-          clientState: { ...(req.clientState || {}), confirmActionId: latestId },
+          clientState: { ...(req.clientState || {}), confirmActionId: pending.id },
         },
         profile,
         actor,
@@ -259,12 +262,12 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
     throw err;
   }
 
-  // Free-text confirm/cancel when a pending card is already open on the thread.
+  // Free-text confirm/cancel only when the latest bot bubble still shows the card.
   const textDecision = parseOwnerTextActionDecision(req.message);
   if (textDecision && threadWritable(actor, ownerId) && !isActionDecision(req.clientState)) {
     const thread = await loadOwnerThread(deps.store, ownerId, actor);
-    const pendingMsg = findLatestOpenPendingActionMessage(thread);
-    const actionId = pendingMsg?.pending_action?.id;
+    const pending = pendingActionOnLastBotMessage(thread);
+    const actionId = pending?.id;
     if (actionId) {
       return handleOwnerActionDecision(
         {
@@ -304,7 +307,7 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
   const llmMs = Date.now() - llmStarted;
 
   const parsed = parseOwnerAssistantResponse(llmRaw, { focus: ctx.focus });
-  parsed.operation = operationAllowedByMode(req.clientState, parsed.operation);
+  parsed.operation = shouldProposeOperation(req.message, parsed.operation, req.clientState);
   if (req.clientState?.mode === 'info') {
     parsed.uiEffects = [];
     parsed.actions = [];

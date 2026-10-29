@@ -55,6 +55,35 @@ export function operationAllowedByMode(clientState, operation) {
   return operation;
 }
 
+const INFO_QUESTION_RE = /^(?:כמה|מהם|מהן|מה|איזה|איזו|אילו|האם|מתי|איפה|היכן|למה|מדוע)(?:\s|$|[?!.,:;"'])/;
+
+const MUTATION_INTENT_RE =
+  /תיצור|תצרי|ליצור|ניצור|תוסיף|תוסיפי|להוסיף|נוסיף|תעדכן|תעדכני|לעדכן|נעדכן|תחסום|תחסמי|לחסום|נחסום|תמחור|תשנה|תשני|לשנות|צימר חדש|הזמנה חדשה|צור צימר|צור הזמנה|חסום את|חסום תאריך|להוסיף הזמנה/;
+
+/** A count/what/whether question, or any message that ends with a question mark. */
+export function isInformationQuestion(message) {
+  const text = String(message || '').trim();
+  if (!text) return false;
+  if (/[?؟]\s*$/.test(text)) return true;
+  return INFO_QUESTION_RE.test(text);
+}
+
+/** The owner asked to create, update, or block — not only to look something up. */
+export function hasMutationIntent(message) {
+  return MUTATION_INTENT_RE.test(String(message || ''));
+}
+
+/**
+ * Drop a tool call on an information question that does not ask for a change.
+ * Info mode is already dropped by operationAllowedByMode. A dropped op is not incomplete.
+ */
+export function shouldProposeOperation(message, operation, clientState) {
+  const allowed = operationAllowedByMode(clientState, operation);
+  if (!allowed) return null;
+  if (isInformationQuestion(message) && !hasMutationIntent(message)) return null;
+  return allowed;
+}
+
 /**
  * Confirm only the newest open card. Older open cards are closed and not executed.
  * @returns {Promise<string|null>} latest pending action id

@@ -153,6 +153,26 @@ export function findLatestOpenPendingActionMessage(thread) {
 }
 
 /**
+ * Text confirm ("כן" / "אישור") may run only when the latest bot bubble still
+ * holds that open card. An older pending behind a later answer is not confirmable this way.
+ * @returns {object|null} pending_action
+ */
+export function pendingActionOnLastBotMessage(thread) {
+  const msgs = Array.isArray(thread?.messages) ? thread.messages : [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const message = msgs[i];
+    if (!message || message.role === 'user') continue;
+    const pending = message.pending_action;
+    if (!pending?.id) return null;
+    const status = pending.status || 'pending';
+    if (status !== 'pending') return null;
+    if (pending.expiresAt && Date.parse(pending.expiresAt) < Date.now()) return null;
+    return pending;
+  }
+  return null;
+}
+
+/**
  * Tagged memory across all bubbles for the prompt, e.g. "[יומן] בעל המתחם: ...".
  * @param {object|null} thread
  * @param {number} [limit]
