@@ -214,6 +214,9 @@ function mockOwnerTools(payload) {
     functionCalls: [{ name, args }],
     model: 'mock',
   });
+  if (prompt.includes('MOCK_INFO_ONLY')) {
+    return { message: 'יש לך 3 צימרים.', functionCalls: [], model: 'mock' };
+  }
   if (prompt.includes('MOCK_ZIMMER_BUILD')) {
     return call('הנה הצימר', 'create_zimmer', {
       name: 'צימר Mock חדש',
@@ -265,6 +268,20 @@ function mockOwnerTools(payload) {
     return call('מעדכן הזמנה', 'update_booking', {
       guest_name: 'אורח Mock לעדכון',
       notes: 'עודכן ב-mock',
+    });
+  }
+  if (prompt.includes('MOCK_VALID_CREATE_ON_QUESTION')) {
+    return call('אנא אשר בכרטיס האישור למטה', 'create_zimmer', {
+      name: 'בקתת הארז',
+      location: 'דלתון',
+      price_per_night: 800,
+    });
+  }
+  if (prompt.includes('MOCK_JUNK_STRING_ZIMMER')) {
+    return call('אנא אשר בכרטיס האישור למטה', 'create_zimmer', {
+      name: 'string',
+      location: 'string',
+      price_per_night: 100,
     });
   }
   return { message: 'תשובת mock בעברית', functionCalls: [], model: 'mock' };

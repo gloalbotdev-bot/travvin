@@ -18,7 +18,7 @@ import {
 } from '../../src/lib/assistant/response-parser/owner-assistant.js';
 import { prepareOwnerAssistantOperation } from '../../src/lib/assistant/action-dispatcher.js';
 import { threadMemoryText } from '../../src/lib/assistant/owner-thread.js';
-import { createPendingAction } from '../../src/lib/assistant/owner-actions.js';
+import { createPendingAction, shouldProposeOperation } from '../../src/lib/assistant/owner-actions.js';
 import { mergeAmenitiesList } from '../../src/lib/owner-assistant-ops.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -105,6 +105,16 @@ function mainUnit() {
 
   const stripped = finalizeOwnerAssistantContent('הכנתי עדכון — אשרי בכרטיס למטה.', { hasPendingAction: false });
   assert(!stripped.includes('בכרטיס למטה'), 'card phrase removed when no card exists');
+  const cardAsk = finalizeOwnerAssistantContent('אנא אשר בכרטיס האישור למטה', { hasPendingAction: false });
+  assert(!cardAsk.includes('כרטיס'), 'approve-on-the-card-below phrase removed when no card exists');
+  const realOp = { type: 'create_zimmer', name: 'בקתת הארז', location: 'דלתון' };
+  assert(shouldProposeOperation('כמה צימרים יש לי?', realOp, { mode: 'edit' }) === null, 'edit-mode count question drops the operation');
+  assert(shouldProposeOperation('תיצור צימר בדלתון בשם ארזים', realOp, { mode: 'edit' }) === realOp, 'edit-mode create request keeps the operation');
+  assert(
+    shouldProposeOperation('כמה יעלה אם ניצור צימר בדלתון?', realOp, { mode: 'edit' }) === realOp,
+    'a question that also asks to create keeps the operation',
+  );
+  assert(shouldProposeOperation('מה ההזמנות שלי?', realOp, {}) === null, 'panel info question drops the operation');
 
   const merged = mergeAmenitiesList(['Wi-Fi', 'מזגן'], ['בריכה']);
   assert(merged.includes('Wi-Fi') && merged.includes('מזגן') && merged.includes('בריכה'), 'amenities merge keeps existing + new');
@@ -123,6 +133,35 @@ function mainUnit() {
   assert(memory.includes('הוצע: לחסום את צימר ספסופה שלי ב-20.11'), 'memory includes the proposal');
   assert(memory.includes('סטטוס: ממתין'), 'memory includes the card status');
   assert(createPendingAction({ type: 'create_zimmer', name: '...' }, [], 'owner_assistant') === null, 'placeholder zimmer name is not proposed');
+  assert(
+    createPendingAction({ type: 'create_zimmer', name: 'string', location: 'דלתון', price_per_night: 100 }, [], 'owner_assistant') === null,
+    'schema name string is not proposed',
+  );
+  assert(
+    createPendingAction({ type: 'create_zimmer', name: 'Villa Rosa', location: 'string', price_per_night: 100 }, [], 'owner_assistant') === null,
+    'schema location string is not proposed',
+  );
+  assert(
+    createPendingAction({ type: 'create_zimmer', name: 'Villa Rosa', location: 'דלתון', price_per_night: 100 }, [], 'owner_assistant')?.op?.name === 'Villa Rosa',
+    'a real latin zimmer name is proposed',
+  );
+  assert(
+    createPendingAction(
+      {
+        type: 'create_booking',
+        guest_name: 'string',
+        guest_phone: '050-1234567',
+        zimmer_name: 'בקתת הארז',
+        check_in: '2026-12-10',
+        check_out: '2026-12-12',
+        num_guests: 2,
+        status: 'אושרה',
+      },
+      [],
+      'owner_assistant',
+    ) === null,
+    'schema guest name is not proposed',
+  );
   assert(createPendingAction({ type: 'create_zimmer', name: 'name', location: 'צפת' }, [], 'owner_assistant') === null, 'literal name is not proposed');
   assert(createPendingAction({ type: 'create_zimmer', name: 'בקתת הארז', price_per_night: 0 }, [], 'owner_assistant') === null, 'zero price zimmer is not proposed');
   assert(createPendingAction({ type: 'create_zimmer', name: 'בקתת הארז' }, [], 'owner_assistant') === null, 'create without location is not proposed');
@@ -273,16 +312,6 @@ async function mainHttp() {
   );
   assert(!zimmers.some((z) => z.name === 'צימר Mock בדיקה'), 'zimmer not persisted before confirmation');
 
-  const infoMode = await chat(base, ownerTok, {
-    profile: 'owner_assistant',
-    message: 'MOCK_EXECUTE_CREATE_ZIMMER',
-    clientState: { ownerId: ownerRow.id, mode: 'info' },
-  });
-  assert(
-    !infoMode.json?.uiEffects?.some((e) => e.type === 'confirm_action'),
-    'info mode does not propose a card',
-  );
-
   const yes = await chat(base, ownerTok, {
     profile: 'owner_assistant',
     message: 'כן',
@@ -324,6 +353,66 @@ async function mainHttp() {
     { id: ownerRow.id, email: ownerEmail, role: 'owner' },
   );
   assert(blocks.length === 0, 'the older block card was not executed');
+
+  const infoMode = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'MOCK_EXECUTE_CREATE_ZIMMER',
+    clientState: { ownerId: ownerRow.id, mode: 'info' },
+  });
+  assert(
+    !infoMode.json?.uiEffects?.some((e) => e.type === 'confirm_action'),
+    'info mode does not propose a card',
+  );
+
+  const junkQuestion = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'כמה צימרים יש לי? MOCK_VALID_CREATE_ON_QUESTION',
+    clientState: { ownerId: ownerRow.id, mode: 'edit' },
+  });
+  assert(
+    !junkQuestion.json?.uiEffects?.some((e) => e.type === 'confirm_action'),
+    'edit-mode count question does not keep a create card',
+  );
+  assert(
+    !String(junkQuestion.json?.message?.content || '').includes('כרטיס'),
+    'count question reply does not mention a confirm card',
+  );
+  const junkName = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'תיצור צימר MOCK_JUNK_STRING_ZIMMER',
+    clientState: { ownerId: ownerRow.id, mode: 'edit' },
+  });
+  assert(
+    !junkName.json?.uiEffects?.some((e) => e.type === 'confirm_action'),
+    'schema name string does not become a card',
+  );
+
+  const stalePropose = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'MOCK_EXECUTE_BLOCK_DATES',
+    clientState: { ownerId: ownerRow.id, surface: 'calendar' },
+  });
+  assert(stalePropose.json?.uiEffects?.some((e) => e.opType === 'block_dates'), 'stale setup proposes a block card');
+  const asked = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'כמה צימרים יש לי? MOCK_INFO_ONLY',
+    clientState: { ownerId: ownerRow.id },
+  });
+  assert(!asked.json?.uiEffects?.some((e) => e.type === 'confirm_action'), 'later count question has no card');
+  const staleYes = await chat(base, ownerTok, {
+    profile: 'owner_assistant',
+    message: 'אישור',
+    clientState: { ownerId: ownerRow.id },
+  });
+  assert(!staleYes.json?.executedActions?.length, 'אישור after a later answer does not execute the old card');
+  const blocksAfterStale = await store.filter(
+    'BookingRequest',
+    { owner_id: ownerRow.id, is_block: true },
+    '-created_date',
+    5,
+    { id: ownerRow.id, email: ownerEmail, role: 'owner' },
+  );
+  assert(blocksAfterStale.length === 0, 'the old block card was not executed by a later אישור');
 
   const denied = await chat(base, customerTok, {
     profile: 'owner_assistant',

@@ -18,6 +18,7 @@ import * as serverPrice from '../../src/lib/booking-price.js';
 import { toGeminiSchema } from '../../src/lib/llm/gemini.js';
 import { OWNER_ASSISTANT_SCHEMA } from '../../src/lib/assistant/profiles.js';
 import { createPendingAction } from '../../src/lib/assistant/owner-actions.js';
+import { pendingActionOnLastBotMessage } from '../../src/lib/assistant/owner-thread.js';
 import * as clientPrice from '../../../src/lib/bookingPrice.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,8 +107,43 @@ function unitChecks() {
     'owner schema: only message is required (operation/open_form stay optional for Gemini)',
   );
   assert(createPendingAction({ type: 'create_zimmer' }, [], 'owner_assistant') === null, 'bare create_zimmer is not proposed');
+  assert(
+    createPendingAction({ type: 'create_zimmer', name: 'string', location: 'צפת', price_per_night: 100 }, [], 'owner_assistant') === null,
+    'schema name string is not proposed',
+  );
+  const openPending = { id: 'card-1', status: 'pending', expiresAt: new Date(Date.now() + 60_000).toISOString() };
+  assert(
+    pendingActionOnLastBotMessage({
+      messages: [
+        { role: 'bot', pending_action: openPending },
+        { role: 'user', content: 'כמה צימרים יש לי?' },
+        { role: 'bot', content: 'יש לך 3 צימרים.' },
+      ],
+    }) === null,
+    'pending behind a later answer is not text-confirmable',
+  );
+  assert(
+    pendingActionOnLastBotMessage({
+      messages: [
+        { role: 'user', content: 'תיצור צימר' },
+        { role: 'bot', pending_action: openPending },
+      ],
+    })?.id === 'card-1',
+    'pending on the last bot bubble is text-confirmable',
+  );
   assert(createPendingAction({ type: 'create_booking', guest_name: 'x' }, [], 'owner_assistant') === null, 'booking without dates is not proposed');
-  assert(createPendingAction({ type: 'block_dates', start_date: '2031-02-10' }, [], 'owner_assistant') !== null, 'block with a start date is proposed');
+  assert(
+    createPendingAction({ type: 'block_dates', start_date: '2031-02-10' }, [], 'owner_assistant') === null,
+    'block without a zimmer is not proposed',
+  );
+  assert(
+    createPendingAction(
+      { type: 'block_dates', zimmer_name: 'צימר בדיקה', start_date: '2031-02-10' },
+      [],
+      'owner_assistant',
+    ) !== null,
+    'block with a zimmer and a start date is proposed',
+  );
   assert(
     createPendingAction({ type: 'update_booking', guest_name: 'x' }, [], 'owner_assistant') === null,
     'update_booking with only guest_name (no change fields) is not proposed',
@@ -119,11 +155,12 @@ function unitChecks() {
   const priced = createPendingAction(
     {
       type: 'create_booking',
-      guest_name: 'י',
+      guest_name: 'יעל',
       guest_phone: '050',
       zimmer_name: 'צימר בדיקה',
       check_in: '2031-07-03',
       check_out: '2031-07-06',
+      num_guests: 2,
       status: 'אושרה',
       price_override: 0,
     },
@@ -416,6 +453,30 @@ async function main() {
       clientState: { confirmActionId: updEff?.actionId },
     });
     assert(updAgain.status === 409, `second update confirm → 409 (got ${updAgain.status})`);
+
+    const stalePropose = await chat(base, tokA, {
+      profile: 'owner_assistant',
+      message: 'MOCK_EXECUTE_CREATE_ZIMMER_ALT',
+      clientState: { surface: 'home' },
+    });
+    assert(confirmEffect(stalePropose)?.opType === 'create_zimmer', 'stale setup proposes a card');
+    const askedLater = await chat(base, tokA, {
+      profile: 'owner_assistant',
+      message: 'כמה צימרים יש לי? MOCK_INFO_ONLY',
+      clientState: { surface: 'home' },
+    });
+    assert(!confirmEffect(askedLater), 'count question after a card has no new card');
+    const staleYes = await chat(base, tokA, {
+      profile: 'owner_assistant',
+      message: 'אישור',
+      clientState: { surface: 'home' },
+    });
+    assert(!staleYes.json?.executedActions?.length, 'bare אישור after a later answer does not execute');
+    const altZimmers = await store.filter('Zimmer', { owner_id: ownerA.id }, '-created_date', 10, actorA);
+    assert(
+      altZimmers.filter((z) => z.name === 'צימר Mock חלופי').length === 0,
+      'old create card was not executed by a later אישור',
+    );
 
     // 10. One-shot owner profiles.
     const day = await chat(base, tokA, {

@@ -21,11 +21,15 @@ import {
   handleOwnerActionDecision,
   isActionDecision,
   isBareConfirmMessage,
-  operationAllowedByMode,
   rememberPendingForAdmin,
-  takeLatestPendingActionId,
+  shouldProposeOperation,
 } from './owner-actions.js';
-import { appendOwnerThreadTurns } from './owner-thread.js';
+import {
+  appendOwnerThreadTurns,
+  loadOwnerThread,
+  pendingActionOnLastBotMessage,
+  threadWritable,
+} from './owner-thread.js';
 import {
   ONESHOT_PROFILES,
   handleOneshotProfile,
@@ -73,13 +77,17 @@ export async function handleAssistantChat(body, actor, deps = {}) {
     isBareConfirmMessage(req.message) &&
     deps.store
   ) {
-    const latestId = await takeLatestPendingActionId(deps.store, actor, req.clientState);
-    if (latestId) {
+    const ownerId = resolveOwnerId(actor, req.clientState);
+    const pending =
+      ownerId && threadWritable(actor, ownerId)
+        ? pendingActionOnLastBotMessage(await loadOwnerThread(deps.store, ownerId, actor))
+        : null;
+    if (pending?.id) {
       return handleOwnerActionDecision(
         {
           ...req,
           message: 'אישור',
-          clientState: { ...(req.clientState || {}), confirmActionId: latestId },
+          clientState: { ...(req.clientState || {}), confirmActionId: pending.id },
         },
         profile,
         actor,
@@ -274,7 +282,7 @@ async function handleOwnerAssistantProfile(req, profile, actor, deps) {
   const llmMs = Date.now() - llmStarted;
 
   const parsed = parseOwnerAssistantResponse(llmRaw, { focus: ctx.focus });
-  parsed.operation = operationAllowedByMode(req.clientState, parsed.operation);
+  parsed.operation = shouldProposeOperation(req.message, parsed.operation, req.clientState);
   if (req.clientState?.mode === 'info') {
     parsed.uiEffects = [];
     parsed.actions = [];
