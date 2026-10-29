@@ -200,7 +200,8 @@ export function createAgent(ports) {
       surface: 'home',
     };
 
-    // Confirm / cancel a pending owner action (same path as the web confirmActionId flow).
+    // Confirm / cancel only the card offered on the previous reply.
+    // "1" / "2" count even if the numbered menu was not stored.
     const pendingId = session.pending_action_id || '';
     if (pendingId) {
       const decision = resolveActionDecision(message);
@@ -212,6 +213,9 @@ export function createAgent(ports) {
       } else if (decision === 'cancel') {
         clientState.cancelActionId = pendingId;
         message = 'ביטול פעולה';
+        session.pending_action_id = '';
+        session.quick_options = [];
+      } else {
         session.pending_action_id = '';
         session.quick_options = [];
       }
@@ -260,6 +264,8 @@ export function createAgent(ports) {
         { label: 'ביטול ❌', text: CANCEL_TOKEN },
         ...quickOptions.filter((o) => o.text !== CONFIRM_TOKEN && o.text !== CANCEL_TOKEN),
       ];
+    } else {
+      session.pending_action_id = '';
     }
 
     let reply = [content, ...rendered.lines].filter(Boolean).join('\n\n');
@@ -289,13 +295,17 @@ export function createAgent(ports) {
   return { handleMessage };
 }
 
-/** @param {string} message */
+/**
+ * Decision words for the card currently offered. "1" and "2" are included because
+ * this runs only while session.pending_action_id is set.
+ * @param {string} message
+ */
 function resolveActionDecision(message) {
   const n = String(message || '')
     .trim()
     .toLowerCase();
-  if (n === CONFIRM_TOKEN || n === 'כן' || n === 'אישור' || n === 'confirm' || n === 'yes') return 'confirm';
-  if (n === CANCEL_TOKEN || n === 'לא' || n === 'ביטול' || n === 'cancel' || n === 'no') return 'cancel';
+  if (n === CONFIRM_TOKEN || n === '1' || n === 'כן' || n === 'אישור' || n === 'confirm' || n === 'yes') return 'confirm';
+  if (n === CANCEL_TOKEN || n === '2' || n === 'לא' || n === 'ביטול' || n === 'cancel' || n === 'no') return 'cancel';
   return null;
 }
 

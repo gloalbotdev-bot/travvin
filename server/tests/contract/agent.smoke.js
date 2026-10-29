@@ -187,6 +187,41 @@ async function confirmChecks() {
   assert(!yes.session.pending_action_id, 'pending cleared after confirm');
 }
 
+async function digitWithoutMenuChecks() {
+  const { agent, brain, sessions } = setup();
+  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'מצב עריכה' });
+  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'צור הזמנה לדני מחר' });
+  const row = sessions.rows.get(`whatsapp:${OWNER}`);
+  sessions.rows.set(`whatsapp:${OWNER}`, { ...row, quick_options: [] });
+  const cancel = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: '2' });
+  assert(
+    brain.calls.some((c) => c.req.clientState.cancelActionId === 'act-1'),
+    '2 cancels the current card even without quick options',
+  );
+  assert(cancel.reply.includes('בוטל: act-1'), '2 runs the shared cancel path');
+  assert(!cancel.session.pending_action_id, 'pending cleared after 2');
+}
+
+async function staleCardChecks() {
+  const { agent, brain } = setup();
+  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'מצב עריכה' });
+  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'צור הזמנה לדני מחר' });
+  const question = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'כמה צימרים יש לי?' });
+  assert(!question.session.pending_action_id, 'a later question clears the session card');
+  assert(!question.session.quick_options?.length, 'a later question clears the 1/2 menu');
+  const asked = brain.calls[brain.calls.length - 1];
+  assert(asked.req.message === 'כמה צימרים יש לי?' && !asked.req.clientState.confirmActionId,
+    'the question reaches the brain as text');
+  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'אישור' });
+  assert(
+    !brain.calls.some((c) => c.req.clientState.confirmActionId === 'act-1'),
+    'אישור after a later question does not confirm the old card',
+  );
+  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: '2' });
+  const two = brain.calls[brain.calls.length - 1];
+  assert(two.req.message === '2' && !two.req.clientState.cancelActionId, '2 after the card is gone is plain text');
+}
+
 async function safetyChecks() {
   const { agent, brain, sessions } = setup();
   const amb = await agent.handleMessage({ channel: 'whatsapp', address: SHARED, text: 'ההזמנות שלי' });
@@ -260,6 +295,8 @@ commandChecks();
 await ownersOnlyChecks();
 await ownerChecks();
 await confirmChecks();
+await digitWithoutMenuChecks();
+await staleCardChecks();
 await safetyChecks();
 await botChecks();
 
