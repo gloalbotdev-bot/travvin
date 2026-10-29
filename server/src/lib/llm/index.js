@@ -1,8 +1,8 @@
 /**
  * InvokeLLM facade — same contract as Base44 Core.InvokeLLM.
  * Provider: Gemini only (single GEMINI_API_KEY) — decisions.md §5.
- * { prompt, response_json_schema?, add_context_from_internet?, model?, files? }
- * → string (no schema) | object (with schema)
+ * { prompt, response_json_schema?, tools?, add_context_from_internet?, model?, files? }
+ * → string (no schema) | object (with schema) | { message, functionCalls, model } (with tools)
  */
 import { invokeGemini } from './gemini.js';
 
@@ -28,11 +28,15 @@ export async function invokeLlm(payload = {}, deps = {}) {
     response_json_schema: payload.response_json_schema,
     add_context_from_internet: payload.add_context_from_internet === true,
     files: Array.isArray(payload.files) ? payload.files : [],
+    tools: Array.isArray(payload.tools) ? payload.tools : [],
     fetchImpl: deps.fetchImpl,
   });
 }
 
 function mockInvoke(payload) {
+  if (Array.isArray(payload.tools) && payload.tools.length) {
+    return mockOwnerTools(payload);
+  }
   if (payload.response_json_schema) {
     const props = payload.response_json_schema?.properties || {};
     const prompt = String(payload.prompt || '');
@@ -119,6 +123,20 @@ function mockInvoke(payload) {
       const full = String(payload.prompt || '');
       const at = full.lastIndexOf('MOCK_');
       const prompt = at >= 0 ? full.slice(at, at + 40) : '';
+      if (prompt.includes('MOCK_EXECUTE_CREATE_ZIMMER_ALT')) {
+        return {
+          message: 'יוצר צימר חלופי לבדיקה',
+          operation: {
+            type: 'create_zimmer',
+            name: 'צימר Mock חלופי',
+            location: 'טבריה',
+            price_per_night: 560,
+            num_rooms: 2,
+            max_guests: 4,
+          },
+          actions: [],
+        };
+      }
       if (prompt.includes('MOCK_EXECUTE_CREATE_ZIMMER')) {
         return {
           message: 'יוצר צימר חדש לבדיקה',
@@ -184,4 +202,70 @@ function mockInvoke(payload) {
     };
   }
   return 'תשובת mock בעברית';
+}
+
+/** Owner assistant function-calling mock. Same MOCK_ tokens as the JSON schema mock. */
+function mockOwnerTools(payload) {
+  const full = String(payload.prompt || '');
+  const at = full.lastIndexOf('MOCK_');
+  const prompt = at >= 0 ? full.slice(at, at + 40) : '';
+  const call = (message, name, args) => ({
+    message,
+    functionCalls: [{ name, args }],
+    model: 'mock',
+  });
+  if (prompt.includes('MOCK_ZIMMER_BUILD')) {
+    return call('הנה הצימר', 'create_zimmer', {
+      name: 'צימר Mock חדש',
+      location: 'גליל',
+      price_per_night: 500,
+      weekday_price: 500,
+      weekend_price: 700,
+      num_rooms: 2,
+      max_guests: 4,
+      description: 'תיאור mock',
+    });
+  }
+  if (prompt.includes('MOCK_EXECUTE_CREATE_ZIMMER_ALT')) {
+    return call('יוצר צימר חלופי לבדיקה', 'create_zimmer', {
+      name: 'צימר Mock חלופי',
+      location: 'טבריה',
+      price_per_night: 560,
+      num_rooms: 2,
+      max_guests: 4,
+    });
+  }
+  if (prompt.includes('MOCK_EXECUTE_CREATE_ZIMMER')) {
+    return call('יוצר צימר חדש לבדיקה', 'create_zimmer', {
+      name: 'צימר Mock בדיקה',
+      location: 'צפת',
+      price_per_night: 550,
+      num_rooms: 2,
+      max_guests: 4,
+    });
+  }
+  if (prompt.includes('MOCK_EXECUTE_BLOCK_DATES')) {
+    return call('חוסם תאריכים', 'block_dates', {
+      zimmer_name: 'צימר Mock בדיקה',
+      start_date: '2031-02-10',
+      end_date: '2031-02-12',
+      reason: 'שיפוץ',
+    });
+  }
+  if (prompt.includes('MOCK_OPEN_FORM_BLOCK')) {
+    return call('פותח טופס חסימה', 'open_form', { form: 'block' });
+  }
+  if (prompt.includes('MOCK_EXECUTE_UPDATE_ZIMMER')) {
+    return call('מעדכן מחיר', 'update_zimmer', {
+      zimmer_id: 'REPLACE_AT_RUNTIME',
+      fields: { price_per_night: 777 },
+    });
+  }
+  if (prompt.includes('MOCK_EXECUTE_UPDATE_BOOKING')) {
+    return call('מעדכן הזמנה', 'update_booking', {
+      guest_name: 'אורח Mock לעדכון',
+      notes: 'עודכן ב-mock',
+    });
+  }
+  return { message: 'תשובת mock בעברית', functionCalls: [], model: 'mock' };
 }

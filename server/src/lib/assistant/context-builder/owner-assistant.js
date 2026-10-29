@@ -5,7 +5,7 @@ import { sanitizeOwnerText } from '../../sanitize-prompt-data.js';
 import { buildOwnerBaseContext, parseOwnerSurface } from './owner-base.js';
 
 const MAX_RECENT_TURNS = 20;
-const ASSISTANT_SURFACES = new Set(['home', 'calendar', 'bookings', 'messages']);
+const ASSISTANT_SURFACES = new Set(['home', 'calendar', 'bookings', 'messages', 'zimmer_creator']);
 
 export function parseOwnerClientState(clientState) {
   const base =
@@ -72,9 +72,12 @@ export async function buildOwnerAssistantContext(deps, input) {
         .map((m) => (m.role === 'user' ? `בעל מתחם: ${m.content}` : `עוזר: ${m.content}`))
         .join('\n');
 
+  const mode = clientState?.mode === 'info' || clientState?.mode === 'edit' ? clientState.mode : null;
+
   return {
     ...base,
     surface: parsed.surface,
+    assistantMode: mode,
     historyText,
     contextStr: base.snapshotStr,
   };

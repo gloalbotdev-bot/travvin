@@ -5,7 +5,12 @@
  * owner + expiry + single execution, runs the whitelisted op and returns executedActions.
  */
 import { randomUUID } from 'node:crypto';
-import { describeOwnerOperation, isActionableOperation, sanitizeOperation } from '../owner-assistant-ops.js';
+import {
+  describeOwnerOperation,
+  findDuplicateZimmerName,
+  isActionableOperation,
+  sanitizeOperation,
+} from '../owner-assistant-ops.js';
 import { dispatchOwnerAssistantOperation, prepareOwnerAssistantOperation } from './action-dispatcher.js';
 import { appendOwnerActionLog } from './conversation-service.js';
 import { resolveOwnerId } from './context-builder/owner-assistant.js';
@@ -34,6 +39,51 @@ export function isActionDecision(clientState) {
   );
 }
 
+/** Bare "כן" / "אישור" — not "כן, כמאושרת" and not a sentence. */
+export function isBareConfirmMessage(message) {
+  const text = String(message || '').trim().replace(/[.!?…]+$/u, '').trim();
+  return text === 'כן' || text === 'אישור';
+}
+
+export function assistantTurnMode(clientState) {
+  return clientState?.mode === 'info' || clientState?.mode === 'edit' ? clientState.mode : null;
+}
+
+/** Info mode never proposes a card. Edit mode and the website (no mode) may. */
+export function operationAllowedByMode(clientState, operation) {
+  if (assistantTurnMode(clientState) === 'info') return null;
+  return operation;
+}
+
+/**
+ * Confirm only the newest open card. Older open cards are closed and not executed.
+ * @returns {Promise<string|null>} latest pending action id
+ */
+export async function takeLatestPendingActionId(store, actor, clientState) {
+  const ownerId = resolveOwnerId(actor, clientState);
+  if (!ownerId || !store || !threadWritable(actor, ownerId)) return null;
+  const thread = await loadOwnerThread(store, ownerId, actor);
+  const now = Date.now();
+  const open = (thread?.messages || []).filter((m) => {
+    const pending = m?.pending_action;
+    return pending?.status === 'pending' && Date.parse(pending.expiresAt) >= now;
+  });
+  if (!open.length) return null;
+  const latest = open[open.length - 1].pending_action;
+  const olderIds = new Set(open.slice(0, -1).map((m) => m.pending_action.id));
+  if (olderIds.size) {
+    await mutateOwnerThread(store, ownerId, actor, (messages) => {
+      for (const message of messages) {
+        const pending = message.pending_action;
+        if (pending && olderIds.has(pending.id) && pending.status === 'pending') {
+          message.pending_action = { ...pending, status: 'cancelled' };
+        }
+      }
+    });
+  }
+  return latest.id;
+}
+
 /**
  * @param {object} rawOp
  * @param {object[]} zimmers
@@ -43,6 +93,12 @@ export function isActionDecision(clientState) {
 export function createPendingAction(rawOp, zimmers, profileId) {
   const sanitized = sanitizeOperation(rawOp);
   if (!isActionableOperation(sanitized)) return null;
+  if (
+    sanitized.type === 'create_zimmer' &&
+    findDuplicateZimmerName(sanitized.name, zimmers || [])
+  ) {
+    return null;
+  }
   const op = prepareOwnerAssistantOperation(sanitized, zimmers || []);
   const { summary, details } = describeOwnerOperation(op, zimmers || []);
   return {

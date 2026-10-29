@@ -157,6 +157,22 @@ export function findLatestOpenPendingActionMessage(thread) {
  * @param {object|null} thread
  * @param {number} [limit]
  */
+const CARD_STATUS_LABELS = {
+  pending: 'ממתין',
+  done: 'בוצע',
+  cancelled: 'בוטל',
+  expired: 'פג תוקף',
+};
+
+function cardMemorySuffix(message) {
+  const pending = message?.pending_action;
+  if (!pending || typeof pending !== 'object') return '';
+  const summary = sanitizeOwnerText(String(pending.summary || '').trim());
+  if (!summary) return '';
+  const status = CARD_STATUS_LABELS[pending.status] || '';
+  return status ? ` הוצע: ${summary}. סטטוס: ${status}.` : ` הוצע: ${summary}.`;
+}
+
 export function threadMemoryText(thread, limit = THREAD_MEMORY_TURNS) {
   const msgs = Array.isArray(thread?.messages) ? thread.messages.slice(-limit) : [];
   return msgs
@@ -164,7 +180,7 @@ export function threadMemoryText(thread, limit = THREAD_MEMORY_TURNS) {
     .map((m) => {
       const tag = SURFACE_LABELS[m.surface] || SURFACE_LABELS.home;
       const who = m.role === 'user' ? 'בעל המתחם' : 'עוזר';
-      return `[${tag}] ${who}: ${sanitizeOwnerText(m.content)}`;
+      return `[${tag}] ${who}: ${sanitizeOwnerText(m.content)}${cardMemorySuffix(m)}`;
     })
     .join('\n');
 }

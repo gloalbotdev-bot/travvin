@@ -136,11 +136,76 @@ export function sanitizeOperation(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const type = raw.type;
   if (!OP_TYPES.has(type)) return null;
-  return { ...raw, type };
+  let op = { ...raw, type };
+  if (type === 'create_zimmer') op = applySinglePriceFill(op);
+  return op;
 }
 
 const hasText = (v) => typeof v === 'string' && v.trim() !== '';
 const hasValue = (v) => v !== undefined && v !== null && v !== '';
+
+function badZimmerName(name) {
+  const n = String(name || '').trim();
+  if (n.length < 2) return true;
+  if (/^[.\-…_\s]+$/.test(n)) return true;
+  const lower = n.toLowerCase();
+  if (lower === 'name' || lower === 'test') return true;
+  return false;
+}
+
+function zeroPrice(value) {
+  return value === 0 || value === '0';
+}
+
+const BED_DUMP_RE = /מיט(?:ה|ות)|מיטות|חדרי?\s*שינה|ספה\s*נפתחת|קומת(?:יים)?|מזרן/;
+
+function zonesDumpBeds(zones) {
+  if (!Array.isArray(zones)) return false;
+  return zones.some((z) => BED_DUMP_RE.test(String(z?.content || z?.title || '')));
+}
+
+function opHasRoomsDetail(op) {
+  const rooms = op?.rooms_detail ?? op?.fields?.rooms_detail;
+  return Array.isArray(rooms) && rooms.length > 0;
+}
+
+function opDataZones(op) {
+  return op?.data_zones ?? op?.fields?.data_zones;
+}
+
+function hasZimmerTarget(op) {
+  return hasText(op.zimmer_id) || hasText(op.zimmer_name) || hasText(op.name);
+}
+
+function hasAbsoluteSeasonalPrice(op) {
+  return [op.price_per_night, op.weekday_price, op.weekend_price].some(
+    (v) => hasValue(v) && !zeroPrice(v),
+  );
+}
+
+/** Same-owner duplicate name (exact trim match). */
+export function findDuplicateZimmerName(name, zimmers) {
+  const q = String(name || '').trim();
+  if (!q || !Array.isArray(zimmers)) return null;
+  return zimmers.find((z) => String(z?.name || '').trim() === q) || null;
+}
+
+/**
+ * Fill a single stated price into weekday + weekend (+ base) when siblings are missing.
+ * @param {object} op
+ */
+export function applySinglePriceFill(op) {
+  if (!op || typeof op !== 'object') return op;
+  const one = [op.price_per_night, op.weekday_price, op.weekend_price].find(
+    (v) => hasValue(v) && !zeroPrice(v),
+  );
+  if (one == null) return op;
+  const next = { ...op };
+  if (!hasValue(next.price_per_night)) next.price_per_night = one;
+  if (!hasValue(next.weekday_price)) next.weekday_price = one;
+  if (!hasValue(next.weekend_price)) next.weekend_price = one;
+  return next;
+}
 
 /**
  * True when a proposed operation carries the minimum it needs to run — LLMs with
@@ -151,14 +216,33 @@ export function isActionableOperation(op) {
   if (!op) return false;
   switch (op.type) {
     case 'create_zimmer':
-      return hasText(op.name);
+      if (!hasText(op.name) || badZimmerName(op.name)) return false;
+      if (!hasText(op.location)) return false;
+      if ([op.price_per_night, op.weekday_price, op.weekend_price].some(zeroPrice)) return false;
+      if (zonesDumpBeds(opDataZones(op)) && !opHasRoomsDetail(op)) return false;
+      return true;
     case 'update_zimmer': {
+      const hasTarget = hasZimmerTarget(op);
       const fieldKeys = op.fields && typeof op.fields === 'object' ? Object.keys(op.fields).filter((k) => hasValue(op.fields[k])) : [];
       const topKeys = [...ZIMMER_MUTABLE_FIELDS, 'price'].filter((k) => k !== 'name' && hasValue(op[k]));
-      return fieldKeys.length > 0 || topKeys.length > 0;
+      if (!hasTarget || (fieldKeys.length === 0 && topKeys.length === 0)) return false;
+      if (zonesDumpBeds(opDataZones(op)) && !opHasRoomsDetail(op)) return false;
+      return true;
     }
-    case 'create_booking':
-      return hasText(op.guest_name) && hasText(op.check_in) && hasText(op.check_out);
+    case 'create_booking': {
+      const guests = Number(op.num_guests);
+      return (
+        hasText(op.guest_name) &&
+        hasText(op.guest_phone) &&
+        (hasText(op.zimmer_name) || hasText(op.zimmer_id)) &&
+        hasText(op.check_in) &&
+        hasText(op.check_out) &&
+        hasText(op.status) &&
+        BOOKING_STATUSES.has(op.status) &&
+        Number.isFinite(guests) &&
+        guests > 0
+      );
+    }
     case 'update_booking': {
       const hasTarget = hasText(op.booking_id) || hasText(op.guest_name);
       // guest_name / check_in alone identify the row; they count as changes only with booking_id.
@@ -168,10 +252,9 @@ export function isActionableOperation(op) {
       return hasTarget && hasChange;
     }
     case 'block_dates':
-      return hasText(op.start_date);
+      return hasZimmerTarget(op) && hasText(op.start_date);
     case 'add_seasonal_price':
-      return hasText(op.start_date) && hasText(op.end_date) &&
-        [op.price_per_night, op.weekday_price, op.weekend_price, op.percentage].some(hasValue);
+      return hasZimmerTarget(op) && hasText(op.start_date) && hasText(op.end_date) && hasAbsoluteSeasonalPrice(op);
     default:
       return false;
   }
@@ -199,10 +282,25 @@ export function describeOwnerOperation(op, zimmers = []) {
       if (f.weekend_price != null) details.push(`סופ"ש: ₪${f.weekend_price}`);
       if (f.num_rooms != null) details.push(`חדרים: ${f.num_rooms}`);
       if (f.max_guests != null) details.push(`אורחים: ${f.max_guests}`);
+      if (f.additional_bathrooms_count) details.push(`חדרי רחצה נוספים: ${f.additional_bathrooms_count}`);
+      if (f.contact_phone) details.push(`טלפון: ${f.contact_phone}`);
+      const amenityLine = amenityNames(f.amenities);
+      if (amenityLine) details.push(`מתקנים: ${amenityLine}`);
+      const roomsLine = formatRoomsLine(f.rooms_detail);
+      if (roomsLine) details.push(roomsLine);
+      const yardLine = formatOutdoorLine(f.outdoor_area);
+      if (yardLine) details.push(yardLine);
+      if (Array.isArray(f.min_nights_rules)) {
+        details.push(`מינימום לילות: ${describeMinNightsRules({ min_nights_rules: f.min_nights_rules }) || 'ללא'}`);
+      }
+      const zones = Array.isArray(f.data_zones)
+        ? f.data_zones.map((z) => String(z?.content || '').trim()).filter(Boolean)
+        : [];
+      if (zones.length) details.push(`מידע נוסף: ${zones.join(' · ')}`);
       return { summary: `ליצור צימר חדש "${op.name || ''}"`, details };
     }
     case 'update_zimmer': {
-      const fields = pickZimmerFields({ ...(op.fields || {}) });
+      const fields = pickZimmerFields(liftZimmerFields(op));
       return {
         summary: `לעדכן את "${zimmerName || 'הצימר'}"`,
         details: Object.keys(fields).length ? [formatUpdateDetail(fields)] : [],
@@ -395,6 +493,62 @@ function amenityLabel(a) {
   return '';
 }
 
+function amenityNames(list) {
+  if (!Array.isArray(list)) return '';
+  return list.map(amenityLabel).filter(Boolean).join(', ');
+}
+
+const BED_LABELS = {
+  king: 'מלכותית',
+  queen: 'זוגית',
+  single: 'יחיד',
+  bunk: 'קומתיים',
+  sofa_bed: 'ספה נפתחת',
+  mattress: 'מזרן',
+};
+
+function formatRoomsLine(rooms) {
+  if (!Array.isArray(rooms) || !rooms.length) return '';
+  const parts = rooms.map((room) => {
+    const beds = (Array.isArray(room?.beds) ? room.beds : [])
+      .map((bed) => {
+        const label = bed?.custom_label || BED_LABELS[bed?.bed_type] || bed?.bed_type || 'מיטה';
+        const count = Number(bed?.count) || 1;
+        return `${count} ${label}`;
+      })
+      .filter(Boolean);
+    const bath = room?.has_bathroom ? ', מקלחת צמודה' : '';
+    return `${room?.room_name || 'חדר'}: ${beds.join(', ') || 'בלי מיטות'}${bath}`;
+  });
+  return `חדרים: ${parts.join(' · ')}`;
+}
+
+function formatOutdoorLine(area) {
+  if (!area || typeof area !== 'object') return '';
+  const items = Array.isArray(area.items) ? area.items : [];
+  const bits = items.map((item) => {
+    if (!item?.name) return '';
+    const flags = [
+      item.heated ? 'מחומם' : '',
+      item.covered ? 'מקורה' : '',
+      item.size || '',
+      item.hours || '',
+    ].filter(Boolean);
+    return flags.length ? `${item.name} (${flags.join(', ')})` : item.name;
+  }).filter(Boolean);
+  const size = area.size_sqm ? `${area.size_sqm} מ"ר` : '';
+  const head = ['חצר', size, area.privacy === 'private' ? 'פרטית' : area.privacy === 'shared' ? 'משותפת' : ''].filter(Boolean).join(' ');
+  return bits.length ? `${head}: ${bits.join(', ')}` : head;
+}
+
+function liftZimmerFields(op) {
+  const fields = { ...(op.fields || {}) };
+  for (const key of ['weekday_price', 'weekend_price', 'price_per_night', 'description', 'amenities', 'min_nights_rules', 'outdoor_area']) {
+    if (op[key] != null && fields[key] == null) fields[key] = op[key];
+  }
+  return fields;
+}
+
 /** Keep existing amenities when the incoming list barely overlaps (additive update). */
 export function mergeAmenitiesList(existingRaw, incomingRaw) {
   const existing = Array.isArray(existingRaw) ? existingRaw : [];
@@ -407,7 +561,8 @@ export function mergeAmenitiesList(existingRaw, incomingRaw) {
   const existingSet = new Set(existingLabels.map((s) => s.toLowerCase()));
   const covered = incomingLabels.filter((s) => existingSet.has(s.toLowerCase())).length;
   const coverage = existingLabels.length ? covered / existingLabels.length : 1;
-  if (coverage >= 0.5) return incoming;
+  const removal = incomingLabels.length > 0 && incomingLabels.every((s) => existingSet.has(s.toLowerCase())) && incomingLabels.length < existingLabels.length;
+  if (coverage >= 0.5 || removal) return incoming;
 
   const seen = new Set(existingLabels.map((s) => s.toLowerCase()));
   const merged = [...existing];
@@ -448,6 +603,26 @@ function formatUpdateDetail(clean) {
     const label = UPDATE_FIELD_LABELS[key] || key;
     if (key === 'min_nights_rules') {
       parts.push(`${label}: ${describeMinNightsRules({ min_nights_rules: value }) || 'ללא'}`);
+      continue;
+    }
+    if (key === 'amenities') {
+      const names = amenityNames(value);
+      if (names) parts.push(`${label}: ${names}`);
+      continue;
+    }
+    if (key === 'outdoor_area') {
+      const line = formatOutdoorLine(value);
+      if (line) parts.push(`מתחם חיצוני — ${line}`);
+      continue;
+    }
+    if (key === 'rooms_detail') {
+      const line = formatRoomsLine(value);
+      if (line) parts.push(line);
+      continue;
+    }
+    if (key === 'data_zones' && Array.isArray(value)) {
+      const zones = value.map((z) => String(z?.content || '').trim()).filter(Boolean);
+      if (zones.length) parts.push(`מידע נוסף: ${zones.join(' · ')}`);
       continue;
     }
     if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
