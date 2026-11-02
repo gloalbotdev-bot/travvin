@@ -5,7 +5,7 @@ A channel-independent conversational agent: the same AI that owners use in the w
 ```
 lib/agent/
   core.js       createAgent(ports): identity → commands → AI → plain-text reply. No app imports.
-  commands.js   Hebrew + English channel commands (עזרה/help, חדש/reset, מצב עריכה/edit…). No app imports.
+  commands.js   Hebrew + English channel commands (עזרה/help, חדש/reset, …). No app imports.
   travvin.js    App binding: assistant, users, WhatsAppSession, zimmer render.
 lib/whatsapp-bot/
   index.js      WhatsApp channel: webhook events → agent → reply (dedupe, per-sender ordering, text-only).
@@ -40,9 +40,11 @@ WhatsApp → provider webhook → routes/whatsapp.js → whatsapp-bot (dedupe, l
 - Ambiguous phone (multiple users) → refused.
 - **v1: owners/admins only** — customers and anonymous get a polite refusal.
 - Phone must be set on the user profile (owner settings / admin edit / invite). No OTP — matching the phone is enough.
-- Owners start in read-only *info* mode; *מצב עריכה* (30 min) for writes.
-- Pending owner actions use the same confirm/cancel path as the web app.
+- No edit-mode gate (same as the panel): writes are proposals only until confirm.
+- Pending owner actions use the same confirm/cancel path as the web app (`1` approve / `2` cancel on WhatsApp).
+- A later non-confirm message clears the session’s current card binding so stale `1`/`2` do not execute old proposals.
 - *עצור* / *stop* opts out until *הפעל* / *start*.
+- Legacy *מצב עריכה* / *מצב מידע* reply that edit mode is no longer required (compat only).
 
 ## Current limits
 

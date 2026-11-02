@@ -107,6 +107,10 @@ function mainUnit() {
   assert(!stripped.includes('בכרטיס למטה'), 'card phrase removed when no card exists');
   const cardAsk = finalizeOwnerAssistantContent('אנא אשר בכרטיס האישור למטה', { hasPendingAction: false });
   assert(!cardAsk.includes('כרטיס'), 'approve-on-the-card-below phrase removed when no card exists');
+  const ghostProposal = finalizeOwnerAssistantContent('הכנתי הצעה', { hasPendingAction: false });
+  assert(!ghostProposal.includes('הכנתי הצעה'), 'bare proposal claim removed when no card exists');
+  const ghostWaiting = finalizeOwnerAssistantContent('מחכה לאישור שלך', { hasPendingAction: false });
+  assert(!/מחכה לאישור/.test(ghostWaiting), 'waiting-for-approval claim removed when no card exists');
   const realOp = { type: 'create_zimmer', name: 'בקתת הארז', location: 'דלתון' };
   assert(shouldProposeOperation('כמה צימרים יש לי?', realOp, { mode: 'edit' }) === null, 'edit-mode count question drops the operation');
   assert(shouldProposeOperation('תיצור צימר בדלתון בשם ארזים', realOp, { mode: 'edit' }) === realOp, 'edit-mode create request keeps the operation');

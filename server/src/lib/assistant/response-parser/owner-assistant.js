@@ -24,17 +24,19 @@ const MUTATION_CALLS = new Set([
   'add_seasonal_price',
 ]);
 
-const CARD_HINT_RE = /כרטיס|ממתין לאישור|אשר\/?י בכרטיס|לאישור בכרטיס/;
+/** Wording that implies a confirm card / waiting approval — strip when no card exists. */
+const CARD_HINT_RE =
+  /כרטיס|ממתין לאישור|ממתינה לאישור|מחכה לאישור|הכנתי הצעה|אשר\/?י בכרטיס|לאישור בכרטיס/;
 
-/** Confirm-card wording that must not survive when no card was actually proposed. */
+/** Confirm-card / ghost-proposal wording that must not survive when no card was proposed. */
 const CONFIRM_CARD_RESIDUE_RE =
-  /כרטיס\s+האישור|אשר(?:\/?י)?\s+בכרטיס|בכרטיס(?:\s+האישור)?(?:\s+למטה)?|ממתין לאישור בכרטיס|לאישור בכרטיס|אישור בכרטיס/;
+  /כרטיס\s+האישור|אשר(?:\/?י)?\s+בכרטיס|בכרטיס(?:\s+האישור)?(?:\s+למטה)?|ממתין לאישור|ממתינה לאישור|מחכה לאישור|הכנתי הצעה|לאישור בכרטיס|אישור בכרטיס/;
 
 const FALSE_DONE_RE =
   /(?:^|[\s.,;:!?\-—])(?:בוצע|בוצעה|עודכן|עודכנה|נוסף|נוספה|נוספו|נשמר|נשמרה|הושלם|הושלמה|שיניתי|עדכנתי|הוספתי|יצרתי|ביצעתי|אישרתי|נפתר)(?:$|[\s.,;:!?\-—])/;
 
 /**
- * Remove “approve on the card below” language when no pending action exists.
+ * Remove “approve on the card below” / ghost-proposal language when no pending action exists.
  * @param {string} text
  */
 export function stripConfirmCardLanguage(text) {
@@ -44,6 +46,9 @@ export function stripConfirmCardLanguage(text) {
   out = out.replace(/[^.…\n]*אשר(?:\/?י)?[^.…\n]*כרטיס[^.…\n]*/g, '');
   out = out.replace(/[^.…\n]*כרטיס[^.…\n]*(?:האישור|למטה)[^.…\n]*/g, '');
   out = out.replace(/אשר\/?י בכרטיס(?:\s+האישור)?(?:\s+למטה)?\s*—?\s*[^.…\n]*/g, '');
+  out = out.replace(/הכנתי הצעה(?:\s*לביצוע)?[^.…\n]*/g, '');
+  out = out.replace(/מחכה לאישור[^.…\n]*/g, '');
+  out = out.replace(/ממתינה? לאישור(?:\s*בכרטיס(?:\s+למטה)?)?[^.…\n]*/g, '');
   out = out.replace(/ממתין לאישור בכרטיס למטה/g, '');
   out = out.replace(/בכרטיס(?:\s+האישור)?(?:\s+למטה)?/g, '');
   out = out.replace(/כרטיס\s+האישור/g, '');
