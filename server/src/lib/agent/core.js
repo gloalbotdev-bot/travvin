@@ -7,6 +7,7 @@
  * (see contract below and ./travvin.js for the app binding).
  *
  * v1 product rule: owners/admins only. Guests and customers are refused on this channel.
+ * Writes use the same confirm_action path as the panel (no separate edit-mode gate).
  */
 import { parseCommand, resolveQuickOption } from './commands.js';
 
@@ -58,7 +59,6 @@ import { parseCommand, resolveQuickOption } from './commands.js';
 const OWNER_ROLES = new Set(['owner', 'admin']);
 const MAX_TURNS = { owner: 8, customer: 20 };
 const MAX_TURN_CHARS = 1500;
-const EDIT_MODE_MINUTES = 30;
 const CONFIRM_TOKEN = '__confirm_action__';
 const CANCEL_TOKEN = '__cancel_action__';
 
@@ -68,22 +68,20 @@ const TEXT = {
     '🤖 *עוזר AI לבעלי מתחמים*',
     'שאלו כל דבר על הצימרים, ההזמנות, הביקורות והשאלות של האורחים.',
     '',
-    '• *מצב עריכה* — לאפשר לעוזר לבצע פעולות (יצירת הזמנה, עדכון צימר) ל-30 דקות',
-    '• *מצב מידע* — חזרה לשאלות בלבד',
+    '• בקשת פעולה (הזמנה, עדכון צימר וכו׳) → תקבלו הצעה לאישור',
+    '• *1* לאישור או *2* לביטול',
     '• *חדש* — שיחה חדשה',
     '• *עצור* — הפסקת הודעות',
   ].join('\n'),
   reset: '🔄 התחלנו שיחה חדשה. איך אפשר לעזור?',
-  editOn: `✏️ מצב עריכה פעיל ל-${EDIT_MODE_MINUTES} דקות — העוזר יכול לבצע פעולות בחשבון שלך. כתבו *מצב מידע* כדי לחזור.`,
-  editOff: 'ℹ️ חזרנו למצב מידע — העוזר עונה על שאלות בלבד.',
-  editNotAllowed: 'מצב עריכה זמין רק לבעלי מתחמים מחוברים.',
+  editCompat:
+    'אין צורך במצב עריכה — בקשו את הפעולה ואשרו עם *1* (או בטלו עם *2*). עד האישור לא נשמר שום שינוי.',
   stop: '🔕 הפסקנו. לא נשלח הודעות נוספות. כתבו *הפעל* כדי לחזור.',
   start: '🔔 חזרנו! כתבו *עזרה* לרשימת אפשרויות.',
   ambiguous: 'המספר הזה משויך ליותר מחשבון אחד במערכת, ולכן אי אפשר לזהות אותך כאן. פנו לתמיכה או השתמשו באפליקציה.',
   ownersOnly:
     'הבוט בוואטסאפ זמין כרגע רק לבעלי מתחמים. עדכנו את מספר הטלפון בפרופיל בעל המתחם באפליקציה, ואז כתבו שוב מכאן.',
   error: '⚠️ משהו השתבש אצלנו. נסו שוב בעוד רגע.',
-  editModeHint: '\n\n_כדי שאבצע את הפעולה כתבו *מצב עריכה*._',
 };
 
 /**
@@ -105,7 +103,6 @@ export function createAgent(ports) {
     let session = existing || {
       channel,
       address,
-      mode: 'info',
       recent_turns: [],
       quick_options: [],
       opted_out: false,
@@ -121,7 +118,6 @@ export function createAgent(ports) {
         conversation_id: '',
         recent_turns: [],
         quick_options: [],
-        mode: 'info',
         pending_action_id: '',
       };
     }
@@ -165,13 +161,11 @@ export function createAgent(ports) {
           session.pending_action_id = '';
           return finish(TEXT.reset, command);
         case 'edit_on':
-          session.mode = 'edit';
-          session.mode_expires_at = new Date(now().getTime() + EDIT_MODE_MINUTES * 60000).toISOString();
-          return finish(TEXT.editOn, command);
         case 'edit_off':
-          session.mode = 'info';
+          // Compat only — no mode gate; writes go through confirm 1/2 like the panel.
+          session.mode = '';
           session.mode_expires_at = '';
-          return finish(TEXT.editOff, command);
+          return finish(TEXT.editCompat, command);
         case 'stop':
           session.opted_out = true;
           return finish(TEXT.stop, command);
@@ -185,17 +179,11 @@ export function createAgent(ports) {
       }
     }
 
-    if (session.mode === 'edit' && session.mode_expires_at && new Date(session.mode_expires_at) <= now()) {
-      session.mode = 'info';
-      session.mode_expires_at = '';
-    }
-
     let message = resolveQuickOption(text, session.quick_options || []) || String(text || '').trim();
     if (!message) return finish(TEXT.helpOwner, 'help');
 
     /** @type {object} */
     const clientState = {
-      mode: session.mode === 'edit' ? 'edit' : 'info',
       recentTurns: (session.recent_turns || []).slice(-MAX_TURNS.owner),
       surface: 'home',
     };
@@ -269,7 +257,6 @@ export function createAgent(ports) {
     }
 
     let reply = [content, ...rendered.lines].filter(Boolean).join('\n\n');
-    if (effects.some((e) => e?.type === 'edit_mode_required')) reply += TEXT.editModeHint;
     if (quickOptions.length) {
       reply += `\n\n${quickOptions.map((o, i) => `${i + 1}. ${o.label}`).join('\n')}`;
     }

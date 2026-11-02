@@ -2,6 +2,7 @@
  * Agent core + WhatsApp bot smoke — fake brain / sessions / identities / provider.
  * No DB, no network, no LLM.
  * v1: owners/admins only; identity by phone match (no OTP).
+ * No edit-mode gate — writes use confirm_action like the panel.
  */
 import { createAgent, AGENT_CONFIRM_TOKEN, AGENT_CANCEL_TOKEN } from '../../src/lib/agent/core.js';
 import { parseCommand, resolveQuickOption } from '../../src/lib/agent/commands.js';
@@ -85,7 +86,7 @@ function fakeBrain() {
           uiEffects: [],
         };
       }
-      if (req.message.includes('צור') && req.clientState.mode === 'edit') {
+      if (req.message.includes('צור')) {
         return {
           conversationId: null,
           message: { content: 'מוכן ליצור הזמנה' },
@@ -101,10 +102,8 @@ function fakeBrain() {
       }
       return {
         conversationId: null,
-        message: { content: `owner(${req.clientState.mode}): ${req.message}` },
-        uiEffects: req.message.includes('צור') && req.clientState.mode === 'info'
-          ? [{ type: 'edit_mode_required' }]
-          : [],
+        message: { content: `owner: ${req.message}` },
+        uiEffects: [],
       };
     },
   };
@@ -131,7 +130,7 @@ function setup() {
 
 function commandChecks() {
   assert(parseCommand('עזרה') === 'help' && parseCommand(' Menu ') === 'help', 'help in Hebrew + English');
-  assert(parseCommand('מצב עריכה') === 'edit_on' && parseCommand('/edit') === 'edit_on', 'edit mode command');
+  assert(parseCommand('מצב עריכה') === 'edit_on' && parseCommand('/edit') === 'edit_on', 'edit mode command still parsed (compat)');
   assert(parseCommand('חדש') === 'reset' && parseCommand('STOP') === 'stop', 'reset + stop');
   assert(parseCommand('מה המחיר לסופש?') === null, 'normal question is not a command');
   assert(resolveQuickOption('2', [{ label: 'a', text: 'A' }, { label: 'b', text: 'B' }]) === 'B', 'number picks quick option');
@@ -148,48 +147,62 @@ async function ownersOnlyChecks() {
 }
 
 async function ownerChecks() {
-  const { agent, brain, advance } = setup();
+  const { agent, brain } = setup();
   await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'כמה הזמנות יש לי השבוע?' });
-  assert(brain.calls[0].req.profile === 'owner_assistant' && brain.calls[0].req.clientState.mode === 'info',
-    'owner → owner_assistant in info mode by default');
+  assert(brain.calls[0].req.profile === 'owner_assistant', 'owner → owner_assistant');
+  assert(
+    brain.calls[0].req.clientState.mode === undefined,
+    'owner → no mode sent to assistant (same as panel)',
+  );
 
-  const hint = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'צור הזמנה לדני מחר' });
-  assert(hint.reply.includes('מצב עריכה'), 'write request in info mode → hint to enable edit mode');
+  const propose = await agent.handleMessage({
+    channel: 'whatsapp',
+    address: OWNER,
+    text: 'צור הזמנה לדני מחר',
+  });
+  assert(propose.session.pending_action_id === 'act-1', 'write request proposes confirm_action without edit mode');
+  assert(propose.reply.includes('1.') && propose.reply.includes('אישור'), 'confirm options listed on first write');
+  assert(brain.calls[1].req.clientState.mode === undefined, 'write request also sends no mode');
 
   const on = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'מצב עריכה' });
-  assert(on.command === 'edit_on' && brain.calls.length === 2, 'edit mode toggled without an AI call');
-  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'צור הזמנה לדני מחר' });
-  assert(brain.calls[2].req.clientState.mode === 'edit', 'edit mode passed to the assistant');
+  assert(on.command === 'edit_on' && brain.calls.length === 2, 'edit compat command without an AI call');
+  assert(on.reply.includes('אין צורך במצב עריכה'), 'edit compat explains 1/2 confirm');
+  assert(on.session.mode !== 'edit', 'compat command does not enable an edit gate');
 
-  advance(31 * 60 * 1000);
-  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'ועוד אחת' });
-  assert(brain.calls[3].req.clientState.mode === 'info', 'edit mode expires after 30 minutes');
-
-  const custEdit = await setup().agent.handleMessage({ channel: 'whatsapp', address: CUSTOMER, text: 'מצב עריכה' });
-  assert(custEdit.session.mode !== 'edit' && custEdit.reply.includes('בעלי מתחמים'),
-    'customers cannot enable edit mode');
+  const custEdit = await setup().agent.handleMessage({
+    channel: 'whatsapp',
+    address: CUSTOMER,
+    text: 'מצב עריכה',
+  });
+  assert(custEdit.reply.includes('בעלי מתחמים'), 'customers still refused before compat edit command');
 }
 
 async function confirmChecks() {
   const { agent, brain } = setup();
-  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'מצב עריכה' });
-  const propose = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'צור הזמנה לדני מחר' });
+  const propose = await agent.handleMessage({
+    channel: 'whatsapp',
+    address: OWNER,
+    text: 'צור הזמנה לדני מחר',
+  });
   assert(propose.session.pending_action_id === 'act-1', 'confirm_action stores pending_action_id');
-  assert(propose.reply.includes('אישור') && propose.reply.includes(AGENT_CONFIRM_TOKEN ? '1.' : '1.'),
-    'confirm options listed');
+  assert(
+    propose.reply.includes('אישור') && propose.reply.includes(AGENT_CONFIRM_TOKEN ? '1.' : '1.'),
+    'confirm options listed',
+  );
   assert(propose.session.quick_options?.[0]?.text === AGENT_CONFIRM_TOKEN, 'confirm token on option 1');
   assert(propose.session.quick_options?.[1]?.text === AGENT_CANCEL_TOKEN, 'cancel token on option 2');
 
   const yes = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: '1' });
-  assert(brain.calls.some((c) => c.req.clientState.confirmActionId === 'act-1'),
-    'numbered 1 → confirmActionId to assistant');
+  assert(
+    brain.calls.some((c) => c.req.clientState.confirmActionId === 'act-1'),
+    'numbered 1 → confirmActionId to assistant',
+  );
   assert(yes.reply.includes('בוצע: act-1'), 'confirm executes via shared assistant path');
   assert(!yes.session.pending_action_id, 'pending cleared after confirm');
 }
 
 async function digitWithoutMenuChecks() {
   const { agent, brain, sessions } = setup();
-  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'מצב עריכה' });
   await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'צור הזמנה לדני מחר' });
   const row = sessions.rows.get(`whatsapp:${OWNER}`);
   sessions.rows.set(`whatsapp:${OWNER}`, { ...row, quick_options: [] });
@@ -204,14 +217,19 @@ async function digitWithoutMenuChecks() {
 
 async function staleCardChecks() {
   const { agent, brain } = setup();
-  await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'מצב עריכה' });
   await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'צור הזמנה לדני מחר' });
-  const question = await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'כמה צימרים יש לי?' });
+  const question = await agent.handleMessage({
+    channel: 'whatsapp',
+    address: OWNER,
+    text: 'כמה צימרים יש לי?',
+  });
   assert(!question.session.pending_action_id, 'a later question clears the session card');
   assert(!question.session.quick_options?.length, 'a later question clears the 1/2 menu');
   const asked = brain.calls[brain.calls.length - 1];
-  assert(asked.req.message === 'כמה צימרים יש לי?' && !asked.req.clientState.confirmActionId,
-    'the question reaches the brain as text');
+  assert(
+    asked.req.message === 'כמה צימרים יש לי?' && !asked.req.clientState.confirmActionId,
+    'the question reaches the brain as text',
+  );
   await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'אישור' });
   assert(
     !brain.calls.some((c) => c.req.clientState.confirmActionId === 'act-1'),
@@ -239,8 +257,10 @@ async function safetyChecks() {
   sessions.rows.set(`whatsapp:${OWNER}`, { ...row, user_id: 'someone-else' });
   await agent.handleMessage({ channel: 'whatsapp', address: OWNER, text: 'מה ההזמנות שלי' });
   const last = brain.calls[brain.calls.length - 1];
-  assert(last.req.clientState.recentTurns.length === 0 && last.req.conversationId === null,
-    'account change on a number wipes previous context');
+  assert(
+    last.req.clientState.recentTurns.length === 0 && last.req.conversationId === null,
+    'account change on a number wipes previous context',
+  );
 }
 
 async function botChecks() {
@@ -248,22 +268,44 @@ async function botChecks() {
   const sent = [];
   const logged = [];
   const store = {
-    async create(_t, data) { logged.push(data); return data; },
+    async create(_t, data) {
+      logged.push(data);
+      return data;
+    },
     async filter(_t, q) {
       return logged.filter((r) => r.direction === q.direction && r.provider_message_id === q.provider_message_id);
     },
-    async update() { return {}; },
+    async update() {
+      return {};
+    },
   };
   const provider = {
     name: 'fake',
     supportsInbound: true,
-    async sendMessage(to, text) { sent.push({ to, text }); return { ok: true, status: 'sent', providerMessageId: `out-${sent.length}` }; },
+    async sendMessage(to, text) {
+      sent.push({ to, text });
+      return { ok: true, status: 'sent', providerMessageId: `out-${sent.length}` };
+    },
   };
-  const bot = createWhatsAppBot({ store: /** @type {any} */ (store), agent, provider: /** @type {any} */ (provider), env: {} });
+  const bot = createWhatsAppBot({
+    store: /** @type {any} */ (store),
+    agent,
+    provider: /** @type {any} */ (provider),
+    env: {},
+  });
 
   const msg = (id, text, extra = {}) => ({
-    type: 'message', id, from: OWNER, fromName: 'דנה', isGroup: false,
-    timestamp: new Date().toISOString(), kind: 'text', text, replyTo: '', media: null, ...extra,
+    type: 'message',
+    id,
+    from: OWNER,
+    fromName: 'דנה',
+    isGroup: false,
+    timestamp: new Date().toISOString(),
+    kind: 'text',
+    text,
+    replyTo: '',
+    media: null,
+    ...extra,
   });
 
   await bot.handleEvents([msg('in-1', 'כמה הזמנות?'), msg('in-1', 'כמה הזמנות?')]);
