@@ -86,7 +86,8 @@ export default function OwnerUpdatesPanel({ user, onAction, focusQuestionId, foc
     const u1 = api.entities.DirectChat.subscribe(() => { load({ silent: true }); });
     const u2 = api.entities.UnansweredQuestion.subscribe(() => { load({ silent: true }); });
     const u3 = api.entities.SystemMessage.subscribe(() => { load({ silent: true }); });
-    return () => { u1(); u2(); u3(); };
+    const u4 = api.entities.GuestProfile.subscribe(() => { load({ silent: true }); });
+    return () => { u1(); u2(); u3(); u4(); };
   }, [user?.id]);
 
   const lookup = useMemo(() => buildPhoneLookup(guestProfiles), [guestProfiles]);

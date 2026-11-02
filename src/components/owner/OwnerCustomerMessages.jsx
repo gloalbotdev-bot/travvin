@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Key, MapPin, Clock, DoorOpen, MessageSquareText, Star, Plus, X, Save, Pencil, CalendarClock } from 'lucide-react';
 import { DEFAULT_TEMPLATES, TEMPLATE_VARIABLES, TIME_NOT_SET } from '@/lib/stayMessageTemplates';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const TRIGGER_OPTIONS = [
   { key: 'pre_checkin', label: 'יום לפני ההגעה', desc: 'פרטי הגעה + ניווט', placeholder: 'שלום! החופשה מתקרבת. פרטי ההגעה יצורפו אוטומטית...' },
@@ -22,15 +23,20 @@ export default function OwnerCustomerMessages({ ownerId }) {
   const [showForm, setShowForm] = useState(false);
   const [editZimmer, setEditZimmer] = useState(null);
 
-  useEffect(() => { load(); }, [ownerId]);
-
-  const load = async () => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!ownerId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const data = await api.entities.Zimmer.filter({ owner_id: ownerId }, 'name');
     setZimmers(data || []);
     setLoading(false);
-  };
+  }, [ownerId]);
+
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.Zimmer],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   const hasField = (z, k) => !!(z.stay_settings && z.stay_settings[k]);
   const hasConfig = (z) => {

@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Truck, Bell, CalendarClock, Droplets, Plus, Trash2, X, Check, MapPin, Sparkles, Clock, CalendarDays, Pencil } from 'lucide-react';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 // Supplier automations as first-class records (SupplierAutomation entity).
 // Top: summary of active automations with on/off toggle + delete + schedule label.
@@ -39,11 +40,9 @@ export default function SupplierAutomationPanel({ ownerId }) {
   const [editingAutomation, setEditingAutomation] = useState(null);
   const [toggling, setToggling] = useState(null);
 
-  useEffect(() => { load(); }, [ownerId]);
-
-  const load = async () => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!ownerId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const [autos, sup, zims] = await Promise.all([
       api.entities.SupplierAutomation.filter({ owner_id: ownerId }, '-created_date'),
       api.entities.Contact.filter({ owner_id: ownerId, type: 'ספק' }, 'name'),
@@ -53,7 +52,14 @@ export default function SupplierAutomationPanel({ ownerId }) {
     setContacts(sup || []);
     setZimmers(zims || []);
     setLoading(false);
-  };
+  }, [ownerId]);
+
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.SupplierAutomation, api.entities.Contact, api.entities.Zimmer],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   const zimmerName = (id) => zimmers.find(z => z.id === id)?.name || 'צימר';
 

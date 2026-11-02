@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/api/client';
 import { Database, ChevronDown, ChevronUp, MapPin, BedDouble, Users, MessageSquare } from 'lucide-react';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const SOURCE_COLORS = {
   'שיחת טלפון': { bg: 'rgba(59,130,246,0.1)', color: '#3B82F6', label: '📞' },
@@ -15,21 +16,31 @@ export default function ZimmerDatabase({ ownerId }) {
   const [expandedZone, setExpandedZone] = useState({});
   const [summaries, setSummaries] = useState({});
   const [summarizing, setSummarizing] = useState({});
+  const didExpandRef = useRef(false);
 
-  useEffect(() => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!ownerId) return;
-    api.entities.Zimmer.filter({ owner_id: ownerId }).then(data => {
-      setZimmers(data);
-      const fromDb = {};
-      for (const z of data) {
-        if (z.knowledge_summary) fromDb[z.id] = z.knowledge_summary;
-      }
-      setSummaries(fromDb);
-      setLoading(false);
-      // auto-expand first zimmer
-      if (data.length > 0) setExpanded({ [data[0].id]: true });
-    });
+    if (!silent) setLoading(true);
+    const data = await api.entities.Zimmer.filter({ owner_id: ownerId });
+    setZimmers(data);
+    const fromDb = {};
+    for (const z of data) {
+      if (z.knowledge_summary) fromDb[z.id] = z.knowledge_summary;
+    }
+    setSummaries((prev) => ({ ...fromDb, ...prev }));
+    setLoading(false);
+    if (!didExpandRef.current && data.length > 0) {
+      didExpandRef.current = true;
+      setExpanded({ [data[0].id]: true });
+    }
   }, [ownerId]);
+
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.Zimmer],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 

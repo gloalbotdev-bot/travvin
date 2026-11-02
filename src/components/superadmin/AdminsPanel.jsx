@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Plus, Trash2, Shield, ShieldCheck, Save, X } from 'lucide-react';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const ALL_PAGES = [
   { id: 'owners', label: 'בעלי מתחמים' },
@@ -30,10 +31,8 @@ export default function AdminsPanel() {
   const [editState, setEditState] = useState({});
   const [deletingAdmin, setDeletingAdmin] = useState(null);
 
-  useEffect(() => { load(); }, []);
-
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     const [perms, users] = await Promise.all([
       api.entities.AdminPermission.list(),
       api.entities.User.list(),
@@ -54,7 +53,13 @@ export default function AdminsPanel() {
       }));
     setAdmins([...(perms || []), ...fromRole]);
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.AdminPermission, api.entities.User],
+    load,
+  });
 
   const handleAdd = async () => {
     if (!newEmail.trim()) return;

@@ -6,6 +6,7 @@ import OwnerCalendarActionsSidebar from '@/components/owner/OwnerCalendarActions
 import CalendarDayPopover, { DRAWER_WIDTH } from '@/components/owner/CalendarDayPopover';
 import CalendarQuickActions from '@/components/owner/CalendarQuickActions';
 import CalendarReservationBar from '@/components/owner/CalendarReservationBar';
+import { useEntityReload } from '@/hooks/useEntityReload';
 import monthChevron from '@/assets/owner/calendar/month-chevron.svg';
 import selectChevron from '@/assets/owner/calendar/select-chevron.svg';
 import iconAddPlus from '@/assets/owner/calendar/add-plus.svg';
@@ -122,15 +123,21 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
   const [command, setCommand] = useState(null);
   const [daySelected, setDaySelected] = useState(false);
 
-  const load = useCallback(() => {
+  const load = useCallback(({ silent = false } = {}) => {
     if (!ownerId) return;
+    if (!silent) setLoading(true);
     api.entities.BookingRequest.filter({ owner_id: ownerId }).then((data) => {
-      setBookings((data || []).filter((b) => b.status !== 'נדחית'));
+      setBookings((data || []).filter((b) => b.status !== 'נדחתה'));
       setLoading(false);
     });
   }, [ownerId]);
 
   useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.BookingRequest],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   const zimmerColorMap = useMemo(() => {
     const m = {};
@@ -229,8 +236,9 @@ export default function OwnerCalendar({ ownerId, zimmers, onAddBookingText, onZi
     }
   };
 
+  // Show booking total once — on check-in day only (not repeated on every night of the stay).
   const priceOnDay = (iso) => {
-    const list = bookingsOn(iso).filter((b) => !(b.is_block || b.status === 'חסום'));
+    const list = bookingsOn(iso).filter((b) => !(b.is_block || b.status === 'חסום') && b.check_in === iso);
     for (const b of list) {
       const p = formatPrice(b.total_price);
       if (p) return p;

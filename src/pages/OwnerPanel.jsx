@@ -24,6 +24,7 @@ import OwnerTodayHome from '@/components/owner/OwnerTodayHome';
 import OwnerInfoAssistant from '@/components/owner/OwnerInfoAssistant';
 import { useOwnerSystemUnread } from '@/hooks/useOwnerSystemUnread';
 import { ensureOwnerPanelVisitStart } from '@/hooks/useOwnerAssistantThread';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 export default function OwnerPanel() {
   const [tab, setTab] = useState('home');
@@ -88,15 +89,24 @@ export default function OwnerPanel() {
 
   const { count: notifCount, markOneRead: markSystemRead } = useOwnerSystemUnread(currentUser?.id);
 
-  const loadZimmers = async (ownerId) => {
-    setLoading(true);
+  const loadZimmers = useCallback(async (ownerId, { silent = false } = {}) => {
+    if (!ownerId) return;
+    if (!silent) setLoading(true);
     try {
       const data = await api.entities.Zimmer.filter({ owner_id: ownerId });
       setZimmers(data);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  useEntityReload({
+    entities: [api.entities.Zimmer],
+    load: ({ silent } = {}) => {
+      if (currentUser?.id) return loadZimmers(currentUser.id, { silent });
+    },
+    enabled: Boolean(currentUser?.id),
+  });
 
   const handleSave = async (data) => {
     let saved;

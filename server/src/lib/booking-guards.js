@@ -42,7 +42,12 @@ export async function loadZimmerData(prisma, zimmerId) {
   }
 }
 
+function isCalendarBlock(b) {
+  return Boolean(b?.is_block) || b?.status === 'חסום';
+}
+
 /**
+ * Approved bookings + calendar blocks that occupy dates (M15 #9).
  * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} prisma
  */
 export async function findOverlappingApproved(
@@ -57,7 +62,13 @@ export async function findOverlappingApproved(
       entityType: 'BookingRequest',
       AND: [
         { data: { path: ['zimmer_id'], equals: zimmerId } },
-        { data: { path: ['status'], equals: 'אושרה' } },
+        {
+          OR: [
+            { data: { path: ['status'], equals: 'אושרה' } },
+            { data: { path: ['status'], equals: 'חסום' } },
+            { data: { path: ['is_block'], equals: true } },
+          ],
+        },
       ],
     },
     take: 2000,
@@ -72,7 +83,7 @@ export async function findOverlappingApproved(
 }
 
 /**
- * Reject if an approved booking already covers these dates (M15 #9).
+ * Reject if an approved booking or calendar block already covers these dates (M15 #9).
  */
 export async function assertNoApprovedOverlap(
   prisma,
@@ -87,10 +98,15 @@ export async function assertNoApprovedOverlap(
     excludeId,
   );
   if (hits.length) {
-    const err = new Error('התאריכים תפוסים — קיימת הזמנה מאושרת חופפת');
+    const blocked = hits.some(isCalendarBlock);
+    const err = new Error(
+      blocked
+        ? 'התאריכים חסומים — קיימת חסימה חופפת ביומן'
+        : 'התאריכים תפוסים — קיימת הזמנה מאושרת חופפת',
+    );
     err.status = 409;
     err.body = {
-      error: 'booking_overlap',
+      error: blocked ? 'date_blocked' : 'booking_overlap',
       message: err.message,
       conflicting_ids: hits.map((h) => h.id),
     };

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Search, UserPlus, X, ChevronRight, Phone, Mail, MapPin, MessageSquare, Calendar, Star, Trash2 } from 'lucide-react';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 export default function CustomersPanel() {
   const [customers, setCustomers] = useState([]);
@@ -16,10 +17,8 @@ export default function CustomersPanel() {
   const [inviteMsg, setInviteMsg] = useState('');
   const [deletingCustomer, setDeletingCustomer] = useState(null);
 
-  useEffect(() => { loadAll(); }, []);
-
-  const loadAll = async () => {
-    setLoading(true);
+  const loadAll = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     const [users, profs, sess, books] = await Promise.all([
       api.entities.User.list(),
       api.entities.CustomerProfile.list(),
@@ -33,7 +32,13 @@ export default function CustomersPanel() {
     setSessions(sess);
     setBookings(books);
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+  useEntityReload({
+    entities: [api.entities.User, api.entities.CustomerProfile, api.entities.ChatSession, api.entities.BookingRequest],
+    load: loadAll,
+  });
 
   const handleInvite = async () => {
     if (!inviteForm.email.trim()) return;

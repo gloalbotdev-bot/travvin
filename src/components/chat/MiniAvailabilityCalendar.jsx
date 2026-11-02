@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '@/api/client';
+import { getBookedRangesForZimmer } from '@/components/chat/DateSearchWidget';
 
 const DAY_LABELS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
 const toISO = (d) => {
@@ -10,8 +10,8 @@ const toISO = (d) => {
   return `${y}-${m}-${day}`;
 };
 
-// Compact availability grid for the next ~6 weeks. Booked days come from approved
-// BookingRequests for this zimmer. Sunday-anchored, RTL.
+// Compact availability grid for the next ~6 weeks. Booked days come from the
+// public busy endpoint (approved bookings only, no PII). Sunday-anchored, RTL.
 export default function MiniAvailabilityCalendar({ zimmerId, weeks = 6 }) {
   const [booked, setBooked] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -20,9 +20,10 @@ export default function MiniAvailabilityCalendar({ zimmerId, weeks = 6 }) {
     let active = true;
     (async () => {
       try {
-        const bookings = await api.entities.BookingRequest.filter({ zimmer_id: zimmerId, status: 'אושרה' });
+        // Use /api/bookings/busy — entity RLS hides other customers' bookings.
+        const ranges = await getBookedRangesForZimmer(null, zimmerId);
         const set = new Set();
-        for (const b of bookings) {
+        for (const b of ranges) {
           if (!b.check_in || !b.check_out) continue;
           let cur = new Date(b.check_in + 'T00:00:00');
           const out = new Date(b.check_out + 'T00:00:00');

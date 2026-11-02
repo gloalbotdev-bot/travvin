@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Plus, Trash2, PenLine, Check, X, Upload, Video, Share2 } from 'lucide-react';
 import OwnerVideoProposals from '@/components/owner/OwnerVideoProposals';
 import ShareSheet from '@/components/discover/ShareSheet';
 import VideoShareBlocks from '@/components/discover/VideoShareBlocks';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const MAX_DURATION = 45;
 const MAX_SIZE = 30 * 1024 * 1024;
@@ -24,8 +25,9 @@ export default function OwnerVideos({ ownerId }) {
   const [shareVideo, setShareVideo] = useState(null);
   const fileRef = useRef(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!ownerId) return;
+    if (!silent) setLoading(true);
     try {
       const res = await api.functions.invoke('listOwnerVideos', {});
       const d = res.data || res;
@@ -34,9 +36,14 @@ export default function OwnerVideos({ ownerId }) {
       setZimmers(zs || []);
     } catch (e) { setError('שגיאה בטעינת הסרטונים.'); }
     setLoading(false);
-  };
+  }, [ownerId]);
 
-  useEffect(() => { if (ownerId) load(); }, [ownerId]);
+  useEffect(() => { if (ownerId) load(); }, [ownerId, load]);
+  useEntityReload({
+    entities: [api.entities.Zimmer],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   const handleUpload = (file) => {
     if (zimmers.length === 0) { setError('אין לך צימרים. צור צימר תחילה.'); return; }

@@ -126,6 +126,7 @@ ${buildContext()}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
         {messages.map(msg => {
           if (msg.type === 'calendar') {
+            if (!zimmer.expose_availability_calendar) return null;
             return (
               <div key={msg.id} className="flex items-end gap-2 mb-2">
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: '#0B3838' }}>✦</div>
@@ -180,9 +181,11 @@ ${buildContext()}
       </div>
       <div className="bg-[#F0F0F0] px-3 pt-2 pb-2.5">
         <div className="flex gap-2 mb-2">
-          <button onClick={pushCalendar} type="button" className="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-xl text-white transition-opacity hover:opacity-90" style={{ background: '#0B3838' }}>
-            <CalendarDays size={14} /> זמינות
-          </button>
+          {zimmer.expose_availability_calendar && (
+            <button onClick={pushCalendar} type="button" className="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-xl text-white transition-opacity hover:opacity-90" style={{ background: '#0B3838' }}>
+              <CalendarDays size={14} /> זמינות
+            </button>
+          )}
           <button onClick={pushBooking} type="button" className="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-xl text-white transition-opacity hover:opacity-90" style={{ background: '#16A34A' }}>
             <ClipboardList size={14} /> הזמן עכשיו
           </button>

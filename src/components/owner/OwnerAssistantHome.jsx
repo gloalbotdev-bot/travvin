@@ -2,7 +2,7 @@
  * Owner AI assistant — landing state (before a conversation starts). Figma Desktop:
  * https://www.figma.com/design/3rRfXaZ752TAyPABkfCjSJ/?node-id=1776-18070
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Loader2 } from 'lucide-react';
 import iconAddBooking from '@/assets/owner/home/icon-add-booking.svg';
@@ -14,6 +14,7 @@ import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
 import OwnerHomeComposer from '@/components/owner/OwnerHomeComposer';
 import OwnerAssistantThread from '@/components/owner/OwnerAssistantThread';
 import { composerPlaceholder } from '@/hooks/useOwnerAssistantThread';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 function nextFridayStr() {
   const d = new Date();
@@ -59,68 +60,80 @@ function SuggestionRow({ icon, title, body, actionLabel, onAction }) {
   );
 }
 
+function fallbackSuggestions(questions, zimmersList, freeWeekend) {
+  const s = [];
+  if (questions.length > 0) {
+    s.push({
+      title: `הרבה לקוחות שואלים על ${questions[0].zimmer_name || 'הנכס'} — כדאי להוסיף מידע לנכס?`,
+      body: 'כדאי להוסיף מידע לנכס על חניה מקורה / חניה פרטית.',
+      action_label: 'הוסף מידע',
+      action_type: 'add_info',
+    });
+  } else {
+    s.push({
+      title: 'הרבה לקוחות שואלים על חניה — כדאי להוסיף מידע לנכס?',
+      body: 'כדאי להוסיף מידע לנכס על חניה מקורה / חניה פרטית.',
+      action_label: 'הוסף מידע',
+      action_type: 'add_info',
+    });
+  }
+  s.push({
+    title: 'הסופ״ש הקרוב פנוי',
+    body: 'אפשר להציע הנחה קטנה כדי להגדיל סיכוי לסגירה.',
+    action_label: 'צור הצעה',
+    action_type: 'create_offer',
+  });
+  return s;
+}
+
 /** "הצעות לשיפור" (Figma 1776:18142–18154) — shown on the home landing. */
 export function OwnerAssistantSuggestions({ ownerId, zimmers, onNavigate, style }) {
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSugg, setLoadingSugg] = useState(true);
-  const firedRef = useRef(false);
+  const llmRef = useRef(null);
+  const zimmersRef = useRef(zimmers);
+  zimmersRef.current = zimmers;
 
-  useEffect(() => {
-    if (firedRef.current || !ownerId) return;
-    firedRef.current = true;
-    (async () => {
-      try {
-        const [bookings, questions] = await Promise.all([
-          api.entities.BookingRequest.filter({ owner_id: ownerId }),
-          api.entities.UnansweredQuestion.filter({ owner_id: ownerId, status: 'ממתינה' }),
-        ]);
-        const fri = nextFridayStr();
-        const freeWeekend = bookings.filter(b => b.status === 'אושרה' && b.check_in <= fri && b.check_out > fri).length < Math.max(1, zimmers.length);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!ownerId) return;
+    if (!silent) setLoadingSugg(true);
+    const zimList = zimmersRef.current || [];
+    try {
+      const [bookings, questions] = await Promise.all([
+        api.entities.BookingRequest.filter({ owner_id: ownerId }),
+        api.entities.UnansweredQuestion.filter({ owner_id: ownerId, status: 'ממתינה' }),
+      ]);
+      const fri = nextFridayStr();
+      const freeWeekend = bookings.filter(b => b.status === 'אושרה' && b.check_in <= fri && b.check_out > fri).length < Math.max(1, zimList.length);
 
-        let llm = null;
+      if (!silent && !llmRef.current) {
         try {
           const res = await api.assistant.chat({
             profile: 'owner_home_suggestions',
             message: 'הצעות לשיפור',
             clientState: {},
           });
-          llm = res?.meta?.parsed || null;
+          llmRef.current = res?.meta?.parsed || null;
         } catch { /* fallback below */ }
-
-        const list = (llm && Array.isArray(llm.suggestions) && llm.suggestions.length) ? llm.suggestions : fallbackSuggestions(questions, zimmers, freeWeekend);
-        setSuggestions(list.slice(0, 2));
-      } catch {
-        setSuggestions(fallbackSuggestions([], zimmers, false));
       }
-      setLoadingSugg(false);
-    })();
-  }, [ownerId, zimmers]);
 
-  const fallbackSuggestions = (questions, zimmersList, freeWeekend) => {
-    const s = [];
-    if (questions.length > 0) {
-      s.push({
-        title: `הרבה לקוחות שואלים על ${questions[0].zimmer_name || 'הנכס'} — כדאי להוסיף מידע לנכס?`,
-        body: 'כדאי להוסיף מידע לנכס על חניה מקורה / חניה פרטית.',
-        action_label: 'הוסף מידע',
-        action_type: 'add_info',
-      });
-    } else {
-      s.push({
-        title: 'הרבה לקוחות שואלים על חניה — כדאי להוסיף מידע לנכס?',
-        body: 'כדאי להוסיף מידע לנכס על חניה מקורה / חניה פרטית.',
-        action_label: 'הוסף מידע',
-        action_type: 'add_info',
-      });
+      const llm = llmRef.current;
+      const list = (llm && Array.isArray(llm.suggestions) && llm.suggestions.length)
+        ? llm.suggestions
+        : fallbackSuggestions(questions, zimList, freeWeekend);
+      setSuggestions(list.slice(0, 2));
+    } catch {
+      setSuggestions(fallbackSuggestions([], zimList, false));
     }
-    s.push({
-      title: 'הסופ״ש הקרוב פנוי',
-      body: 'אפשר להציע הנחה קטנה כדי להגדיל סיכוי לסגירה.',
-      action_label: 'צור הצעה',
-      action_type: 'create_offer',
-    });
-    return s;
-  };
+    setLoadingSugg(false);
+  }, [ownerId]);
+
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.BookingRequest, api.entities.UnansweredQuestion],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   const onSuggestionAction = (s) => {
     if (s.action_type === 'add_info') onNavigate('zimmers');

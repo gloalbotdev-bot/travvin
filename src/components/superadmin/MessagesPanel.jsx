@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Megaphone, Users, Home, Send, Trash2, CheckCheck } from 'lucide-react';
 import RecipientPicker from '@/components/superadmin/RecipientPicker';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const inputStyle = { background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A', borderRadius: '12px', outline: 'none' };
 
@@ -16,24 +17,32 @@ export default function MessagesPanel() {
     owner: { mode: 'all', category: 'הודעה', title: '', body: '', selected: new Set() },
   });
 
-  useEffect(() => { loadAll(); loadMessages(); }, []);
-
-  const loadAll = async () => {
+  const loadAll = useCallback(async () => {
     try {
       const [u, z] = await Promise.all([api.entities.User.list(), api.entities.Zimmer.list()]);
       setUsers(u);
       setZimmers(z);
     } catch (e) { /* silent */ }
-  };
+  }, []);
 
-  const loadMessages = async () => {
-    setLoading(true);
+  const loadMessages = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const data = await api.entities.SystemMessage.list('-created_date', 80);
       setMessages(data);
     } catch (e) { /* silent */ }
     setLoading(false);
-  };
+  }, []);
+
+  const reload = useCallback(async ({ silent = false } = {}) => {
+    await Promise.all([loadAll(), loadMessages({ silent })]);
+  }, [loadAll, loadMessages]);
+
+  useEffect(() => { reload(); }, [reload]);
+  useEntityReload({
+    entities: [api.entities.SystemMessage, api.entities.User, api.entities.Zimmer],
+    load: reload,
+  });
 
   const ownerIds = new Set(zimmers.map(z => z.owner_id).filter(Boolean));
   const customers = users.filter(u => u.role === 'user');

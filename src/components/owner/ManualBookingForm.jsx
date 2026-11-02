@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { api } from '@/api/client';
 import { X, Calendar, User, Phone, Users, Home, MessageSquare, Check } from 'lucide-react';
 import { calcNights, calcBookingTotalForZimmer, formatILS, checkMinNights } from '@/lib/bookingPrice';
+import { bookingErrorMessage } from '@/lib/bookingErrors';
 import DateRangeField from '@/components/common/DateRangeField';
 
 export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, onSwitchToText, initialDate }) {
@@ -17,6 +18,7 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
   });
   const [priceOverride, setPriceOverride] = useState('');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const selectedZimmer = zimmers.find(z => z.id === form.zimmer_id);
   const nights = useMemo(() => calcNights(form.check_in, form.check_out), [form.check_in, form.check_out]);
@@ -39,6 +41,7 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
   const handleSubmit = async () => {
     if (!valid) return;
     setSaving(true);
+    setError('');
     const payload = {
       ...form,
       zimmer_name: selectedZimmer?.name || '',
@@ -50,6 +53,8 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
       await api.entities.BookingRequest.create(payload);
       onSaved?.();
       onClose?.();
+    } catch (err) {
+      setError(bookingErrorMessage(err, 'לא הצלחתי ליצור את ההזמנה. נסה שוב.'));
     } finally {
       setSaving(false);
     }
@@ -147,6 +152,12 @@ export default function ManualBookingForm({ zimmers, ownerId, onClose, onSaved, 
           </Field>
           {form.check_in && form.check_out && nights <= 0 && (
             <p className="text-xs text-red-500">תאריך היציאה חייב להיות אחרי תאריך הכניסה</p>
+          )}
+
+          {error && (
+            <p role="alert" className="text-xs rounded-lg px-3 py-2 leading-relaxed" style={{ background: '#FEE2E2', color: '#991B1B' }}>
+              {error}
+            </p>
           )}
 
           {/* Actions */}

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Star, Plus, X, Trash2 } from 'lucide-react';
 import OwnerReviewCard from '@/components/reviews/OwnerReviewCard';
 import ReviewActionModal from '@/components/reviews/ReviewActionModal';
 import { getBookingTotal } from '@/lib/bookingPrice';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const SOURCE_OPTIONS = ['ידני', 'Google', 'Booking.com', 'Airbnb', 'WhatsApp'];
 
@@ -21,8 +22,8 @@ export default function SuperAdminReviewsPanel() {
   const [search, setSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     const [revs, zims, users] = await Promise.all([
       api.entities.Review.list('-created_date', 500),
       api.entities.Zimmer.list(),
@@ -32,9 +33,13 @@ export default function SuperAdminReviewsPanel() {
     setZimmers(zims || []);
     setOwners(users || []);
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.Review, api.entities.Zimmer, api.entities.User],
+    load,
+  });
 
   const ownerName = (ownerId) => owners.find(o => o.id === ownerId)?.full_name || '—';
   const zimmerName = (zid) => zimmers.find(z => z.id === zid)?.name || '—';

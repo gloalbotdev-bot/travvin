@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { MessageCircleQuestion, X, BookOpen, Clock } from 'lucide-react';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const inputStyle = { background: '#F8F7F4', border: '1.5px solid #E8E5E0', color: '#1A1A1A', borderRadius: '12px' };
 const inputFocus = e => { e.currentTarget.style.borderColor = '#F97316'; e.currentTarget.style.background = '#fff'; };
@@ -13,20 +14,27 @@ export default function QuestionsPanel({ ownerId, focusQuestionId }) {
   const [answer, setAnswer] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!ownerId) return;
+    if (!silent) setLoading(true);
+    const data = await api.entities.UnansweredQuestion.filter({ owner_id: ownerId }, '-created_date');
+    setQuestions(data);
+    setLoading(false);
+  }, [ownerId]);
+
   useEffect(() => {
     if (ownerId) load();
-  }, [ownerId]);
+  }, [ownerId, load]);
+
+  useEntityReload({
+    entities: [api.entities.UnansweredQuestion],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   useEffect(() => {
     if (focusQuestionId) setAnsweringId(focusQuestionId);
   }, [focusQuestionId]);
-
-  const load = async () => {
-    setLoading(true);
-    const data = await api.entities.UnansweredQuestion.filter({ owner_id: ownerId }, '-created_date');
-    setQuestions(data);
-    setLoading(false);
-  };
 
   const handleAnswer = async (q) => {
     if (!answer.trim()) return;

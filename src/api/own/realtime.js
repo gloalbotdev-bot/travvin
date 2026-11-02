@@ -16,6 +16,19 @@ export const realtimeTransport =
 const ssePools = new Map();
 
 /**
+ * @typedef {{
+ *   callbacks: Set<Function>,
+ *   listFn: (sort?: string, limit?: number) => Promise<object[]>,
+ *   snapshot: Map<string, string>,
+ *   timer: ReturnType<typeof setInterval>|null,
+ *   polling: boolean,
+ * }} PollPool
+ */
+
+/** @type {Map<string, PollPool>} */
+const pollPools = new Map();
+
+/**
  * @param {string} entityName
  * @param {(sort?: string, limit?: number) => Promise<object[]>} listFn
  */
@@ -24,41 +37,61 @@ export function createSubscribe(entityName, listFn) {
     if (realtimeTransport === 'sse') {
       return subscribeSse(entityName, cb);
     }
-    return subscribePolling(listFn, cb);
+    return subscribePolling(entityName, listFn, cb);
   };
 }
 
 /**
+ * Shared poller per entity — one list request for N subscribers.
+ * @param {string} entityName
  * @param {(sort?: string, limit?: number) => Promise<object[]>} listFn
  * @param {(ev: object) => void} cb
  */
-function subscribePolling(listFn, cb) {
-  /** @type {Map<string, string>} */
-  let snapshot = new Map();
-  let timer = null;
-  let cancelled = false;
-
-  const poll = async () => {
-    if (cancelled) return;
-    try {
-      const records = await listFn('-updated_date', POLL_LIST_LIMIT);
-      const { events, next } = diffRecords(snapshot, records);
-      snapshot = next;
-      for (const ev of events) {
-        if (!cancelled) cb(ev);
-      }
-    } catch {
-      /* silent — consumer hooks swallow errors too */
-    }
-  };
-
-  poll();
-  timer = setInterval(poll, POLL_INTERVAL_MS);
+function subscribePolling(entityName, listFn, cb) {
+  let pool = pollPools.get(entityName);
+  if (!pool) {
+    pool = {
+      callbacks: new Set(),
+      listFn,
+      snapshot: new Map(),
+      timer: null,
+      polling: false,
+    };
+    pollPools.set(entityName, pool);
+    pool.timer = setInterval(() => runPoll(entityName), POLL_INTERVAL_MS);
+    runPoll(entityName);
+  }
+  pool.callbacks.add(cb);
 
   return () => {
-    cancelled = true;
-    if (timer) clearInterval(timer);
+    pool.callbacks.delete(cb);
+    if (pool.callbacks.size === 0) {
+      if (pool.timer) clearInterval(pool.timer);
+      pollPools.delete(entityName);
+    }
   };
+}
+
+/**
+ * @param {string} entityName
+ */
+async function runPoll(entityName) {
+  const pool = pollPools.get(entityName);
+  if (!pool || pool.polling || pool.callbacks.size === 0) return;
+  pool.polling = true;
+  try {
+    const records = await pool.listFn('-updated_date', POLL_LIST_LIMIT);
+    if (!pollPools.has(entityName)) return;
+    const { events, next } = diffRecords(pool.snapshot, records);
+    pool.snapshot = next;
+    for (const ev of events) {
+      for (const cb of [...pool.callbacks]) cb(ev);
+    }
+  } catch {
+    /* silent — consumer hooks swallow errors too */
+  } finally {
+    if (pool) pool.polling = false;
+  }
 }
 
 /**

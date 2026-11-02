@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Home, Users, ClipboardList, Wallet, Star, Tag, AlertTriangle, Clock, CheckCircle, XCircle, MessageSquare, TrendingUp, Calendar, LayoutDashboard, Bell, Phone } from 'lucide-react';
 import FloatingQuestionsWidget from '@/components/superadmin/FloatingQuestionsWidget';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const HEB_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
@@ -13,10 +14,8 @@ export default function SuperAdminDashboard({ onNavigate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { load(); }, []);
-
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const [zimmers, bookings, users, reviews, promos, sessions, questions] = await Promise.all([
         api.entities.Zimmer.list(),
@@ -98,7 +97,21 @@ export default function SuperAdminDashboard({ onNavigate }) {
       console.error('Dashboard load error:', e);
     }
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [
+      api.entities.Zimmer,
+      api.entities.BookingRequest,
+      api.entities.User,
+      api.entities.Review,
+      api.entities.Promotion,
+      api.entities.ChatSession,
+      api.entities.UnansweredQuestion,
+    ],
+    load,
+  });
 
   if (loading || !data) return (
     <div className="flex items-center justify-center py-20">

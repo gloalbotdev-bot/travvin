@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '@/api/client';
 import { normalizePhoneE164, formatPhoneDisplay } from '@/lib/rooms';
 import { calcNights, getBookingTotal, formatILS } from '@/lib/bookingPrice';
 import { Search, Users2, Home, Calendar, Wallet, Sparkles } from 'lucide-react';
 import GuestProfileDetail from './GuestProfileDetail';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 export default function OwnerGuests({ ownerId, embedded = false }) {
   const [guests, setGuests] = useState(null);
@@ -12,9 +13,9 @@ export default function OwnerGuests({ ownerId, embedded = false }) {
   const [zimmers, setZimmers] = useState([]);
   const [openPhone, setOpenPhone] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!ownerId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const [bookings, profiles, zimList] = await Promise.all([
         api.entities.BookingRequest.filter({ owner_id: ownerId }),
@@ -56,9 +57,14 @@ export default function OwnerGuests({ ownerId, embedded = false }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [ownerId]);
 
-  useEffect(() => { load(); }, [ownerId]);
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.GuestProfile, api.entities.BookingRequest, api.entities.Zimmer],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   const filtered = useMemo(() => {
     if (!guests) return [];

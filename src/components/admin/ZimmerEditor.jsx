@@ -162,7 +162,12 @@ export default function ZimmerEditor({ zimmer, onSave, onCancel, onDelete, initi
       min_guests: form.partial_pricing_enabled ? num(form.min_guests) : null,
       price_per_adult: form.partial_pricing_enabled ? num(form.price_per_adult) : null,
       price_per_child: form.partial_pricing_enabled ? num(form.price_per_child) : null,
-      seasonal_pricing: (form.seasonal_pricing || []).map(r => ({ ...r, label: (r.label || '').trim() || null, percentage: r.percentage === '' ? null : Number(r.percentage) })),
+      seasonal_pricing: (form.seasonal_pricing || []).map(r => ({
+        ...r,
+        label: (r.label || '').trim() || null,
+        percentage: num(r.percentage),
+        price_per_night: num(r.price_per_night),
+      })),
       min_nights_rules: (form.min_nights_rules || [])
         .map(({ _period, ...r }) => ({
           scope: r.scope || 'weekend',

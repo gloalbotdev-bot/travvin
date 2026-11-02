@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Users, Truck, Clock, Check, AlertCircle, Search } from 'lucide-react';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 // History of automatic messages: customer (GuestMessage) and supplier
 // (SupplierMessage) side-by-side, color-coded and filterable. Default tab when
@@ -12,11 +13,9 @@ export default function OwnerAutomationHistory({ ownerId }) {
   const [q, setQ] = useState('');
   const [kind, setKind] = useState('all'); // all | customer | supplier
 
-  useEffect(() => { load(); }, [ownerId]);
-
-  const load = async () => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!ownerId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const [g, s] = await Promise.all([
       api.entities.GuestMessage.filter({ owner_id: ownerId }, '-created_date', 100).catch(() => []),
       api.entities.SupplierMessage.filter({ owner_id: ownerId }, '-created_date', 100).catch(() => []),
@@ -24,7 +23,14 @@ export default function OwnerAutomationHistory({ ownerId }) {
     setGuests(g || []);
     setSuppliers(s || []);
     setLoading(false);
-  };
+  }, [ownerId]);
+
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.GuestMessage, api.entities.SupplierMessage],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   const matches = (text) => !q || (text || '').toLowerCase().includes(q.toLowerCase());
 

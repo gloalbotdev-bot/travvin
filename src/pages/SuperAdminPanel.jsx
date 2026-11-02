@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Users, Home, ClipboardList, LogOut, UserPlus, MessageSquare, Search, X, Menu, UserCheck, ChevronRight, Trash2, Plus, PenLine, ShieldCheck, Megaphone, LayoutDashboard, Bot, Star, Video, KeyRound } from 'lucide-react';
 import ChatHistoryPanel from '@/components/superadmin/ChatHistoryPanel';
@@ -16,6 +16,7 @@ import SuperAdminDashboard from '@/components/superadmin/SuperAdminDashboard';
 import BookingCreatorChat from '@/components/owner/BookingCreatorChat';
 import SuperAdminVideos from '@/components/superadmin/SuperAdminVideos';
 import RoleAccessRequestsPanel from '@/components/superadmin/RoleAccessRequestsPanel';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 export default function SuperAdminPanel() {
   const [tab, setTab] = useState('dashboard');
@@ -59,10 +60,8 @@ export default function SuperAdminPanel() {
     });
   }, []);
 
-  useEffect(() => { loadAll(); }, []);
-
-  const loadAll = async () => {
-    setLoading(true);
+  const loadAll = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     const [users, zimmers, bookings] = await Promise.all([
       api.entities.User.list(),
       api.entities.Zimmer.list(),
@@ -76,19 +75,26 @@ export default function SuperAdminPanel() {
     setOwners(ownerList);
     setAllZimmers(zimmers);
     setAllBookings(bookings);
-    setLoading(false);
-  };
+    if (!silent) setLoading(false);
+  }, []);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+  useEntityReload({
+    entities: [api.entities.User, api.entities.Zimmer, api.entities.BookingRequest],
+    load: loadAll,
+  });
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     setInviteMsg('');
+    const email = inviteEmail.trim();
     try {
-      await api.users.inviteUser(inviteEmail.trim(), 'owner');
-      setInviteMsg(`✅ הזמנה נשלחה ל-${inviteEmail}`);
+      await api.users.inviteUser(email, 'owner');
+      setInviteMsg(`✅ בעל המתחם נוסף. יש לשלוח לו הזמנה ל-${email}`);
       setInviteEmail('');
     } catch (e) {
-      setInviteMsg('❌ שגיאה בשליחת ההזמנה');
+      setInviteMsg('❌ שגיאה בהוספת בעל המתחם');
     }
     setInviting(false);
   };
@@ -305,8 +311,11 @@ export default function SuperAdminPanel() {
                 {/* Invite */}
                 <div className="rounded-2xl p-5 mb-4" style={{ background: '#fff', border: '1.5px solid #F0EEE8' }}>
                   <h2 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: '#1A1A1A' }}>
-                    <UserPlus size={15} style={{ color: '#F97316' }} /> הזמן בעל מתחם חדש
+                    <UserPlus size={15} style={{ color: '#F97316' }} /> הוסף בעל מתחם חדש
                   </h2>
+                  <p className="text-xs mb-3" style={{ color: '#9CA3AF' }}>
+                    נוצר משתמש במערכת. לאחר מכן יש לשלוח לו הזמנה להתחברות.
+                  </p>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleInvite()}
@@ -314,7 +323,7 @@ export default function SuperAdminPanel() {
                     <button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()}
                       className="px-5 py-2.5 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50 hover:opacity-90 w-full sm:w-auto"
                       style={{ background: '#F97316' }}>
-                      {inviting ? 'שולח...' : 'שלח הזמנה'}
+                      {inviting ? 'מוסיף...' : 'הוסף בעל מתחם'}
                     </button>
                   </div>
                   {inviteMsg && <p className="text-sm mt-2" style={{ color: '#6B7280' }}>{inviteMsg}</p>}
@@ -380,7 +389,7 @@ export default function SuperAdminPanel() {
 
             {tab === 'dashboard' && <SuperAdminDashboard onNavigate={setTab} />}
             {tab === 'customers' && <CustomersPanel />}
-            {tab === 'add_owner' && <AddOwnerPanel onInvited={loadAll} />}
+            {tab === 'add_owner' && <AddOwnerPanel onInvited={() => loadAll({ silent: true })} />}
             {tab === 'role_requests' && <RoleAccessRequestsPanel />}
             {tab === 'chat_history' && <ChatHistoryPanel />}
             {tab === 'messages' && <MessagesPanel />}

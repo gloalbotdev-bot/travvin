@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Star } from 'lucide-react';
 import OwnerReviewCard, { REVIEW_STATUS } from '@/components/reviews/OwnerReviewCard';
 import ReviewActionModal from '@/components/reviews/ReviewActionModal';
 import { getBookingTotal } from '@/lib/bookingPrice';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 export default function ReviewsPanel({ ownerId, focusReviewId }) {
   const [reviews, setReviews] = useState([]);
@@ -12,8 +13,9 @@ export default function ReviewsPanel({ ownerId, focusReviewId }) {
   const [modal, setModal] = useState(null); // { mode, review, booking, bookingTotal }
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!ownerId) return;
+    if (!silent) setLoading(true);
     const [revs, zims] = await Promise.all([
       api.entities.Review.filter({ owner_id: ownerId }, '-created_date', 200),
       api.entities.Zimmer.filter({ owner_id: ownerId }),
@@ -21,9 +23,14 @@ export default function ReviewsPanel({ ownerId, focusReviewId }) {
     setReviews(revs);
     setZimmers(zims);
     setLoading(false);
-  };
+  }, [ownerId]);
 
-  useEffect(() => { load(); }, [ownerId]);
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.Review, api.entities.Zimmer],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   const openAction = async (review, mode) => {
     let booking = null;

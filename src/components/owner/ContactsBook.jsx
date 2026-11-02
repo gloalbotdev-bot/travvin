@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Plus, Phone, Mail, Trash2, Users, Wrench } from 'lucide-react';
 import OwnerGuests from './OwnerGuests';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const EMPTY_FORM = { name: '', phone: '', email: '', type: 'ספק', category: '', notes: '' };
 
@@ -13,16 +14,23 @@ export default function ContactsBook({ ownerId }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (ownerId) load();
-  }, [ownerId]);
-
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!ownerId) return;
+    if (!silent) setLoading(true);
     const data = await api.entities.Contact.filter({ owner_id: ownerId });
     setContacts(data);
     setLoading(false);
-  };
+  }, [ownerId]);
+
+  useEffect(() => {
+    if (ownerId) load();
+  }, [ownerId, load]);
+
+  useEntityReload({
+    entities: [api.entities.Contact],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   const handleSave = async (e) => {
     e.preventDefault();

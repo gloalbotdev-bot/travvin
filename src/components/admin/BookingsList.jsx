@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Check, X, Clock, Trash2, AlertTriangle } from 'lucide-react';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const STATUS_CONFIG = {
   'ממתינה': { color: 'text-amber-700 bg-amber-50', icon: Clock },
@@ -17,10 +18,8 @@ export default function BookingsList() {
   const [calendarLoading, setCalendarLoading] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
-  useEffect(() => { load(); }, []);
-
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     let data = await api.entities.BookingRequest.list('-created_date');
     // Deletion requests jump to the top of the list
     data = data.sort((a, b) => {
@@ -31,7 +30,13 @@ export default function BookingsList() {
     });
     setBookings(data);
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.BookingRequest],
+    load,
+  });
 
   const updateStatus = async (booking, status) => {
     await api.entities.BookingRequest.update(booking.id, { status });

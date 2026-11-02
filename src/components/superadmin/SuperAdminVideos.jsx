@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Trash2, Eye, EyeOff, MessageSquare, MessageSquareOff, AlertTriangle, Plus, Clock } from 'lucide-react';
 import SuperAdminVideoProposalForm from '@/components/superadmin/SuperAdminVideoProposalForm';
 import SuperAdminVideoProposals from '@/components/superadmin/SuperAdminVideoProposals';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 function fmtDate(s) { try { return new Date(s).toLocaleDateString('he-IL'); } catch { return ''; } }
 
@@ -16,8 +17,8 @@ export default function SuperAdminVideos() {
   const [busy, setBusy] = useState(false);
   const [showProposal, setShowProposal] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const [videos, users, bookings] = await Promise.all([
         api.entities.ZimmerVideo.list('-created_date', 500),
@@ -38,9 +39,13 @@ export default function SuperAdminVideos() {
       setOwners(ownerIds.map((id) => ({ id, name: ownerMap.get(id)?.full_name || '—' })).filter(o => o.id));
     } catch (e) { /* */ }
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.ZimmerVideo, api.entities.User, api.entities.BookingRequest],
+    load,
+  });
 
   const setHidden = async (v, hidden) => {
     setBusy(true);

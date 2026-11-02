@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Check } from 'lucide-react';
 import ZimmerInlineChat from '@/components/admin/ZimmerInlineChat';
 import MicButton from '@/components/chat/MicButton';
 import OwnerAiIcon from '@/components/owner/OwnerAiIcon';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 /* Figma PNGs from user Downloads (Frame 101 / Group 48099121) */
 import iconFigmaBooking from '@/assets/owner/properties/icon-action-booking.png';
@@ -87,60 +88,71 @@ function FigmaSwitch({ checked, onCheckedChange }) {
 function useZimmerSuggestions(zimmer, missing, onEmpty) {
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSugg, setLoadingSugg] = useState(true);
+  const missingRef = useRef(missing);
+  missingRef.current = missing;
+  const onEmptyRef = useRef(onEmpty);
+  onEmptyRef.current = onEmpty;
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [questions, bookings] = await Promise.all([
-          api.entities.UnansweredQuestion.filter({ zimmer_id: zimmer.id, status: 'ממתינה' }),
-          api.entities.BookingRequest.filter({ zimmer_id: zimmer.id, status: 'אושרה' }),
-        ]);
-        const fri = nextFridayStr();
-        const freeWeekend = !bookings.some(b => overlap(b.check_in, b.check_out, fri, fri));
-        const list = [];
-        if (questions.length > 0) {
-          list.push({
-            kind: 'chat',
-            title: 'לקוחות שואלים על הנכס',
-            body: 'שאלה חוזרת: ' + (questions[0].question || '').slice(0, 70),
-            cta: 'לנסח תשובה עם Travvin',
-          });
-        } else if (missing.length > 0 && /חני/.test(missing.map(m => m.label).join(' '))) {
-          list.push({
-            kind: 'parking',
-            title: 'הרבה לקוחות שואלים על חניה — כדאי להוסיף מידע לנכס?',
-            body: 'כדאי להוסיף מידע לנכס על חניה מקורה / חניה פרטית.',
-            cta: 'להוסיף מידע על חניה',
-          });
-        } else if (missing.length > 0) {
-          list.push({
-            kind: 'missing',
-            title: 'מידע חסר בנכס',
-            body: `כדאי להוסיף פרטים על ${missing[0].label.toLowerCase()} ועוד ${Math.max(0, missing.length - 1)} פריטים.`,
-            cta: 'להשלים את המידע',
-          });
-        } else {
-          list.push({ kind: 'chat', title: 'הנכס מלא במידע', body: 'כל הפריטים החיוניים מולאו. כדאי לרענן תמונות מדי פעם.', cta: 'לשאול את Travvin' });
-        }
-        if (freeWeekend) {
-          list.push({
-            kind: 'price',
-            title: 'הסופ״ש הקרוב פנוי',
-            body: 'אפשר להציע הנחה קטנה כדי להגדיל סיכוי לסגירה.',
-            cta: 'לעדכן מחיר לסופ״ש',
-          });
-        } else {
-          list.push({ kind: 'chat', title: 'תפוסה גבוהה', body: 'הסופ"ש הקרוב תפוס. כדאי לבדוק תאריכים פנויים אחרים למבצע.', cta: 'לבדוק תאריכים פנויים' });
-        }
-        if (!cancelled) setSuggestions(list.slice(0, 2));
-      } catch {
-        if (!cancelled) { setSuggestions([]); onEmpty?.(); }
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!zimmer?.id) return;
+    if (!silent) setLoadingSugg(true);
+    try {
+      const [questions, bookings] = await Promise.all([
+        api.entities.UnansweredQuestion.filter({ zimmer_id: zimmer.id, status: 'ממתינה' }),
+        api.entities.BookingRequest.filter({ zimmer_id: zimmer.id, status: 'אושרה' }),
+      ]);
+      const miss = missingRef.current || [];
+      const fri = nextFridayStr();
+      const freeWeekend = !bookings.some(b => overlap(b.check_in, b.check_out, fri, fri));
+      const list = [];
+      if (questions.length > 0) {
+        list.push({
+          kind: 'chat',
+          title: 'לקוחות שואלים על הנכס',
+          body: 'שאלה חוזרת: ' + (questions[0].question || '').slice(0, 70),
+          cta: 'לנסח תשובה עם Travvin',
+        });
+      } else if (miss.length > 0 && /חני/.test(miss.map(m => m.label).join(' '))) {
+        list.push({
+          kind: 'parking',
+          title: 'הרבה לקוחות שואלים על חניה — כדאי להוסיף מידע לנכס?',
+          body: 'כדאי להוסיף מידע לנכס על חניה מקורה / חניה פרטית.',
+          cta: 'להוסיף מידע על חניה',
+        });
+      } else if (miss.length > 0) {
+        list.push({
+          kind: 'missing',
+          title: 'מידע חסר בנכס',
+          body: `כדאי להוסיף פרטים על ${miss[0].label.toLowerCase()} ועוד ${Math.max(0, miss.length - 1)} פריטים.`,
+          cta: 'להשלים את המידע',
+        });
+      } else {
+        list.push({ kind: 'chat', title: 'הנכס מלא במידע', body: 'כל הפריטים החיוניים מולאו. כדאי לרענן תמונות מדי פעם.', cta: 'לשאול את Travvin' });
       }
-      if (!cancelled) setLoadingSugg(false);
-    })();
-    return () => { cancelled = true; };
-  }, [zimmer.id]);
+      if (freeWeekend) {
+        list.push({
+          kind: 'price',
+          title: 'הסופ״ש הקרוב פנוי',
+          body: 'אפשר להציע הנחה קטנה כדי להגדיל סיכוי לסגירה.',
+          cta: 'לעדכן מחיר לסופ״ש',
+        });
+      } else {
+        list.push({ kind: 'chat', title: 'תפוסה גבוהה', body: 'הסופ"ש הקרוב תפוס. כדאי לבדוק תאריכים פנויים אחרים למבצע.', cta: 'לבדוק תאריכים פנויים' });
+      }
+      setSuggestions(list.slice(0, 2));
+    } catch {
+      setSuggestions([]);
+      onEmptyRef.current?.();
+    }
+    setLoadingSugg(false);
+  }, [zimmer?.id]);
+
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.UnansweredQuestion, api.entities.BookingRequest],
+    load,
+    enabled: Boolean(zimmer?.id),
+  });
 
   return { suggestions, loadingSugg };
 }

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Sparkles, ChevronDown, ChevronUp, MessageSquare, RefreshCw } from 'lucide-react';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const cardStyle = { background: '#fff', border: '1.5px solid #F0EEE8' };
 
@@ -11,12 +12,18 @@ export default function ChatHistoryPanel() {
   const [expanded, setExpanded] = useState({});
   const [openChat, setOpenChat] = useState(null);
 
-  useEffect(() => {
-    api.entities.ChatSession.list('-created_date', 200).then(data => {
-      setSessions(data);
-      setLoading(false);
-    });
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    const data = await api.entities.ChatSession.list('-created_date', 200);
+    setSessions(data);
+    setLoading(false);
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.ChatSession],
+    load,
+  });
 
   const generateSummary = async (session) => {
     setSummarizing(p => ({ ...p, [session.id]: true }));

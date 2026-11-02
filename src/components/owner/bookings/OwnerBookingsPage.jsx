@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Plus, AlertTriangle } from 'lucide-react';
 import BookingsSummaryCards from './BookingsSummaryCards';
@@ -12,6 +12,7 @@ import BookingsFilterChips from './BookingsFilterChips';
 import ZimmerSelector from './ZimmerSelector';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import PullIndicator from '@/components/common/PullIndicator';
+import { useEntityReload } from '@/hooks/useEntityReload';
 import { needsAttention, isUpcoming, isActive, isPast } from './bookingStatus';
 
 // Replaces OwnerBookingsList with the Figma design. All business logic
@@ -31,17 +32,9 @@ export default function OwnerBookingsPage({ ownerId, zimmers = [], onAddBooking,
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const mainRef = useRef(null);
 
-  useEffect(() => { if (ownerId) loadBookings(); }, [ownerId]);
-
-  useEffect(() => {
-    if (focusBookingId && bookings.length) {
-      const b = bookings.find(x => x.id === focusBookingId);
-      if (b) setSelectedBooking(b);
-    }
-  }, [focusBookingId, bookings]);
-
-  const loadBookings = async () => {
-    setLoading(true);
+  const loadBookings = useCallback(async ({ silent = false } = {}) => {
+    if (!ownerId) return;
+    if (!silent) setLoading(true);
     const data = await api.entities.BookingRequest.filter({ owner_id: ownerId });
     const sorted = data.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
     setBookings(sorted);
@@ -52,7 +45,21 @@ export default function OwnerBookingsPage({ ownerId, zimmers = [], onAddBooking,
       const updated = await api.entities.BookingRequest.filter({ owner_id: ownerId });
       setBookings(updated.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
     });
-  };
+  }, [ownerId]);
+
+  useEffect(() => { if (ownerId) loadBookings(); }, [ownerId, loadBookings]);
+  useEntityReload({
+    entities: [api.entities.BookingRequest],
+    load: loadBookings,
+    enabled: Boolean(ownerId),
+  });
+
+  useEffect(() => {
+    if (focusBookingId && bookings.length) {
+      const b = bookings.find(x => x.id === focusBookingId);
+      if (b) setSelectedBooking(b);
+    }
+  }, [focusBookingId, bookings]);
 
   const { pull, refreshing } = usePullToRefresh(mainRef, loadBookings);
 

@@ -27,6 +27,7 @@ const ENTITY_NAMES = [
   'UnansweredQuestion',
   'User',
   'Zimmer',
+  'ZimmerVideo',
 ];
 
 function createEntityApi(name) {

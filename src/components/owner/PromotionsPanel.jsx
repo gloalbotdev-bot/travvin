@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/api/client';
 import { Tag, X, Trash2, Sparkles } from 'lucide-react';
 import { calcBookingTotalForZimmer, calcNights, formatILS, clampDiscount } from '@/lib/bookingPrice';
 import DateRangeField from '@/components/common/DateRangeField';
+import { useEntityReload } from '@/hooks/useEntityReload';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 const addDays = (d, n) => new Date(new Date(d).getTime() + n * 86400000).toISOString().split('T')[0];
@@ -23,9 +24,9 @@ export default function PromotionsPanel({ ownerId }) {
   const weekStart = todayStr();
   const weekEnd = addDays(weekStart, 7);
 
-  const load = async () => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!ownerId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const [zs, bks, prs] = await Promise.all([
       api.entities.Zimmer.filter({ owner_id: ownerId }),
       api.entities.BookingRequest.filter({ status: 'אושרה' }),
@@ -34,7 +35,7 @@ export default function PromotionsPanel({ ownerId }) {
     setZimmers(zs);
     setBookings(bks);
     // auto-expire
-    const today = weekStart;
+    const today = todayStr();
     for (const p of prs) {
       if (p.status === 'פעיל' && p.check_out && p.check_out < today) {
         try { await api.entities.Promotion.update(p.id, { status: 'פג תוקף' }); p.status = 'פג תוקף'; } catch (e) {}
@@ -42,9 +43,14 @@ export default function PromotionsPanel({ ownerId }) {
     }
     setPromos(prs);
     setLoading(false);
-  };
+  }, [ownerId]);
 
-  useEffect(() => { load(); }, [ownerId]);
+  useEffect(() => { load(); }, [load]);
+  useEntityReload({
+    entities: [api.entities.Promotion, api.entities.BookingRequest, api.entities.Zimmer],
+    load,
+    enabled: Boolean(ownerId),
+  });
 
   // zimmers free for the whole upcoming week (no approved booking overlapping the week window)
   const bookedZimmerIds = new Set(

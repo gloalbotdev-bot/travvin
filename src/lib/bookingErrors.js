@@ -3,8 +3,18 @@
  */
 export function bookingErrorMessage(err, fallback = 'לא הצלחתי לשמור את הבקשה. נסה שוב.') {
   if (!err) return fallback;
-  if (err.status === 409 || err.data?.error === 'booking_overlap') {
-    return err.data?.message || err.message || 'התאריכים תפוסים — קיימת הזמנה מאושרת חופפת';
+  if (
+    err.status === 409 ||
+    err.data?.error === 'booking_overlap' ||
+    err.data?.error === 'date_blocked'
+  ) {
+    return (
+      err.data?.message ||
+      err.message ||
+      (err.data?.error === 'date_blocked'
+        ? 'התאריכים חסומים — קיימת חסימה חופפת ביומן'
+        : 'התאריכים תפוסים — קיימת הזמנה מאושרת חופפת')
+    );
   }
   if (err.data?.error === 'min_nights') {
     return err.data.message || 'מספר הלילות קטן מהמינימום שהוגדר לצימר';
